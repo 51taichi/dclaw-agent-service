@@ -8,6 +8,7 @@ import { createChannelRegistry } from "./channels/index.js";
 import { AgentGateway } from "./services/agent-gateway.js";
 import { DeliveryService } from "./services/delivery-service.js";
 import { MessageService } from "./services/message-service.js";
+import { ActivationService } from "./services/activation-service.js";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,6 +21,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   const gateway = new AgentGateway({ timeoutMs: config.agentTimeoutMs, fetchImpl });
   const delivery = new DeliveryService({ store, registry, maxAttempts: config.deliveryMaxAttempts });
   const messages = new MessageService({ store, registry, gateway, delivery });
+  const activation = new ActivationService({ store, gateway, delivery });
   const app = express();
 
   app.disable("x-powered-by");
@@ -43,8 +45,11 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.get("/api/accounts/:accountId/dashboard", (req, res) => res.json(store.dashboard(req.params.accountId)));
   app.get("/api/accounts/:accountId/state-machine", (req, res) => res.json(store.getStateMachine(req.params.accountId)));
   app.put("/api/accounts/:accountId/state-machine", (req, res) => res.json(store.saveStateMachine(req.params.accountId, req.body || {})));
-  app.get("/api/accounts/:accountId/tags", (req, res) => res.json({ items: store.listTags(req.params.accountId) }));
-  app.post("/api/accounts/:accountId/tags", (req, res) => res.status(201).json(store.createTag(req.params.accountId, req.body || {})));
+  app.get("/api/flow-machines/:accountId", (req, res) => res.json({ ok: true, machine: store.getFlowMachine(req.params.accountId, { useDefault: req.query.default === "1" }) }));
+  app.put("/api/flow-machines/:accountId", (req, res) => res.json({ ok: true, machine: store.saveFlowMachine(req.params.accountId, req.body || {}) }));
+  app.get("/api/tag-schemas/:accountId", (req, res) => res.json({ ok: true, schema: store.getTagSchema(req.params.accountId).config }));
+  app.put("/api/tag-schemas/:accountId", (req, res) => res.json({ ok: true, schema: store.saveTagSchema(req.params.accountId, req.body?.schema || req.body || {}).config }));
+  app.get("/api/accounts/:accountId/tags", (req, res) => res.json({ items: store.listTags(req.params.accountId), schema: store.getTagSchema(req.params.accountId).config }));
   app.get("/api/accounts/:accountId/alerts", (req, res) => res.json({ items: store.listAlerts(req.params.accountId, String(req.query.status ?? "open")) }));
   app.get("/api/accounts/:accountId/audit", (req, res) => res.json({ items: store.listAudit(req.params.accountId, clampInt(req.query.limit, 1, 500, 200)) }));
 
@@ -57,9 +62,14 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     store.markRead(id);
     res.json({ items: store.listMessages(id) });
   });
+  app.get("/api/conversations/:conversationId/flow-events", (req, res) => res.json({ items: store.listFlowEvents(numberId(req.params.conversationId)) }));
   app.put("/api/conversations/:conversationId/mode", (req, res) => respondFound(res, store.setConversationMode(numberId(req.params.conversationId), req.body?.mode, { operator: String(req.body?.operator || "console"), note: String(req.body?.note || "") })));
   app.put("/api/conversations/:conversationId/state", (req, res) => respondFound(res, store.setConversationState(numberId(req.params.conversationId), String(req.body?.state || ""), "manual")));
-  app.post("/api/conversations/:conversationId/tags", (req, res) => res.json({ items: store.assignTags(numberId(req.params.conversationId), req.body?.tags, { source: "manual" }) }));
+  app.post("/api/conversations/:conversationId/tags", (req, res) => {
+    const id = numberId(req.params.conversationId);
+    if (req.body?.decision) return res.json(store.applyTagDecision(id, req.body.decision, { source: "manual" }));
+    return res.json({ items: store.assignTags(id, req.body?.tags, { source: "manual" }) });
+  });
   app.post("/api/conversations/:conversationId/messages", asyncHandler(async (req, res) => {
     const conversation = store.getConversation(numberId(req.params.conversationId));
     if (!conversation) return res.status(404).json({ error: "Conversation not found" });
@@ -126,7 +136,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     res.status(Number(error.status) || (error instanceof TypeError ? 400 : 500)).json({ error: String(error.message || error), requestId: req.requestId });
   });
 
-  return { app, db, store, registry, services: { gateway, delivery, messages } };
+  return { app, db, store, registry, services: { gateway, delivery, messages, activation } };
 }
 
 function asyncHandler(handler) {

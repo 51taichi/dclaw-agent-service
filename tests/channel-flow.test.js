@@ -55,7 +55,7 @@ test("website adapter creates one conversation and one outbound delivery for an 
 
   const conversations = await jsonRequest(app.baseUrl, "/api/accounts/website-default/conversations");
   assert.equal(conversations.data.items.length, 1);
-  assert.equal(conversations.data.items[0].state, "engaged");
+  assert.equal(conversations.data.items[0].state, "collect_basic_info");
 
   const outbox = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/conversations/session-1/outbox?after=0");
   assert.equal(outbox.data.items.length, 1);
@@ -89,11 +89,19 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
   let captured;
   const agentFetch = async (_url, options) => {
     captured = { headers: options.headers, body: JSON.parse(options.body) };
+    const context = JSON.parse(captured.body.message.split("\n").at(-1));
+    const evidence = { evidenceMessageId: String(context.currentMessage.id), evidenceText: context.currentMessage.text };
     return new Response(JSON.stringify({
       reply: "可以，我来为您安排产品顾问。",
-      state: "qualified",
-      tags: ["高意向"],
-      attention: { title: "安排产品顾问", detail: "客户希望进一步了解产品" },
+      flowDecision: { nodeCompleted: true, nextNodeId: "invite_next_step", collectedDataPatch: { "客户需求": "了解产品", "联系方式": "待确认" }, reason: "需求明确" },
+      tagEvaluation: [
+        { groupId: "intent_level", tagId: "potential", matched: true, reason: "客户主动咨询", ...evidence },
+        { groupId: "intent_level", tagId: "high_intent", matched: true, reason: "客户要求安排顾问", ...evidence },
+        { groupId: "service_attention", tagId: "needs_follow_up", matched: false, reason: "无需延期跟进" },
+        { groupId: "service_attention", tagId: "needs_human", matched: false, reason: "未明确要求人工" }
+      ],
+      tagDecision: { add: [{ groupId: "intent_level", tagId: "high_intent", reason: "客户要求安排顾问", ...evidence }], remove: [] },
+      attentionAlert: { title: "安排产品顾问", detail: "客户希望进一步了解产品" },
       handoff: true
     }), { status: 200, headers: { "content-type": "application/json" } });
   };
@@ -104,6 +112,8 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
     method: "PUT",
     body: { agentApiUrl: "https://agent.example.test/openapi/chat", agentApiKey: "secret", agentId: "sales-agent" }
   });
+  const machine = await jsonRequest(app.baseUrl, "/api/flow-machines/website-default");
+  await jsonRequest(app.baseUrl, "/api/flow-machines/website-default", { method: "PUT", body: { enabled: true, config: machine.data.machine.config } });
   const received = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound({ text: "请安排产品顾问联系我" }) });
   assert.equal(received.data.items[0].handledBy, "agent");
   assert.equal(captured.body.external_user_id, "website:website-default:visitor-1");
@@ -111,9 +121,34 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
   assert.equal(captured.headers["Idempotency-Key"], `agent:website-default:${received.data.items[0].messageId}`);
 
   const conversations = await jsonRequest(app.baseUrl, "/api/accounts/website-default/conversations");
-  assert.equal(conversations.data.items[0].state, "qualified");
+  assert.equal(conversations.data.items[0].state, "invite_next_step");
   assert.equal(conversations.data.items[0].mode, "human");
-  assert.deepEqual(conversations.data.items[0].tags.map((tag) => tag.name), ["高意向"]);
+  assert.deepEqual(conversations.data.items[0].tags.map((tag) => tag.name), ["20261015", "高意向"]);
   const alerts = await jsonRequest(app.baseUrl, "/api/accounts/website-default/alerts");
-  assert.equal(alerts.data.items[0].title, "安排产品顾问");
+  assert.deepEqual(new Set(alerts.data.items.map((item) => item.title)), new Set(["标签提醒：高意向", "安排产品顾问"]));
+});
+
+test("flow activation is scheduled, delivered through the channel adapter, and canceled by a customer reply", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+  const machine = (await jsonRequest(app.baseUrl, "/api/flow-machines/website-default")).data.machine;
+  machine.config.nodes[0].activation = {
+    enabled: true,
+    polishByAgent: false,
+    messages: [{ content: "还有什么可以帮您？", intervalMinutes: 0, maxTimes: 2 }]
+  };
+  await jsonRequest(app.baseUrl, "/api/flow-machines/website-default", { method: "PUT", body: { enabled: true, config: machine.config } });
+
+  await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound() });
+  app.db.prepare("UPDATE activation_tasks SET due_at = '2000-01-01T00:00:00.000Z' WHERE status = 'pending'").run();
+  const firstRun = await app.services.activation.runDue();
+  assert.equal(firstRun.length, 2);
+  assert.deepEqual(firstRun.map((item) => item.status), ["sent", "sent"]);
+
+  await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound({ eventId: "event-2", messageId: "message-2", text: "我再想想" }) });
+  const pendingBefore = app.db.prepare("SELECT COUNT(*) AS count FROM activation_tasks WHERE status = 'pending'").get().count;
+  assert.equal(pendingBefore, 2);
+  await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound({ eventId: "event-3", messageId: "message-3", text: "先不用了" }) });
+  const canceled = app.db.prepare("SELECT COUNT(*) AS count FROM activation_tasks WHERE status = 'canceled'").get().count;
+  assert.equal(canceled, 2);
 });

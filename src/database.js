@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { defaultFlowConfig } from "./flow-machine.js";
+import { normalizeStoredTagSchema } from "./tags.js";
 
 const nowSql = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
@@ -97,35 +99,86 @@ function migrate(db) {
     CREATE TABLE IF NOT EXISTS state_machine_configs (
       account_id TEXT PRIMARY KEY REFERENCES channel_accounts(id) ON DELETE CASCADE,
       config_json TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
-    CREATE TABLE IF NOT EXISTS state_events (
+    CREATE TABLE IF NOT EXISTS flow_sessions (
+      conversation_id INTEGER PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+      account_id TEXT NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      current_node_id TEXT NOT NULL,
+      collected_data_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed')),
+      entered_at TEXT NOT NULL DEFAULT (${nowSql}),
+      completed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_state_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-      from_state TEXT NOT NULL,
-      to_state TEXT NOT NULL,
+      account_id TEXT NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      from_node_id TEXT NOT NULL,
+      to_node_id TEXT NOT NULL,
+      node_completed INTEGER NOT NULL DEFAULT 0,
+      collected_data_patch_json TEXT NOT NULL DEFAULT '{}',
       reason TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'agent',
       created_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
-    CREATE TABLE IF NOT EXISTS tag_definitions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      account_id TEXT NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      color TEXT NOT NULL DEFAULT '#2a30d8',
-      description TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (${nowSql}),
-      UNIQUE(account_id, name)
+    CREATE TABLE IF NOT EXISTS tag_schemas (
+      account_id TEXT PRIMARY KEY REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      config_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
-    CREATE TABLE IF NOT EXISTS conversation_tags (
+    CREATE TABLE IF NOT EXISTS conversation_rule_tags (
       conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-      tag_id INTEGER NOT NULL REFERENCES tag_definitions(id) ON DELETE CASCADE,
-      source TEXT NOT NULL DEFAULT 'manual',
+      account_id TEXT NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      group_id TEXT NOT NULL,
+      group_name TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      tag_name TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
       evidence_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+      evidence_text TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'agent',
       created_at TEXT NOT NULL DEFAULT (${nowSql}),
-      PRIMARY KEY(conversation_id, tag_id)
+      updated_at TEXT NOT NULL DEFAULT (${nowSql}),
+      PRIMARY KEY(conversation_id, group_id, tag_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tag_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      account_id TEXT NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      group_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      evidence_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+      evidence_text TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'agent',
+      created_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
+    CREATE TABLE IF NOT EXISTS activation_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      account_id TEXT NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      source_type TEXT NOT NULL CHECK(source_type IN ('flow', 'tag')),
+      source_key TEXT NOT NULL,
+      message_index INTEGER NOT NULL,
+      sequence_no INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      polish_by_agent INTEGER NOT NULL DEFAULT 1,
+      due_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'sent', 'canceled', 'failed')),
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
     CREATE TABLE IF NOT EXISTS attention_alerts (
@@ -163,7 +216,13 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_recent ON messages(conversation_id, id DESC);
     CREATE INDEX IF NOT EXISTS idx_alerts_status_recent ON attention_alerts(status, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_outbox_poll ON channel_outbox(account_id, external_conversation_id, id);
+    CREATE INDEX IF NOT EXISTS idx_flow_events_conversation ON flow_state_events(conversation_id, id);
+    CREATE INDEX IF NOT EXISTS idx_rule_tags_conversation ON conversation_rule_tags(conversation_id, group_id);
+    CREATE INDEX IF NOT EXISTS idx_tag_events_conversation ON tag_events(conversation_id, id);
+    CREATE INDEX IF NOT EXISTS idx_activation_tasks_due ON activation_tasks(status, due_at, id);
   `);
+
+  ensureColumn(db, "state_machine_configs", "enabled", "INTEGER NOT NULL DEFAULT 0");
 }
 
 function seed(db) {
@@ -175,25 +234,47 @@ function seed(db) {
   insertAccount.run("miniapp-default", "miniapp", "智能名片", "#18a66a", JSON.stringify({ delivery: "poll" }));
   insertAccount.run("fake-demo", "fake", "本地演示", "#ef2625", JSON.stringify({ delivery: "memory" }));
 
-  const defaultMachine = JSON.stringify({
-    initialState: "new",
-    states: [
-      { id: "new", name: "新会话", color: "#6b6472" },
-      { id: "engaged", name: "沟通中", color: "#2a30d8" },
-      { id: "qualified", name: "已识别意向", color: "#ff5a12" },
-      { id: "follow_up", name: "待跟进", color: "#ef2625" },
-      { id: "completed", name: "已完成", color: "#126fd4" }
+  const insertMachine = db.prepare("INSERT OR IGNORE INTO state_machine_configs (account_id, config_json, enabled) VALUES (?, ?, 0)");
+  for (const id of ["website-default", "miniapp-default", "fake-demo"]) {
+    insertMachine.run(id, JSON.stringify(defaultFlowConfig(id === "miniapp-default" ? "智能名片" : id === "website-default" ? "官网客服" : "本地演示")));
+  }
+
+  const defaultSchema = normalizeStoredTagSchema({
+    version: "1.0.0",
+    dateTag: { enabled: true, cutoffTime: "00:00" },
+    groups: [
+      {
+        id: "intent_level",
+        name: "意向等级",
+        enabled: true,
+        exclusive: true,
+        oneWay: true,
+        tags: [
+          { id: "potential", name: "潜在客户", condition: "客户表达了初步兴趣", enabled: true },
+          { id: "high_intent", name: "高意向", condition: "客户明确希望购买、合作或留下联系方式", enabled: true, voiceAlertEnabled: true }
+        ]
+      },
+      {
+        id: "service_attention",
+        name: "服务关注",
+        enabled: true,
+        exclusive: false,
+        oneWay: false,
+        tags: [
+          { id: "needs_follow_up", name: "待跟进", condition: "客户要求稍后联系或当前问题需要后续处理", enabled: true },
+          { id: "needs_human", name: "需要人工", condition: "客户明确要求人工服务或出现必须人工处理的情况", enabled: true, voiceAlertEnabled: true, handoffEnabled: true }
+        ]
+      }
     ]
   });
-  const insertMachine = db.prepare("INSERT OR IGNORE INTO state_machine_configs (account_id, config_json) VALUES (?, ?)");
-  for (const id of ["website-default", "miniapp-default", "fake-demo"]) insertMachine.run(id, defaultMachine);
+  const insertSchema = db.prepare("INSERT OR IGNORE INTO tag_schemas (account_id, config_json) VALUES (?, ?)");
+  for (const id of ["website-default", "miniapp-default", "fake-demo"]) insertSchema.run(id, JSON.stringify(defaultSchema));
 
-  const insertTag = db.prepare("INSERT OR IGNORE INTO tag_definitions (account_id, name, color, description) VALUES (?, ?, ?, ?)");
-  for (const id of ["website-default", "miniapp-default", "fake-demo"]) {
-    insertTag.run(id, "高意向", "#ef2625", "近期有明确购买或合作意向");
-    insertTag.run(id, "待跟进", "#ff5a12", "需要人工后续处理");
-    insertTag.run(id, "已成交", "#126fd4", "已经完成目标转化");
-  }
+}
+
+function ensureColumn(db, table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((item) => item.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 export function json(value, fallback = {}) {

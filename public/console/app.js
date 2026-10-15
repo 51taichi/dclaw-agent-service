@@ -1,16 +1,20 @@
+import { createFlowEditor } from "./flow-editor.js";
+import { createTagEditor } from "./tag-editor.js";
+
 const state = {
   accounts: [],
   account: null,
   activeTab: ["cockpit", "sessions", "flow", "tags", "push", "logs", "config"].includes(new URLSearchParams(location.search).get("tab")) ? new URLSearchParams(location.search).get("tab") : "cockpit",
   conversations: [],
   conversation: null,
-  machine: { initialState: "new", states: [] },
+  machine: { enabled: false, config: { entryNodeId: "", nodes: [] } },
   tags: [],
   alerts: []
 };
 
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((element) => [element.getAttribute("id"), element]));
 const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
+let alertsLoaded = false;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -43,9 +47,21 @@ function showToast(message, error = false) {
   showToast.timer = setTimeout(() => { els.toast.hidden = true; }, 2800);
 }
 
+const flowEditor = createFlowEditor({
+  api, toast: showToast, icon, escapeHtml,
+  getAccountId: () => state.account?.id || "",
+  onChanged: (machine) => { state.machine = machine; renderStateOptions(); }
+});
+const tagEditor = createTagEditor({
+  api, toast: showToast, icon, escapeHtml,
+  getAccountId: () => state.account?.id || "",
+  onChanged: (schema) => { state.tags = schema.groups.flatMap((group) => group.tags.map((tag) => ({ ...tag, groupId: group.id, groupName: group.name, id: `${group.id}:${tag.id}` }))); }
+});
+
 async function bootstrap() {
   bindEvents();
   await loadAccounts();
+  setInterval(() => { if (state.account) loadAlerts().catch(handleError); }, 5_000);
 }
 
 async function loadAccounts(preferredId = state.account?.id) {
@@ -78,6 +94,8 @@ async function selectAccount(id, tab = state.activeTab) {
   if (state.account?.id === id && tab === state.activeTab) return;
   state.account = state.accounts.find((item) => item.id === id) || null;
   state.conversation = null;
+  state.alerts = [];
+  alertsLoaded = false;
   state.activeTab = tab;
   renderAccounts();
   setTab(tab, false);
@@ -89,10 +107,7 @@ async function loadAccountContext() {
   document.documentElement.style.setProperty("--bot-accent", state.account.accent);
   document.querySelector(".workspace-tabs").classList.add("is-bound");
   document.querySelectorAll(".bot-context-panel").forEach((panel) => panel.classList.add("is-bound"));
-  [state.machine, state.tags] = await Promise.all([
-    api(`/api/accounts/${encodeURIComponent(state.account.id)}/state-machine`),
-    api(`/api/accounts/${encodeURIComponent(state.account.id)}/tags`).then((data) => data.items)
-  ]);
+  await Promise.all([flowEditor.load(), tagEditor.load()]);
   renderStateOptions();
   await Promise.all([loadAlerts(), loadActiveTab()]);
 }
@@ -108,8 +123,8 @@ async function loadActiveTab() {
   const loaders = {
     cockpit: loadDashboard,
     sessions: loadConversations,
-    flow: renderStateEditor,
-    tags: renderTags,
+    flow: flowEditor.render,
+    tags: tagEditor.render,
     push: loadActivationTargets,
     logs: loadAudit,
     config: renderAccountForm
@@ -139,7 +154,7 @@ async function loadDashboard() {
 }
 
 function renderStateOptions() {
-  const options = state.machine.states.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+  const options = (state.machine.config?.nodes || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
   els.conversationStateFilter.innerHTML = `<option value="">全部状态</option>${options}`;
   els.chatState.innerHTML = options;
 }
@@ -172,7 +187,10 @@ async function openConversation(id, markSelected = true) {
   const conversation = await api(`/api/conversations/${id}`);
   state.conversation = conversation;
   if (markSelected) renderConversationList();
-  const data = await api(`/api/conversations/${id}/messages`);
+  const [data, events] = await Promise.all([
+    api(`/api/conversations/${id}/messages`),
+    api(`/api/conversations/${id}/flow-events`)
+  ]);
   els.chatTitle.textContent = conversation.displayName;
   els.chatState.disabled = false;
   els.chatState.value = conversation.state;
@@ -185,6 +203,12 @@ async function openConversation(id, markSelected = true) {
   els.manualReplyComposer.querySelector(".ai-takeover-card").hidden = conversation.mode !== "ai";
   els.manualReplyComposer.querySelector(".manual-reply-box").hidden = conversation.mode !== "human";
   renderMessages(data.items);
+  els.flowEventsOutput.textContent = JSON.stringify({
+    currentNodeId: conversation.flowSession?.currentNodeId || conversation.state,
+    status: conversation.flowSession?.status || "active",
+    collectedData: conversation.flowSession?.collectedData || {},
+    events: events.items
+  }, null, 2);
   await loadConversationsQuietly();
 }
 
@@ -224,60 +248,31 @@ async function sendManual(event) {
   } finally { button.disabled = false; }
 }
 
-function renderStateEditor() {
-  els.stateEditor.innerHTML = state.machine.states.map((item, index) => `
-    <div class="state-editor-row" data-state-index="${index}">
-      <input type="radio" name="initialState" value="${escapeHtml(item.id)}" ${state.machine.initialState === item.id ? "checked" : ""} title="设为初始状态" />
-      <input name="id" value="${escapeHtml(item.id)}" pattern="[a-z][a-z0-9_]{1,39}" required aria-label="状态 ID" />
-      <input class="state-name" name="name" value="${escapeHtml(item.name)}" required aria-label="状态名称" />
-      <input class="state-color" name="color" type="color" value="${escapeHtml(item.color || "#2a30d8")}" aria-label="状态颜色" />
-      <button class="danger icon-button remove-state" type="button" title="删除状态">${icon("alert")}</button>
-    </div>
-  `).join("");
-}
-
-function stateMachineFromForm() {
-  const rows = [...els.stateEditor.querySelectorAll(".state-editor-row")];
-  const states = rows.map((row) => ({ id: row.querySelector('[name="id"]').value.trim(), name: row.querySelector('[name="name"]').value.trim(), color: row.querySelector('[name="color"]').value }));
-  const checked = els.stateEditor.querySelector('[name="initialState"]:checked');
-  return { initialState: checked?.value || states[0]?.id || "", states };
-}
-
-async function saveStateMachine(event) {
-  event.preventDefault();
-  state.machine = await api(`/api/accounts/${encodeURIComponent(state.account.id)}/state-machine`, { method: "PUT", body: stateMachineFromForm() });
-  renderStateOptions();
-  renderStateEditor();
-  showToast("状态机已保存");
-}
-
-function addState() {
-  const id = `state_${state.machine.states.length + 1}`;
-  state.machine.states.push({ id, name: "新状态", color: "#2a30d8" });
-  renderStateEditor();
-}
-
-function renderTags() {
-  els.tagList.innerHTML = state.tags.length ? state.tags.map((tag) => `<article class="tag-definition-card" style="--tag-color:${escapeHtml(tag.color)}"><strong>${icon("tag")}${escapeHtml(tag.name)}</strong><small>${escapeHtml(tag.description || "未填写业务含义")}</small><code>${escapeHtml(tag.color)}</code></article>`).join("") : `<div class="empty-state">暂无标签</div>`;
-}
-
-async function createTag(event) {
-  event.preventDefault();
-  const body = Object.fromEntries(new FormData(event.currentTarget));
-  await api(`/api/accounts/${encodeURIComponent(state.account.id)}/tags`, { method: "POST", body });
-  state.tags = (await api(`/api/accounts/${encodeURIComponent(state.account.id)}/tags`)).items;
-  event.currentTarget.reset();
-  renderTags();
-  showToast("标签已创建");
-}
-
 async function addConversationTag() {
   if (!state.conversation) return;
-  const available = state.tags.filter((tag) => !state.conversation.tags.some((assigned) => assigned.id === tag.id));
-  if (!available.length) return showToast("所有标签都已添加");
-  const name = window.prompt(`输入要添加的标签名称：\n${available.map((item) => item.name).join("、")}`);
-  if (!name) return;
-  await api(`/api/conversations/${state.conversation.id}/tags`, { method: "POST", body: { tags: [name] } });
+  let dialog = document.querySelector("#manualTagDialog");
+  if (!dialog) {
+    dialog = document.createElement("div");
+    dialog.id = "manualTagDialog";
+    dialog.className = "modal-backdrop";
+    document.body.append(dialog);
+  }
+  const selected = new Set(state.conversation.tags.filter((tag) => tag.groupId !== "date").map((tag) => `${tag.groupId}:${tag.tagId}`));
+  const groups = Map.groupBy(state.tags.filter((tag) => tag.enabled !== false), (tag) => tag.groupId);
+  dialog.innerHTML = `<div class="confirm-dialog manual-tag-dialog" role="dialog" aria-modal="true"><div class="confirm-icon">${icon("tag")}</div><div class="confirm-copy"><strong>调整客户标签</strong><div class="manual-tag-groups">${[...groups].map(([groupId, tags]) => `<fieldset><legend>${escapeHtml(tags[0]?.groupName || groupId)}</legend>${tags.map((tag) => { const key = `${groupId}:${tag.id.split(":").at(-1)}`; return `<label class="target-option"><input type="checkbox" value="${escapeHtml(key)}" ${selected.has(key) ? "checked" : ""} /><span>${escapeHtml(tag.name)}</span></label>`; }).join("")}</fieldset>`).join("")}</div></div><div class="confirm-actions"><button class="secondary" data-manual-tag-cancel type="button">取消</button><button class="primary" data-manual-tag-save type="button">${icon("save")}保存</button></div></div>`;
+  dialog.hidden = false;
+  const accepted = await new Promise((resolve) => {
+    dialog.onclick = (event) => {
+      if (event.target === dialog || event.target.closest("[data-manual-tag-cancel]")) resolve(false);
+      if (event.target.closest("[data-manual-tag-save]")) resolve(true);
+    };
+  });
+  dialog.hidden = true;
+  if (!accepted) return;
+  const next = new Set([...dialog.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value));
+  const add = [...next].filter((key) => !selected.has(key)).map((key) => { const [groupId, tagId] = key.split(":"); return { groupId, tagId, reason: "控制台人工调整" }; });
+  const remove = [...selected].filter((key) => !next.has(key)).map((key) => { const [groupId, tagId] = key.split(":"); return { groupId, tagId, reason: "控制台人工调整" }; });
+  await api(`/api/conversations/${state.conversation.id}/tags`, { method: "POST", body: { decision: { add, remove } } });
   await openConversation(state.conversation.id);
 }
 
@@ -332,7 +327,17 @@ async function saveAccount(event) {
 }
 
 async function loadAlerts() {
+  const previousIds = new Set(state.alerts.map((item) => item.id));
   state.alerts = (await api(`/api/accounts/${encodeURIComponent(state.account.id)}/alerts`)).items;
+  if (alertsLoaded) {
+    const fresh = state.alerts.find((item) => !previousIds.has(item.id));
+    if (fresh) {
+      const audio = fresh.title.startsWith("标签提醒：") ? els.tagVoiceAlertAudio : els.attentionAlertAudio;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    }
+  }
+  alertsLoaded = true;
   els.alertCount.textContent = String(state.alerts.length);
   els.alertCount.hidden = !state.alerts.length;
   els.alertList.innerHTML = state.alerts.length ? state.alerts.map((alert) => `${alertMarkup(alert)}<button class="secondary resolve-alert" data-alert-id="${alert.id}">${icon("check")}标记已处理</button>`).join("") : `<div class="empty-state">当前没有待处理提醒</div>`;
@@ -347,7 +352,7 @@ function renderTagChips(tags = []) {
 }
 
 function stateName(id) {
-  return state.machine.states.find((item) => item.id === id)?.name || id || "未设置";
+  return (state.machine.config?.nodes || []).find((item) => item.id === id)?.name || id || "未设置";
 }
 
 function deliveryLabel(status) {
@@ -375,11 +380,6 @@ function bindEvents() {
   els.chatState.addEventListener("change", async () => { if (!state.conversation) return; state.conversation = await api(`/api/conversations/${state.conversation.id}/state`, { method: "PUT", body: { state: els.chatState.value } }); await loadConversations(); showToast("会话状态已更新"); });
   els.chatTags.addEventListener("click", (event) => { if (event.target.closest(".tag-add-button")) addConversationTag().catch(handleError); });
   els.manualReplyComposer.addEventListener("submit", (event) => sendManual(event).catch(handleError));
-  els.stateMachineForm.addEventListener("submit", (event) => saveStateMachine(event).catch(handleError));
-  els.addStateButton.addEventListener("click", addState);
-  els.stateEditor.addEventListener("input", (event) => { if (event.target.name === "id" && event.target.closest(".state-editor-row")?.querySelector('[name="initialState"]').checked) event.target.closest(".state-editor-row").querySelector('[name="initialState"]').value = event.target.value; });
-  els.stateEditor.addEventListener("click", (event) => { const button = event.target.closest(".remove-state"); if (!button || state.machine.states.length < 2) return; const index = Number(button.closest(".state-editor-row").dataset.stateIndex); state.machine.states.splice(index, 1); if (!state.machine.states.some((item) => item.id === state.machine.initialState)) state.machine.initialState = state.machine.states[0].id; renderStateEditor(); });
-  els.tagForm.addEventListener("submit", (event) => createTag(event).catch(handleError));
   els.activationForm.addEventListener("submit", (event) => sendActivation(event).catch(handleError));
   els.refreshAudit.addEventListener("click", () => loadAudit().catch(handleError));
   els.accountForm.addEventListener("submit", (event) => saveAccount(event).catch(handleError));

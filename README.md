@@ -55,7 +55,7 @@ docker compose down --volumes
 normalizeInbound()
         |
         v
-会话 -> 状态机 -> 标签 -> 提醒 -> Agent Gateway -> delivery.send()
+会话 -> Agent Gateway -> 任务流/标签判定 -> 提醒/接管 -> delivery.send()
                                                         |
                                                         v
                                                    Adapter.send()
@@ -117,19 +117,44 @@ POST /api/channels/{provider}/{accountId}/receipts
 - `external_session_id`
 - SSE 或 JSON 响应
 
-推荐 Agent 返回：
+当任务流或标签规则启用时，Agent 必须返回完整的结构化判定。服务端会校验节点跳转、可收集字段、标签全集评价、客户证据、组内互斥和单向升级规则；不符合契约的响应不会落库或发送。
+
+示例响应：
 
 ```json
 {
   "reply": "给客户的回复",
-  "state": "engaged",
-  "tags": ["高意向"],
-  "attention": null,
+  "flowDecision": {
+    "nodeCompleted": true,
+    "nextNodeId": "invite_next_step",
+    "collectedDataPatch": {
+      "客户需求": "产品报价",
+      "联系方式": "13800000000"
+    },
+    "reason": "基础信息已收集完整"
+  },
+  "tagEvaluation": [
+    {
+      "groupId": "intent_level",
+      "tagId": "high_intent",
+      "matched": true,
+      "reason": "客户明确询价并留下联系方式",
+      "evidenceMessageId": "42",
+      "evidenceText": "请给我报价，电话是 13800000000"
+    }
+  ],
+  "tagDecision": {
+    "add": [{ "groupId": "intent_level", "tagId": "high_intent", "reason": "明确购买意向" }],
+    "remove": []
+  },
+  "attentionAlert": null,
   "handoff": false
 }
 ```
 
 未配置 Agent 时，服务使用明确的兜底回复，便于在接通真实 OpenAPI 前完整测试渠道链路。
+
+任务流支持节点目标、完成条件、收集字段、交流技巧、顺序拖拽、客户激活和末节点静默回复。标签机支持日期标签、分组、互斥、单向变更、证据、语音提醒、自动人工接管及标签触发任务。两者的配置接口分别是 `GET/PUT /api/flow-machines/{accountId}` 和 `GET/PUT /api/tag-schemas/{accountId}`。
 
 ## 验证
 

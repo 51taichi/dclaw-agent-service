@@ -1,4 +1,6 @@
 import { json, isoNow } from "../database.js";
+import { defaultFlowConfig, normalizeFlowConfig } from "../flow-machine.js";
+import { adjudicateTagDecision, dateTagIdFor, normalizeStoredTagSchema } from "../tags.js";
 
 export class Store {
   constructor(db) {
@@ -31,8 +33,8 @@ export class Store {
       cleanText(input.agentId, "", 200), cleanText(input.webhookSecret, "", 500),
       JSON.stringify(input.config && typeof input.config === "object" ? input.config : { delivery: "poll" })
     );
-    const defaultMachine = { initialState: "new", states: [{ id: "new", name: "新会话", color: "#6b6472" }, { id: "engaged", name: "沟通中", color: "#2a30d8" }, { id: "follow_up", name: "待跟进", color: "#ef2625" }, { id: "completed", name: "已完成", color: "#126fd4" }] };
-    this.saveStateMachine(id, defaultMachine);
+    this.saveFlowMachine(id, { enabled: false, config: defaultFlowConfig(name) });
+    this.saveTagSchema(id, { dateTag: { enabled: true, cutoffTime: "00:00" }, groups: [] });
     return this.getAccount(id);
   }
 
@@ -104,19 +106,17 @@ export class Store {
       ORDER BY c.last_message_at DESC LIMIT 300
     `).all(...params);
     const tags = this.db.prepare(`
-      SELECT ct.conversation_id, td.id, td.name, td.color
-      FROM conversation_tags ct JOIN tag_definitions td ON td.id = ct.tag_id
-      JOIN conversations c ON c.id = ct.conversation_id WHERE c.account_id = ?
-    `).all(accountId);
-    const byConversation = Map.groupBy(tags, (item) => Number(item.conversation_id));
+      SELECT conversation_id, group_id, group_name, tag_id, tag_name, reason, source, created_at
+      FROM conversation_rule_tags WHERE account_id = ? ORDER BY created_at, tag_id
+    `).all(accountId).map(ruleTagView);
+    const byConversation = Map.groupBy(tags, (item) => Number(item.conversationId));
     return rows.map((row) => ({ ...conversationView(row), tags: byConversation.get(Number(row.id)) || [] }));
   }
 
   getConversation(id) {
     const row = this.db.prepare("SELECT * FROM conversations WHERE id = ?").get(id);
     if (!row) return null;
-    const tags = this.db.prepare(`SELECT td.id, td.name, td.color, ct.source FROM conversation_tags ct JOIN tag_definitions td ON td.id = ct.tag_id WHERE ct.conversation_id = ?`).all(id);
-    return { ...conversationView(row), tags };
+    return { ...conversationView(row), tags: this.listConversationTags(id), flowSession: this.getFlowSession(id) };
   }
 
   listMessages(conversationId) {
@@ -138,8 +138,9 @@ export class Store {
         return { duplicate: true };
       }
       const now = event.occurredAt || isoNow();
-      const stateMachine = this.getStateMachine(event.accountId);
-      const initialState = String(stateMachine.initialState || "new");
+      this.db.prepare("UPDATE activation_tasks SET status = 'canceled', updated_at = ? WHERE conversation_id IN (SELECT id FROM conversations WHERE account_id = ? AND external_conversation_id = ?) AND status IN ('pending', 'processing')").run(now, event.accountId, event.externalConversationId);
+      const machine = this.getFlowMachine(event.accountId);
+      const initialState = String(machine.config.entryNodeId || "new");
       this.db.prepare(`
         INSERT INTO conversations (account_id, external_conversation_id, external_user_id, display_name, state, unread_count, last_message_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
@@ -151,6 +152,8 @@ export class Store {
           updated_at = excluded.updated_at
       `).run(event.accountId, event.externalConversationId, event.externalUserId, event.displayName, initialState, now, now, now);
       const conversation = this.db.prepare("SELECT * FROM conversations WHERE account_id = ? AND external_conversation_id = ?").get(event.accountId, event.externalConversationId);
+      this.getOrCreateFlowSession(Number(conversation.id), event.accountId, machine);
+      this.ensureDateTag(Number(conversation.id), event.accountId, now);
       const insertedMessage = this.db.prepare(`
         INSERT INTO messages (conversation_id, external_message_id, direction, sender_type, message_type, content, delivery_status, metadata_json, created_at)
         VALUES (?, ?, 'inbound', 'customer', ?, ?, 'received', ?, ?)
@@ -226,14 +229,18 @@ export class Store {
     return this.getConversation(id);
   }
 
-  setConversationState(id, state, reason = "agent") {
+  setConversationState(id, state, reason = "manual") {
     const conversation = this.getConversation(id);
-    if (!conversation || conversation.state === state) return conversation;
-    const machine = this.getStateMachine(conversation.accountId);
-    if (!machine.states.some((item) => item.id === state)) return conversation;
-    this.db.prepare("UPDATE conversations SET state = ?, updated_at = ? WHERE id = ?").run(state, isoNow(), id);
-    this.db.prepare("INSERT INTO state_events (conversation_id, from_state, to_state, reason) VALUES (?, ?, ?, ?)").run(id, conversation.state, state, reason);
-    this.audit(conversation.accountId, id, "state", "state.changed", { from: conversation.state, to: state, reason });
+    if (!conversation) return null;
+    const machine = this.getFlowMachine(conversation.accountId);
+    if (!machine.config.nodes.some((item) => item.id === state)) throw new TypeError("Unknown flow node");
+    const session = this.getOrCreateFlowSession(id, conversation.accountId, machine);
+    if (session.currentNodeId === state) return conversation;
+    const timestamp = isoNow();
+    this.db.prepare("UPDATE flow_sessions SET current_node_id = ?, status = 'active', entered_at = ?, completed_at = NULL, updated_at = ? WHERE conversation_id = ?").run(state, timestamp, timestamp, id);
+    this.db.prepare("UPDATE conversations SET state = ?, updated_at = ? WHERE id = ?").run(state, timestamp, id);
+    this.db.prepare("INSERT INTO flow_state_events (conversation_id, account_id, from_node_id, to_node_id, node_completed, reason, source) VALUES (?, ?, ?, ?, 0, ?, ?)").run(id, conversation.accountId, session.currentNodeId, state, cleanText(reason, "manual", 1000), reason === "manual" ? "manual" : "agent");
+    this.audit(conversation.accountId, id, "flow", "flow.node_changed", { from: session.currentNodeId, to: state, reason });
     return this.getConversation(id);
   }
 
@@ -242,38 +249,172 @@ export class Store {
   }
 
   getStateMachine(accountId) {
-    const row = this.db.prepare("SELECT config_json FROM state_machine_configs WHERE account_id = ?").get(accountId);
-    return json(row?.config_json, { initialState: "new", states: [] });
+    return this.getFlowMachine(accountId);
   }
 
-  saveStateMachine(accountId, config) {
-    validateStateMachine(config);
-    this.db.prepare(`INSERT INTO state_machine_configs (account_id, config_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET config_json = excluded.config_json, updated_at = excluded.updated_at`).run(accountId, JSON.stringify(config), isoNow());
-    this.audit(accountId, null, "configuration", "state_machine.updated", { stateCount: config.states.length });
-    return this.getStateMachine(accountId);
+  saveStateMachine(accountId, input) {
+    return this.saveFlowMachine(accountId, input?.config ? input : { enabled: input?.enabled, config: input });
+  }
+
+  getFlowMachine(accountId, { useDefault = false } = {}) {
+    const row = this.db.prepare("SELECT config_json, enabled, updated_at FROM state_machine_configs WHERE account_id = ?").get(accountId);
+    let raw = json(row?.config_json, null);
+    if (!raw?.nodes) raw = defaultFlowConfig(this.getAccount(accountId)?.name || "客服");
+    const config = normalizeFlowConfig(raw);
+    return { accountId, enabled: useDefault ? false : Boolean(row?.enabled), config, updatedAt: row?.updated_at || null };
+  }
+
+  saveFlowMachine(accountId, input = {}) {
+    if (!this.getAccount(accountId)) throw new TypeError("Channel account not found");
+    const config = normalizeFlowConfig(input.config || input);
+    const enabled = input.enabled !== false;
+    const timestamp = isoNow();
+    this.db.prepare(`INSERT INTO state_machine_configs (account_id, config_json, enabled, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET config_json = excluded.config_json, enabled = excluded.enabled, updated_at = excluded.updated_at`).run(accountId, JSON.stringify(config), enabled ? 1 : 0, timestamp);
+    this.audit(accountId, null, "configuration", "flow_machine.updated", { enabled, nodeCount: config.nodes.length, version: config.version });
+    return this.getFlowMachine(accountId);
+  }
+
+  getOrCreateFlowSession(conversationId, accountId, machine = this.getFlowMachine(accountId)) {
+    let row = this.db.prepare("SELECT * FROM flow_sessions WHERE conversation_id = ?").get(conversationId);
+    if (!row) {
+      const timestamp = isoNow();
+      this.db.prepare("INSERT INTO flow_sessions (conversation_id, account_id, current_node_id, created_at, updated_at, entered_at) VALUES (?, ?, ?, ?, ?, ?)").run(conversationId, accountId, machine.config.entryNodeId, timestamp, timestamp, timestamp);
+      row = this.db.prepare("SELECT * FROM flow_sessions WHERE conversation_id = ?").get(conversationId);
+    }
+    return flowSessionView(row);
+  }
+
+  getFlowSession(conversationId) {
+    return flowSessionView(this.db.prepare("SELECT * FROM flow_sessions WHERE conversation_id = ?").get(conversationId));
+  }
+
+  getFlowContext(conversationId) {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) return null;
+    const machine = this.getFlowMachine(conversation.accountId);
+    const session = this.getOrCreateFlowSession(conversationId, conversation.accountId, machine);
+    return { machine, session };
+  }
+
+  applyFlowDecision(conversationId, decision, source = "agent") {
+    if (!decision) return this.getFlowSession(conversationId);
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) return null;
+    const session = this.getOrCreateFlowSession(conversationId, conversation.accountId);
+    const collectedData = { ...session.collectedData, ...(decision.collectedDataPatch || {}) };
+    const toNodeId = decision.nodeCompleted && decision.nextNodeId ? decision.nextNodeId : session.currentNodeId;
+    const completed = Boolean(decision.nodeCompleted && !decision.nextNodeId);
+    const timestamp = isoNow();
+    this.db.prepare(`UPDATE flow_sessions SET current_node_id = ?, collected_data_json = ?, status = ?, entered_at = CASE WHEN current_node_id <> ? THEN ? ELSE entered_at END, completed_at = ?, updated_at = ? WHERE conversation_id = ?`).run(toNodeId, JSON.stringify(collectedData), completed ? "completed" : "active", toNodeId, timestamp, completed ? timestamp : null, timestamp, conversationId);
+    this.db.prepare("UPDATE conversations SET state = ?, updated_at = ? WHERE id = ?").run(toNodeId, timestamp, conversationId);
+    this.db.prepare(`INSERT INTO flow_state_events (conversation_id, account_id, from_node_id, to_node_id, node_completed, collected_data_patch_json, reason, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(conversationId, conversation.accountId, session.currentNodeId, toNodeId, decision.nodeCompleted ? 1 : 0, JSON.stringify(decision.collectedDataPatch || {}), cleanText(decision.reason, "", 1000), source);
+    this.audit(conversation.accountId, conversationId, "flow", decision.nodeCompleted ? "flow.node_completed" : "flow.evaluated", { from: session.currentNodeId, to: toNodeId, collectedDataPatch: decision.collectedDataPatch || {}, reason: decision.reason || "" });
+    return this.getFlowSession(conversationId);
+  }
+
+  listFlowEvents(conversationId) {
+    return this.db.prepare("SELECT * FROM flow_state_events WHERE conversation_id = ? ORDER BY id").all(conversationId).map((row) => ({ id: Number(row.id), fromNodeId: row.from_node_id, toNodeId: row.to_node_id, nodeCompleted: Boolean(row.node_completed), collectedDataPatch: json(row.collected_data_patch_json), reason: row.reason, source: row.source, createdAt: row.created_at }));
+  }
+
+  scheduleActivation(conversationId, { sourceType, sourceKey, activation, anchorAt = isoNow() }) {
+    if (!activation?.enabled || !Array.isArray(activation.messages)) return [];
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) return [];
+    this.db.prepare("UPDATE activation_tasks SET status = 'canceled', updated_at = ? WHERE conversation_id = ? AND source_type = ? AND source_key = ? AND status = 'pending'").run(isoNow(), conversationId, sourceType, sourceKey);
+    let dueMs = Number.isFinite(Date.parse(anchorAt)) ? Date.parse(anchorAt) : Date.now();
+    const ids = [];
+    const insert = this.db.prepare(`INSERT INTO activation_tasks (conversation_id, account_id, source_type, source_key, message_index, sequence_no, content, polish_by_agent, due_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    activation.messages.forEach((message, messageIndex) => {
+      const content = cleanText(message?.content, "", 20_000);
+      if (!content) return;
+      const delayMs = Math.max(0, Number(message.intervalMinutes) || 0) === 0 ? 5_000 : Math.max(0, Number(message.intervalMinutes) || 0) * 60_000;
+      const maxTimes = Math.max(1, Number.parseInt(message.maxTimes ?? 1, 10) || 1);
+      for (let sequence = 1; sequence <= maxTimes; sequence += 1) {
+        dueMs += delayMs;
+        const result = insert.run(conversationId, conversation.accountId, sourceType, cleanText(sourceKey, "", 200), messageIndex, sequence, content, activation.polishByAgent === false ? 0 : 1, new Date(dueMs).toISOString());
+        ids.push(Number(result.lastInsertRowid));
+      }
+    });
+    if (ids.length) this.audit(conversation.accountId, conversationId, "activation", "activation.scheduled", { sourceType, sourceKey, taskCount: ids.length });
+    return ids;
+  }
+
+  claimDueActivations(limit = 20) {
+    const rows = this.db.prepare(`SELECT * FROM activation_tasks WHERE status = 'pending' AND due_at <= ? ORDER BY due_at, id LIMIT ?`).all(isoNow(), limit);
+    const claimed = [];
+    const claim = this.db.prepare("UPDATE activation_tasks SET status = 'processing', updated_at = ? WHERE id = ? AND status = 'pending'");
+    for (const row of rows) if (claim.run(isoNow(), row.id).changes) claimed.push(activationTaskView(row));
+    return claimed;
+  }
+
+  finishActivation(id, { status, error = "" }) {
+    if (!["sent", "failed", "canceled"].includes(status)) throw new TypeError("Invalid activation status");
+    const condition = status === "canceled" ? "status IN ('pending', 'processing')" : "status = 'processing'";
+    return Boolean(this.db.prepare(`UPDATE activation_tasks SET status = ?, last_error = ?, updated_at = ? WHERE id = ? AND ${condition}`).run(status, cleanText(error, "", 1000), isoNow(), id).changes);
+  }
+
+  isActivationProcessing(id) {
+    return this.db.prepare("SELECT 1 FROM activation_tasks WHERE id = ? AND status = 'processing'").get(id) !== undefined;
+  }
+
+  getTagSchema(accountId) {
+    const row = this.db.prepare("SELECT config_json, updated_at FROM tag_schemas WHERE account_id = ?").get(accountId);
+    return { accountId, config: normalizeStoredTagSchema(json(row?.config_json, { dateTag: { enabled: true, cutoffTime: "00:00" }, groups: [] })), updatedAt: row?.updated_at || null };
+  }
+
+  saveTagSchema(accountId, schema) {
+    if (!this.getAccount(accountId)) throw new TypeError("Channel account not found");
+    const config = normalizeStoredTagSchema(schema?.schema || schema);
+    validateTagSchema(config);
+    const timestamp = isoNow();
+    this.db.prepare(`INSERT INTO tag_schemas (account_id, config_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET config_json = excluded.config_json, updated_at = excluded.updated_at`).run(accountId, JSON.stringify(config), timestamp);
+    this.audit(accountId, null, "configuration", "tag_schema.updated", { groupCount: config.groups.length, tagCount: config.groups.reduce((sum, group) => sum + group.tags.length, 0) });
+    return this.getTagSchema(accountId);
   }
 
   listTags(accountId) {
-    return this.db.prepare("SELECT id, name, color, description, created_at FROM tag_definitions WHERE account_id = ? ORDER BY id").all(accountId).map((row) => ({ ...row, id: Number(row.id), createdAt: row.created_at }));
+    return this.getTagSchema(accountId).config.groups.flatMap((group) => group.tags.map((tag) => ({ ...tag, groupId: group.id, groupName: group.name })));
   }
 
-  createTag(accountId, { name, color = "#2a30d8", description = "" }) {
-    const cleanName = cleanText(name, "", 60);
-    if (!cleanName) throw new TypeError("Tag name is required");
-    const result = this.db.prepare("INSERT INTO tag_definitions (account_id, name, color, description) VALUES (?, ?, ?, ?)").run(accountId, cleanName, /^#[0-9a-f]{6}$/i.test(color) ? color : "#2a30d8", cleanText(description, "", 300));
-    return this.db.prepare("SELECT id, name, color, description FROM tag_definitions WHERE id = ?").get(result.lastInsertRowid);
+  listConversationTags(conversationId) {
+    return this.db.prepare("SELECT * FROM conversation_rule_tags WHERE conversation_id = ? ORDER BY created_at, tag_id").all(conversationId).map(ruleTagView);
   }
 
-  assignTags(conversationId, names, { source = "agent", evidenceMessageId = null } = {}) {
+  ensureDateTag(conversationId, accountId, at = isoNow()) {
+    const schema = this.getTagSchema(accountId).config;
+    if (!schema.dateTag.enabled) return;
+    const tagId = dateTagIdFor(at, schema.dateTag.cutoffTime);
+    this.db.prepare(`INSERT OR IGNORE INTO conversation_rule_tags (conversation_id, account_id, group_id, group_name, tag_id, tag_name, source) VALUES (?, ?, 'date', '添加日期', ?, ?, 'system')`).run(conversationId, accountId, tagId, tagId);
+  }
+
+  applyTagDecision(conversationId, decision, { source = "agent", evidenceMessageId = null } = {}) {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) return { tags: [], accepted: [], rejected: [] };
+    const schema = this.getTagSchema(conversation.accountId).config;
+    const currentTags = this.listConversationTags(conversationId).filter((tag) => tag.groupId !== "date");
+    const result = adjudicateTagDecision({ schema, currentTags, decision, ignoreOneWay: source === "manual" });
+    const timestamp = isoNow();
+    this.db.prepare("DELETE FROM conversation_rule_tags WHERE conversation_id = ? AND group_id <> 'date'").run(conversationId);
+    const insert = this.db.prepare(`INSERT INTO conversation_rule_tags (conversation_id, account_id, group_id, group_name, tag_id, tag_name, reason, evidence_message_id, evidence_text, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const tag of result.nextTags) {
+      const action = result.accepted.find((item) => item.groupId === tag.groupId && item.tagId === tag.tagId);
+      insert.run(conversationId, conversation.accountId, tag.groupId, tag.groupName, tag.tagId, tag.tagName || tag.name, action?.reason || tag.reason || "", action?.evidenceMessageId ? evidenceMessageId : null, action?.evidenceText || "", source, timestamp, timestamp);
+    }
+    const eventInsert = this.db.prepare(`INSERT INTO tag_events (conversation_id, account_id, group_id, tag_id, action, reason, evidence_message_id, evidence_text, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const action of result.accepted) {
+      eventInsert.run(conversationId, conversation.accountId, action.groupId, action.tagId, action.action, action.reason || "", action.evidenceMessageId ? evidenceMessageId : null, action.evidenceText || "", source);
+    }
+    if (result.accepted.length || result.rejected.length) this.audit(conversation.accountId, conversationId, "tag", "tag.decision_applied", { accepted: result.accepted, rejected: result.rejected });
+    return { tags: this.listConversationTags(conversationId), accepted: result.accepted, rejected: result.rejected };
+  }
+
+  assignTags(conversationId, names, { source = "manual", evidenceMessageId = null } = {}) {
     const conversation = this.getConversation(conversationId);
     if (!conversation) return [];
-    const available = new Map(this.listTags(conversation.accountId).map((tag) => [tag.name, tag]));
-    const insert = this.db.prepare("INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id, source, evidence_message_id) VALUES (?, ?, ?, ?)");
-    for (const name of Array.isArray(names) ? names : []) {
-      const tag = available.get(String(name));
-      if (tag) insert.run(conversationId, tag.id, source, evidenceMessageId);
-    }
-    return this.getConversation(conversationId).tags;
+    const schema = this.getTagSchema(conversation.accountId).config;
+    const wanted = new Set((Array.isArray(names) ? names : []).map(String));
+    const add = schema.groups.flatMap((group) => group.tags.filter((tag) => wanted.has(tag.name) || wanted.has(`${group.id}:${tag.id}`)).map((tag) => ({ groupId: group.id, tagId: tag.id, reason: "manual" })));
+    return this.applyTagDecision(conversationId, { add, remove: [] }, { source, evidenceMessageId }).tags;
   }
 
   createAlert(conversationId, messageId, { title, detail = "" }) {
@@ -340,17 +481,65 @@ function messageView(row) {
   };
 }
 
+function flowSessionView(row) {
+  if (!row) return null;
+  return {
+    conversationId: Number(row.conversation_id),
+    accountId: row.account_id,
+    currentNodeId: row.current_node_id,
+    collectedData: json(row.collected_data_json),
+    status: row.status,
+    enteredAt: row.entered_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function ruleTagView(row) {
+  return {
+    id: `${row.group_id}:${row.tag_id}`,
+    conversationId: Number(row.conversation_id),
+    groupId: row.group_id,
+    groupName: row.group_name,
+    tagId: row.tag_id,
+    tagName: row.tag_name,
+    name: row.tag_name,
+    reason: row.reason || "",
+    source: row.source,
+    createdAt: row.created_at
+  };
+}
+
+function activationTaskView(row) {
+  return {
+    id: Number(row.id),
+    conversationId: Number(row.conversation_id),
+    accountId: row.account_id,
+    sourceType: row.source_type,
+    sourceKey: row.source_key,
+    messageIndex: Number(row.message_index),
+    sequenceNo: Number(row.sequence_no),
+    content: row.content,
+    polishByAgent: Boolean(row.polish_by_agent),
+    dueAt: row.due_at
+  };
+}
+
 function cleanText(value, fallback = "", max = 1000) {
   if (value === undefined || value === null) return fallback;
   return String(value).trim().slice(0, max);
 }
 
-function validateStateMachine(config) {
-  if (!config || !Array.isArray(config.states) || !config.states.length) throw new TypeError("State machine requires at least one state");
-  const ids = new Set();
-  for (const state of config.states) {
-    if (!/^[a-z][a-z0-9_]{1,39}$/.test(state?.id || "") || !String(state?.name || "").trim() || ids.has(state.id)) throw new TypeError("Invalid state machine state");
-    ids.add(state.id);
+function validateTagSchema(schema) {
+  const groupIds = new Set();
+  for (const group of schema.groups) {
+    if (!group.id || !group.name || groupIds.has(group.id)) throw new TypeError("Tag group ids must be unique and non-empty");
+    groupIds.add(group.id);
+    const tagIds = new Set();
+    for (const tag of group.tags) {
+      if (!tag.id || !tag.name || tagIds.has(tag.id)) throw new TypeError(`Tag ids in '${group.id}' must be unique and non-empty`);
+      tagIds.add(tag.id);
+    }
   }
-  if (!ids.has(config.initialState)) throw new TypeError("Initial state must exist");
 }
