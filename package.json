@@ -1,0 +1,20 @@
+{
+  "name": "dclaw-agent-service",
+  "version": "0.1.0",
+  "description": "Channel-neutral customer service runtime for DClaw agents",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "check": "node --check src/server.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1"
+  }
+}
