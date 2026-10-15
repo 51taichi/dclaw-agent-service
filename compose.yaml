@@ -1,0 +1,45 @@
+name: dclaw-agent-local
+
+services:
+  agent-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dclaw-agent-service:local
+    container_name: dclaw-agent-service-local
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4310
+      DATABASE_PATH: /app/data/dclaw-agent.sqlite
+      PUBLIC_BASE_URL: ${DCLAW_AGENT_PUBLIC_BASE_URL:-http://127.0.0.1:${DCLAW_AGENT_PORT:-4310}}
+      AGENT_TIMEOUT_MS: ${AGENT_TIMEOUT_MS:-90000}
+      DELIVERY_MAX_ATTEMPTS: ${DELIVERY_MAX_ATTEMPTS:-3}
+    ports:
+      - "${DCLAW_AGENT_PORT:-4310}:4310"
+    volumes:
+      - dclaw-agent-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:4310/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    stop_grace_period: 15s
+
+volumes:
+  dclaw-agent-data:
+    name: dclaw-agent-service-data

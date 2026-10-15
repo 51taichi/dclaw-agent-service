@@ -16,6 +16,34 @@ npm start
 
 Node.js 需为 24 或更高版本，数据库使用 Node 内置 SQLite。首次启动会创建 `data/dclaw-agent.sqlite`，并预置 `website`、`miniapp`、`fake` 三个示例账号。
 
+## Docker 本地测试
+
+```bash
+docker compose up --build -d
+docker compose ps
+docker compose logs -f agent-service
+```
+
+默认访问地址仍为：
+
+- 管理中台：`http://127.0.0.1:4310/console/`
+- 渠道管理：`http://127.0.0.1:4310/admin/`
+- 健康检查：`http://127.0.0.1:4310/health`
+
+SQLite 数据保存在命名卷 `dclaw-agent-service-data`。停止容器不会删除数据：
+
+```bash
+docker compose down
+```
+
+只有明确需要清空本地测试数据时才删除数据卷：
+
+```bash
+docker compose down --volumes
+```
+
+如需改用其他宿主机端口，可在 `.env` 设置 `DCLAW_AGENT_PORT` 和对应的 `DCLAW_AGENT_PUBLIC_BASE_URL`。
+
 ## Channel Adapter 边界
 
 核心业务只处理标准入站事件和标准投递命令，不判断具体渠道名称：

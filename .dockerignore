@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+node_modules
+data
+coverage
+screenshots
+tests
+*.log
+.DS_Store
+Dockerfile*
+compose*.yaml
+compose*.yml
+README.md
