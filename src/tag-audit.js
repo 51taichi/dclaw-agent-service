@@ -13,14 +13,65 @@ function error(path, message, type = "semantic") {
 }
 
 export function normalizeTagEvaluation(value = []) {
-  return (Array.isArray(value) ? value : []).map((item) => ({
-    groupId: text(item?.groupId || item?.group_id),
-    tagId: text(item?.tagId || item?.tag_id),
-    matched: item?.matched,
-    reason: text(item?.reason),
-    evidenceMessageId: text(item?.evidenceMessageId || item?.evidence_message_id),
-    evidenceText: text(item?.evidenceText || item?.evidence_text)
-  }));
+  return (Array.isArray(value) ? value : []).map((item) => {
+    const matched = item?.matched;
+    return {
+      groupId: text(item?.groupId || item?.group_id),
+      tagId: text(item?.tagId || item?.tag_id),
+      matched,
+      reason: text(item?.reason),
+      evidenceMessageId: matched === false ? "" : text(item?.evidenceMessageId || item?.evidence_message_id),
+      evidenceText: matched === false ? "" : text(item?.evidenceText || item?.evidence_text)
+    };
+  });
+}
+
+export function completeTagDecisionFromEvaluation({ evaluation, decision, tagContext } = {}) {
+  const evaluations = normalizeTagEvaluation(evaluation);
+  const normalizedDecision = normalizeTagDecision(decision);
+  const groups = (Array.isArray(tagContext?.groups) ? tagContext.groups : []).map((group) => ({
+    id: text(group?.id),
+    exclusive: Boolean(group?.exclusive),
+    oneWay: Boolean(group?.oneWay),
+    tags: (Array.isArray(group?.tags) ? group.tags : []).map((tag, index) => ({ id: text(tag?.id), index })).filter((tag) => tag.id)
+  })).filter((group) => group.id);
+  const configuredKeys = groups.flatMap((group) => group.tags.map((tag) => key(group.id, tag.id)));
+  const evaluationByKey = new Map();
+  for (const item of evaluations) {
+    const itemKey = key(item.groupId, item.tagId);
+    if (!configuredKeys.includes(itemKey) || evaluationByKey.has(itemKey) || typeof item.matched !== "boolean" || !item.reason) return normalizedDecision;
+    evaluationByKey.set(itemKey, item);
+  }
+  if (evaluationByKey.size !== configuredKeys.length) return normalizedDecision;
+
+  const current = new Set((Array.isArray(tagContext?.currentTags) ? tagContext.currentTags : []).map((tag) => key(text(tag?.groupId), text(tag?.tagId))));
+  const existingAdds = new Set(normalizedDecision.add.map((tag) => key(tag.groupId, tag.tagId)));
+  const addEvaluation = (item) => {
+    const itemKey = key(item.groupId, item.tagId);
+    if (current.has(itemKey) || existingAdds.has(itemKey)) return;
+    normalizedDecision.add.push({
+      groupId: item.groupId,
+      tagId: item.tagId,
+      reason: item.reason,
+      ...(item.evidenceMessageId ? { evidenceMessageId: item.evidenceMessageId } : {}),
+      ...(item.evidenceText ? { evidenceText: item.evidenceText } : {})
+    });
+    existingAdds.add(itemKey);
+  };
+
+  for (const group of groups) {
+    const matched = group.tags.filter((tag) => evaluationByKey.get(key(group.id, tag.id))?.matched === true);
+    if (!matched.length) continue;
+    if (!group.exclusive) {
+      for (const tag of matched) addEvaluation(evaluationByKey.get(key(group.id, tag.id)));
+      continue;
+    }
+    const winner = matched.reduce((best, tag) => (!best || tag.index > best.index ? tag : best), null);
+    const currentTag = group.tags.find((tag) => current.has(key(group.id, tag.id)));
+    if (group.oneWay && currentTag && currentTag.index >= winner.index) continue;
+    addEvaluation(evaluationByKey.get(key(group.id, winner.id)));
+  }
+  return normalizedDecision;
 }
 
 export function validateTagAuditContract({

@@ -222,9 +222,26 @@ function renderMessages(messages) {
   els.chatMessages.innerHTML = messages.length ? messages.map((message) => {
     const outbound = message.direction === "outbound";
     const sender = outbound ? (message.senderType === "human" ? "人工客服" : "AI 客服") : state.conversation.displayName;
-    return `<div class="chat-bubble-row ${outbound ? "outbound" : "inbound"}" data-message-id="${message.id}">${outbound ? "" : `<img class="chat-avatar" src="./assets/ddeer.png" alt="" />`}<div class="chat-bubble"><div class="chat-meta"><small>${escapeHtml(sender)}</small><time>${escapeHtml(formatDate(message.createdAt))}</time></div><div class="chat-text">${escapeHtml(message.content)}</div>${outbound ? `<div class="chat-delivery">${escapeHtml(deliveryLabel(message.deliveryStatus))}</div>` : ""}</div>${outbound ? `<img class="chat-avatar" src="./assets/bot-avatar.png" alt="" />` : ""}</div>`;
+    return `<div class="chat-bubble-row ${outbound ? "outbound" : "inbound"}" data-message-id="${message.id}">${outbound ? "" : `<img class="chat-avatar" src="./assets/ddeer.png" alt="" />`}<div class="chat-bubble"><div class="chat-meta"><small>${escapeHtml(sender)}</small><time>${escapeHtml(formatDate(message.createdAt))}</time></div>${message.content ? `<div class="chat-text">${escapeHtml(message.content)}</div>` : ""}${renderMessageAttachments(message.metadata?.attachments)}${renderMessageSources(message.metadata?.sources)}${outbound ? `<div class="chat-delivery">${escapeHtml(deliveryLabel(message.deliveryStatus))}</div>` : ""}</div>${outbound ? `<img class="chat-avatar" src="./assets/bot-avatar.png" alt="" />` : ""}</div>`;
   }).join("") : `<div class="empty-state">暂无会话记录</div>`;
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+}
+
+function renderMessageAttachments(value) {
+  const attachments = Array.isArray(value) ? value.filter((item) => item?.url) : [];
+  if (!attachments.length) return "";
+  return `<div class="chat-attachments" aria-label="附件">${attachments.map((attachment) => {
+    const name = attachment.title || attachment.name || attachment.url;
+    if (attachment.type === "image") return `<a class="chat-attachment-link chat-media-image-link" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer"><img class="chat-media-image" src="${escapeHtml(attachment.url)}" alt="${escapeHtml(name)}" loading="lazy" /></a>`;
+    if (attachment.type === "card") return `<a class="chat-message-card-link" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer"><span class="chat-message-card-shell"><span class="chat-message-card-copy"><strong>${escapeHtml(attachment.title || attachment.name || "卡片")}</strong><small>${escapeHtml(attachment.subtitle || "")}</small><span class="chat-message-card-host">${icon("link")}打开资料</span></span><span class="chat-message-card-image ${attachment.pictureUrl ? "" : "chat-message-card-image-fallback"}">${attachment.pictureUrl ? `<img src="${escapeHtml(attachment.pictureUrl)}" alt="" loading="lazy" />` : icon("image")}</span></span></a>`;
+    return `<a class="chat-attachment-link" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>`;
+  }).join("")}</div>`;
+}
+
+function renderMessageSources(value) {
+  const sources = Array.isArray(value) ? value.filter((item) => item?.type && item?.name) : [];
+  if (!sources.length) return "";
+  return `<div class="chat-sources">${sources.map((source) => `<span class="chat-source-chip" title="${escapeHtml(source.reason || "")}">${icon("link")}${escapeHtml(source.name)}</span>`).join("")}</div>`;
 }
 
 async function toggleHandoff() {

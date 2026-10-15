@@ -138,6 +138,11 @@ export function validateFlowDecision(raw, { flowContext } = {}) {
   if (!flowContext) return null;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new TypeError("flowDecision is required when a flow context is provided");
   if (typeof raw.nodeCompleted !== "boolean") throw new TypeError("flowDecision.nodeCompleted must be a boolean");
+  const currentNodeId = text(flowContext.currentNode?.id);
+  const declaredCurrentNodeId = text(raw.currentNodeId);
+  if (declaredCurrentNodeId && declaredCurrentNodeId !== currentNodeId) {
+    throw new TypeError("flowDecision.currentNodeId must match the current node");
+  }
   const patch = raw.collectedDataPatch && typeof raw.collectedDataPatch === "object" && !Array.isArray(raw.collectedDataPatch)
     ? raw.collectedDataPatch
     : {};
@@ -152,14 +157,18 @@ export function validateFlowDecision(raw, { flowContext } = {}) {
     collectedDataPatch[field] = typeof value === "string" ? value.trim() : value;
   }
   const nextNodeId = text(raw.nextNodeId);
-  if (!raw.nodeCompleted && nextNodeId) throw new TypeError("flowDecision.nextNodeId is only allowed when nodeCompleted=true");
+  if (!raw.nodeCompleted && nextNodeId && nextNodeId !== currentNodeId) {
+    throw new TypeError("flowDecision.nextNodeId must remain on the current node when nodeCompleted=false");
+  }
   if (raw.nodeCompleted && nextNodeId !== (flowContext.allowedNextNodeId || "")) {
     throw new TypeError("flowDecision.nextNodeId must match the configured next node");
   }
   return {
+    currentNodeId,
     nodeCompleted: raw.nodeCompleted,
-    nextNodeId,
+    nextNodeId: raw.nodeCompleted ? nextNodeId : currentNodeId,
     collectedDataPatch,
+    confidence: Number.isFinite(Number(raw.confidence)) ? Math.min(1, Math.max(0, Number(raw.confidence))) : null,
     reason: text(raw.reason).slice(0, 1000)
   };
 }

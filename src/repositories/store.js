@@ -124,8 +124,9 @@ export class Store {
   }
 
   conversationContext(conversationId, limit = 20) {
-    return this.db.prepare(`SELECT id, direction, sender_type, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?`).all(conversationId, limit).reverse().map((row) => ({
-      id: Number(row.id), direction: row.direction, senderType: row.sender_type, content: row.content, createdAt: row.created_at
+    return this.db.prepare(`SELECT id, direction, sender_type, message_type, content, metadata_json, created_at FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?`).all(conversationId, limit).reverse().map((row) => ({
+      id: Number(row.id), direction: row.direction, senderType: row.sender_type, messageType: row.message_type,
+      content: row.content, metadata: json(row.metadata_json), createdAt: row.created_at
     }));
   }
 

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { adjudicateTagDecision, normalizeStoredTagSchema } from "../src/tags.js";
 import { compactFlowForAgent, defaultFlowConfig, normalizeFlowConfig, validateFlowDecision } from "../src/flow-machine.js";
-import { validateTagAuditContract } from "../src/tag-audit.js";
+import { completeTagDecisionFromEvaluation, normalizeTagEvaluation, validateTagAuditContract } from "../src/tag-audit.js";
 
 test("exclusive one-way tags can advance but cannot regress", () => {
   const schema = normalizeStoredTagSchema({ groups: [{ id: "intent", name: "意向", exclusive: true, oneWay: true, tags: [
@@ -27,6 +27,43 @@ test("tag audit requires exact customer evidence for every matched customer tag"
   assert.match(invalid.errors.map((item) => item.message).join(" "), /exactly match/);
 });
 
+test("tag evaluation clears redundant evidence from unmatched tags", () => {
+  assert.deepEqual(normalizeTagEvaluation([{
+    groupId: "intent",
+    tagId: "high",
+    matched: false,
+    reason: "未命中",
+    evidenceMessageId: "11",
+    evidenceText: "我想购买"
+  }]), [{
+    groupId: "intent",
+    tagId: "high",
+    matched: false,
+    reason: "未命中",
+    evidenceMessageId: "",
+    evidenceText: ""
+  }]);
+});
+
+test("complete tag evaluation deterministically supplies a missing add decision", () => {
+  const tagContext = {
+    groups: [{ id: "service", exclusive: false, oneWay: false, tags: [
+      { id: "enrollment", evidenceMode: "customer" },
+      { id: "review", evidenceMode: "customer" }
+    ] }],
+    currentTags: []
+  };
+  const decision = completeTagDecisionFromEvaluation({
+    tagContext,
+    evaluation: [
+      { groupId: "service", tagId: "enrollment", matched: true, reason: "明确报名", evidenceMessageId: "11", evidenceText: "我要报名" },
+      { groupId: "service", tagId: "review", matched: false, reason: "无需核对" }
+    ],
+    decision: { add: [], remove: [] }
+  });
+  assert.deepEqual(decision.add, [{ groupId: "service", tagId: "enrollment", reason: "明确报名", evidenceMessageId: "11", evidenceText: "我要报名" }]);
+});
+
 test("flow decision only collects configured fields and follows the configured next node", () => {
   const config = normalizeFlowConfig(defaultFlowConfig("测试"));
   const flowContext = compactFlowForAgent({ machine: { enabled: true, config }, session: { currentNodeId: config.entryNodeId, collectedData: {} } });
@@ -34,4 +71,20 @@ test("flow decision only collects configured fields and follows the configured n
   assert.equal(decision.nextNodeId, "invite_next_step");
   assert.throws(() => validateFlowDecision({ nodeCompleted: true, nextNodeId: "close_deal", collectedDataPatch: {}, reason: "跳级" }, { flowContext }), /configured next node/);
   assert.throws(() => validateFlowDecision({ nodeCompleted: false, nextNodeId: "", collectedDataPatch: { "未配置字段": "x" } }, { flowContext }), /not configured/);
+});
+
+test("flow decision accepts the WorkTool contract for an incomplete node", () => {
+  const config = normalizeFlowConfig(defaultFlowConfig("测试"));
+  const flowContext = compactFlowForAgent({ machine: { enabled: true, config }, session: { currentNodeId: config.entryNodeId, collectedData: {} } });
+  const decision = validateFlowDecision({
+    currentNodeId: config.entryNodeId,
+    nodeCompleted: false,
+    nextNodeId: config.entryNodeId,
+    confidence: 0.9,
+    collectedDataPatch: {},
+    reason: "继续当前节点"
+  }, { flowContext });
+  assert.equal(decision.currentNodeId, config.entryNodeId);
+  assert.equal(decision.nextNodeId, config.entryNodeId);
+  assert.equal(decision.confidence, 0.9);
 });

@@ -128,6 +128,114 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
   assert.deepEqual(new Set(alerts.data.items.map((item) => item.title)), new Set(["标签提醒：高意向", "安排产品顾问"]));
 });
 
+test("Agent attachments reach the channel outbox and required=false does not create an alert", async (t) => {
+  const agentFetch = async (_url, options) => {
+    const request = JSON.parse(options.body);
+    const payload = JSON.parse(request.message.split("\n").at(-1));
+    const current = payload.flow.currentNode.id;
+    return new Response(JSON.stringify({
+      reply: "请扫码添加课程老师",
+      attachments: [{ type: "image", url: "https://example.test/teacher.png", name: "课程老师二维码.png" }],
+      sources: [{ type: "flow_node", name: current, reason: "节点配置" }],
+      flowDecision: { currentNodeId: current, nodeCompleted: false, nextNodeId: current, collectedDataPatch: {}, confidence: 0.9, reason: "等待客户后续" },
+      tagEvaluation: [],
+      tagDecision: { add: [], remove: [] },
+      attentionAlert: { required: false, reason: "", evidenceMessageId: "", evidenceText: "" }
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const app = await fixture(agentFetch);
+  t.after(() => app.close());
+  await jsonRequest(app.baseUrl, "/api/accounts/miniapp-default", {
+    method: "PUT",
+    body: { agentApiUrl: "https://agent.example.test/openapi/chat", agentApiKey: "secret", agentId: "sales-agent" }
+  });
+  const machine = await jsonRequest(app.baseUrl, "/api/flow-machines/miniapp-default");
+  await jsonRequest(app.baseUrl, "/api/flow-machines/miniapp-default", { method: "PUT", body: { enabled: true, config: machine.data.machine.config } });
+  const schema = await jsonRequest(app.baseUrl, "/api/tag-schemas/miniapp-default");
+  await jsonRequest(app.baseUrl, "/api/tag-schemas/miniapp-default", { method: "PUT", body: { schema: { ...schema.data.schema, dateTag: { enabled: false } , groups: [] } } });
+
+  const received = await jsonRequest(app.baseUrl, "/api/channels/miniapp/miniapp-default/events", { method: "POST", body: inbound() });
+  assert.equal(received.data.items[0].handledBy, "agent");
+  const outbox = await jsonRequest(app.baseUrl, "/api/channels/miniapp/miniapp-default/conversations/session-1/outbox?after=0");
+  assert.equal(outbox.data.items[0].messageType, "rich");
+  assert.deepEqual(outbox.data.items[0].attachments, [{ type: "image", url: "https://example.test/teacher.png", name: "课程老师二维码.png" }]);
+  const alerts = await jsonRequest(app.baseUrl, "/api/accounts/miniapp-default/alerts");
+  assert.equal(alerts.data.items.length, 0);
+});
+
+test("Agent Gateway uses the completed SSE body instead of concatenating duplicate content events", async (t) => {
+  const agentFetch = async (_url, options) => {
+    const request = JSON.parse(options.body);
+    const payload = JSON.parse(request.message.split("\n").at(-1));
+    const current = payload.flow.currentNode.id;
+    const reply = JSON.stringify({
+      reply: "收到",
+      flowDecision: { currentNodeId: current, nodeCompleted: false, nextNodeId: current, collectedDataPatch: {}, reason: "继续当前节点" },
+      tagEvaluation: [],
+      tagDecision: { add: [], remove: [] },
+      attentionAlert: { required: false, reason: "", evidenceMessageId: "", evidenceText: "" }
+    });
+    const stream = [
+      `data: ${JSON.stringify({ object: "content", status: "in_progress", delta: true, text: reply })}`,
+      `data: ${JSON.stringify({ object: "content", status: "completed", delta: null, text: reply })}`,
+      `data: ${JSON.stringify({ object: "response", status: "completed", output: [{ content: [{ text: reply }] }] })}`,
+      ""
+    ].join("\n\n");
+    return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+  };
+  const app = await fixture(agentFetch);
+  t.after(() => app.close());
+  await jsonRequest(app.baseUrl, "/api/accounts/miniapp-default", {
+    method: "PUT",
+    body: { agentApiUrl: "https://agent.example.test/openapi/chat", agentApiKey: "secret", agentId: "sales-agent" }
+  });
+  const machine = await jsonRequest(app.baseUrl, "/api/flow-machines/miniapp-default");
+  await jsonRequest(app.baseUrl, "/api/flow-machines/miniapp-default", { method: "PUT", body: { enabled: true, config: machine.data.machine.config } });
+  const schema = await jsonRequest(app.baseUrl, "/api/tag-schemas/miniapp-default");
+  await jsonRequest(app.baseUrl, "/api/tag-schemas/miniapp-default", { method: "PUT", body: { schema: { ...schema.data.schema, dateTag: { enabled: false }, groups: [] } } });
+
+  const received = await jsonRequest(app.baseUrl, "/api/channels/miniapp/miniapp-default/events", { method: "POST", body: inbound() });
+  assert.equal(received.data.items[0].handledBy, "agent");
+  const outbox = await jsonRequest(app.baseUrl, "/api/channels/miniapp/miniapp-default/conversations/session-1/outbox?after=0");
+  assert.equal(outbox.data.items[0].content, "收到");
+});
+
+test("Agent Gateway retries a contract-invalid response with validation feedback", async (t) => {
+  const calls = [];
+  const agentFetch = async (_url, options) => {
+    const request = JSON.parse(options.body);
+    calls.push({ key: options.headers["Idempotency-Key"], message: request.message });
+    if (calls.length === 1) {
+      return new Response(JSON.stringify({ reply: "缺少流程决策" }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    const payload = JSON.parse(request.message.split("\n").find((line) => line.startsWith("{") && line.endsWith("}")));
+    const current = payload.flow.currentNode.id;
+    return new Response(JSON.stringify({
+      reply: "已修正",
+      flowDecision: { currentNodeId: current, nodeCompleted: false, nextNodeId: current, collectedDataPatch: {}, reason: "继续当前节点" },
+      tagEvaluation: [],
+      tagDecision: { add: [], remove: [] },
+      attentionAlert: { required: false, reason: "", evidenceMessageId: "", evidenceText: "" }
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const app = await fixture(agentFetch);
+  t.after(() => app.close());
+  await jsonRequest(app.baseUrl, "/api/accounts/miniapp-default", {
+    method: "PUT",
+    body: { agentApiUrl: "https://agent.example.test/openapi/chat", agentApiKey: "secret", agentId: "sales-agent" }
+  });
+  const machine = await jsonRequest(app.baseUrl, "/api/flow-machines/miniapp-default");
+  await jsonRequest(app.baseUrl, "/api/flow-machines/miniapp-default", { method: "PUT", body: { enabled: true, config: machine.data.machine.config } });
+  const schema = await jsonRequest(app.baseUrl, "/api/tag-schemas/miniapp-default");
+  await jsonRequest(app.baseUrl, "/api/tag-schemas/miniapp-default", { method: "PUT", body: { schema: { ...schema.data.schema, dateTag: { enabled: false }, groups: [] } } });
+
+  const received = await jsonRequest(app.baseUrl, "/api/channels/miniapp/miniapp-default/events", { method: "POST", body: inbound() });
+  assert.equal(received.data.items[0].handledBy, "agent");
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].message, /flowDecision is required/);
+  assert.notEqual(calls[0].key, calls[1].key);
+});
+
 test("flow activation is scheduled, delivered through the channel adapter, and canceled by a customer reply", async (t) => {
   const app = await fixture();
   t.after(() => app.close());

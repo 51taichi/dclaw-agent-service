@@ -70,8 +70,15 @@ export class MessageService {
       if (decision.attentionAlert) this.store.createAlert(conversation.id, message.id, decision.attentionAlert);
       const tagHandoff = matchedDefinitions.find((item) => item.handoffEnabled);
       if (decision.handoff || tagHandoff) this.store.setConversationMode(conversation.id, "human", { operator: "agent", note: decision.attentionAlert?.detail || (tagHandoff ? `命中标签：${tagHandoff.name}` : "Agent requested handoff") });
-      const outbound = decision.reply
-        ? await this.delivery.send({ account, conversation, content: decision.reply, senderType: "agent", metadata: { agentSource: decision.source } })
+      const outbound = decision.reply || decision.attachments?.length
+        ? await this.delivery.send({
+            account,
+            conversation,
+            content: decision.reply,
+            attachments: decision.attachments,
+            senderType: "agent",
+            metadata: { agentSource: decision.source, sources: decision.sources || [] }
+          })
         : null;
       if (!outbound) this.store.audit(account.id, conversation.id, "agent", "agent.silent_reply", { messageId: message.id });
       return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, outboundMessageId: outbound?.id || null, handledBy: "agent" };
