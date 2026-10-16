@@ -65,6 +65,7 @@ function renderAll() {
   els.workspaceStatus.textContent = state.workspace.enabled ? "运行中" : "已停用";
   els.workspaceStatus.className = `pill ${state.workspace.enabled ? "ok" : "off"}`;
   els.openConsole.href = `/console/?workspace=${encodeURIComponent(state.workspace.id)}`;
+  els.openWorkspaceConsole.href = els.openConsole.href;
   renderWorkspaceList();
   renderWorkspaceForm();
   renderPeople();
@@ -74,11 +75,15 @@ function renderAll() {
 
 function renderWorkspaceList() {
   els.workspaceList.innerHTML = state.workspaces.map((workspace) => `
-    <button class="workspace-row ${workspace.id === state.workspace?.id ? "active" : ""}" data-workspace-id="${escapeHtml(workspace.id)}">
-      <span class="workspace-mark" style="background:${escapeHtml(workspace.accent)}">${escapeHtml(workspace.name.slice(0, 1))}</span>
-      <span><strong>${escapeHtml(workspace.name)}</strong><small>${workspace.personCount} 人物 · ${workspace.channelCount} 渠道</small></span>
-      <i class="status-dot ${workspace.enabled ? "on" : ""}"></i>
-    </button>`).join("") || '<div class="list-empty">暂无工作区</div>';
+    <article class="workspace-row ${workspace.id === state.workspace?.id && !state.creatingWorkspace ? "active" : ""}" style="--workspace-accent:${escapeHtml(workspace.accent)}">
+      <button class="workspace-select" data-workspace-id="${escapeHtml(workspace.id)}">
+        <svg><use href="#i-grid"/></svg>
+        <span><strong>${escapeHtml(workspace.name)}</strong><small>${workspace.personCount} 人物 · ${workspace.channelCount} 渠道</small></span>
+      </button>
+      <label class="workspace-switch" title="${workspace.enabled ? "停用" : "启用"}${escapeHtml(workspace.name)}">
+        <input type="checkbox" data-workspace-toggle="${escapeHtml(workspace.id)}" ${workspace.enabled ? "checked" : ""}/><span></span>
+      </label>
+    </article>`).join("") || '<div class="list-empty">暂无工作区</div>';
 }
 
 function renderWorkspaceForm() {
@@ -93,7 +98,9 @@ function renderWorkspaceForm() {
   setField(form, "logoUrl", workspace?.logoUrl || "");
   setField(form, "industry", workspace?.companyContext?.industry || "");
   setField(form, "description", workspace?.companyContext?.description || "");
-  form.elements.enabled.checked = workspace?.enabled !== false;
+  els.workspaceFormHint.textContent = workspace ? `${workspace.enabled ? "已启用" : "已停用"} · ${workspace.personCount} 个智能员工 · ${workspace.channelCount} 个渠道` : "新工作区创建后默认启用";
+  els.openWorkspaceConsole.hidden = !workspace;
+  if (workspace) els.openWorkspaceConsole.href = `/console/?workspace=${encodeURIComponent(workspace.id)}`;
 }
 
 function renderPeople() {
@@ -256,8 +263,7 @@ function startWorkspace() {
   els.workspaceSlug.textContent = "平台租户";
   els.workspaceStatus.textContent = "待创建";
   els.openConsole.href = "/console/";
-  document.querySelectorAll("[data-tab]").forEach((button) => button.classList.toggle("active", button.dataset.tab === "workspace"));
-  document.querySelectorAll("[data-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === "workspace"));
+  activateTab("workspace");
   renderWorkspaceList();
   renderWorkspaceForm();
 }
@@ -265,7 +271,7 @@ function startWorkspace() {
 async function saveWorkspace(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const body = { id: form.elements.id.value, slug: form.elements.slug.value, name: form.elements.name.value, accent: form.elements.accent.value, logoUrl: form.elements.logoUrl.value, enabled: form.elements.enabled.checked, companyContext: { industry: form.elements.industry.value, description: form.elements.description.value } };
+  const body = { id: form.elements.id.value, slug: form.elements.slug.value, name: form.elements.name.value, accent: form.elements.accent.value, logoUrl: form.elements.logoUrl.value, enabled: state.creatingWorkspace ? true : state.workspace.enabled, companyContext: { industry: form.elements.industry.value, description: form.elements.description.value } };
   if (state.creatingWorkspace) {
     state.workspace = await api("/api/admin/workspaces", { method: "POST", body });
   } else state.workspace = await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}`, { method: "PUT", body });
@@ -316,12 +322,31 @@ async function saveBinding(event, scopeType, getScopeId) {
   toast("Agent API 配置已保存");
 }
 
+async function toggleWorkspace(id, enabled) {
+  const current = state.workspaces.find((item) => item.id === id);
+  if (!current) return;
+  await api(`/api/admin/workspaces/${encodeURIComponent(id)}`, { method: "PUT", body: { enabled } });
+  state.workspaces = (await api("/api/admin/workspaces")).items;
+  if (state.workspace?.id === id) state.workspace = state.workspaces.find((item) => item.id === id);
+  if (state.creatingWorkspace) {
+    renderWorkspaceList();
+    renderWorkspaceForm();
+  } else {
+    renderAll();
+  }
+  toast(`${current.name}已${enabled ? "启用" : "停用"}`);
+}
+
+function activateTab(tab) {
+  document.querySelectorAll("[data-tab]").forEach((item) => item.classList.toggle("active", item.dataset.tab === tab));
+  document.querySelectorAll("[data-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tab));
+  document.querySelector(".contextual-titlebar").hidden = tab === "workspace";
+}
+
 function bindEvents() {
-  document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => {
-    document.querySelectorAll("[data-tab]").forEach((item) => item.classList.toggle("active", item === button));
-    document.querySelectorAll("[data-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === button.dataset.tab));
-  }));
+  document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => activateTab(button.dataset.tab)));
   els.workspaceList.addEventListener("click", (event) => { const button = event.target.closest("[data-workspace-id]"); if (!button) return; state.workspace = state.workspaces.find((item) => item.id === button.dataset.workspaceId); loadWorkspaceContext().catch(handleError); });
+  els.workspaceList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-workspace-toggle]"); if (!toggle) return; toggleWorkspace(toggle.dataset.workspaceToggle, toggle.checked).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.personList.addEventListener("click", (event) => { const button = event.target.closest("[data-person-id]"); if (!button) return; state.person = state.people.find((item) => item.id === button.dataset.personId); state.creatingPerson = false; api(`/api/admin/agent-bindings/person/${encodeURIComponent(state.person.id)}`).then((data) => { state.bindings.person = data.binding; renderPeople(); renderBindings(); }).catch(handleError); });
   els.channelList.addEventListener("click", (event) => { const button = event.target.closest("[data-channel-id]"); if (!button) return; state.channel = state.channels.find((item) => item.id === button.dataset.channelId); state.deployment = state.deployments.find((item) => item.workspaceChannelId === state.channel.id) || null; state.creatingChannel = false; state.creatingDeployment = false; renderChannels(); });
   els.deploymentList.addEventListener("click", (event) => { const button = event.target.closest("[data-deployment-id], [data-preview-id]"); if (!button) return; const id = button.dataset.deploymentId || button.dataset.previewId; state.deployment = state.deployments.find((item) => item.id === id); state.creatingDeployment = false; renderDeployments(); });
