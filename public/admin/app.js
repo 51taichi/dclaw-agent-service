@@ -80,7 +80,7 @@ function renderWorkspaceList() {
         <svg><use href="#i-grid"/></svg>
         <span><strong>${escapeHtml(workspace.name)}</strong><small>${workspace.personCount} 人物 · ${workspace.channelCount} 渠道</small></span>
       </button>
-      <label class="workspace-switch" title="${workspace.enabled ? "停用" : "启用"}${escapeHtml(workspace.name)}">
+      <label class="row-switch" title="${workspace.enabled ? "停用" : "启用"}${escapeHtml(workspace.name)}">
         <input type="checkbox" data-workspace-toggle="${escapeHtml(workspace.id)}" ${workspace.enabled ? "checked" : ""}/><span></span>
       </label>
     </article>`).join("") || '<div class="list-empty">暂无工作区</div>';
@@ -105,11 +105,15 @@ function renderWorkspaceForm() {
 
 function renderPeople() {
   els.personList.innerHTML = state.people.map((person) => `
-    <button class="entity-row ${person.id === state.person?.id && !state.creatingPerson ? "active" : ""}" data-person-id="${escapeHtml(person.id)}">
-      ${person.avatarUrl ? `<img src="${escapeHtml(person.avatarUrl)}" alt="" />` : `<span class="avatar-fallback">${escapeHtml(person.name.slice(0, 1))}</span>`}
-      <span><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.title || "未设置职务")} · ${person.deploymentCount} 个部署</small></span>
-      <i class="status-dot ${person.enabled ? "on" : ""}"></i>
-    </button>`).join("") || '<div class="list-empty">还没有智能员工</div>';
+    <article class="entity-row ${person.id === state.person?.id && !state.creatingPerson ? "active" : ""}">
+      <button class="entity-select" data-person-id="${escapeHtml(person.id)}">
+        ${person.avatarUrl ? `<img src="${escapeHtml(person.avatarUrl)}" alt="" />` : `<span class="avatar-fallback">${escapeHtml(person.name.slice(0, 1))}</span>`}
+        <span><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.title || "未设置职务")} · ${person.deploymentCount} 个部署</small></span>
+      </button>
+      <label class="row-switch" title="${person.enabled ? "停用" : "启用"}${escapeHtml(person.name)}">
+        <input type="checkbox" data-person-toggle="${escapeHtml(person.id)}" ${person.enabled ? "checked" : ""}/><span></span>
+      </label>
+    </article>`).join("") || '<div class="list-empty">还没有智能员工</div>';
   renderPersonForm();
   renderPersonOptions();
 }
@@ -127,16 +131,19 @@ function renderPersonForm() {
   setField(form, "speakingStyle", person?.persona?.speakingStyle || "");
   setField(form, "responsibilities", person?.persona?.responsibilities || "");
   setField(form, "systemPrompt", person?.persona?.systemPrompt || "");
-  form.elements.enabled.checked = person?.enabled !== false;
 }
 
 function renderChannels() {
   els.channelList.innerHTML = state.channels.map((channel) => `
-    <button class="entity-row channel-row ${channel.id === state.channel?.id && !state.creatingChannel ? "active" : ""}" data-channel-id="${escapeHtml(channel.id)}">
-      <span class="channel-glyph">${channel.provider === "miniapp" ? "名" : "网"}</span>
-      <span><strong>${escapeHtml(channel.name)}</strong><small>${channel.provider === "miniapp" ? "智能体名片" : "官网客服"} · v${channel.publishedVersion}</small></span>
-      <i class="status-dot ${channel.enabled ? "on" : ""}"></i>
-    </button>`).join("") || '<div class="list-empty">还没有开通渠道</div>';
+    <article class="entity-row channel-row ${channel.id === state.channel?.id && !state.creatingChannel ? "active" : ""}">
+      <button class="entity-select" data-channel-id="${escapeHtml(channel.id)}">
+        <span class="channel-glyph">${channel.provider === "miniapp" ? "名" : "网"}</span>
+        <span><strong>${escapeHtml(channel.name)}</strong><small>${channel.provider === "miniapp" ? "智能体名片" : "官网客服"} · v${channel.publishedVersion}</small></span>
+      </button>
+      <label class="row-switch" title="${channel.enabled ? "停用" : "启用"}${escapeHtml(channel.name)}">
+        <input type="checkbox" data-channel-toggle="${escapeHtml(channel.id)}" ${channel.enabled ? "checked" : ""}/><span></span>
+      </label>
+    </article>`).join("") || '<div class="list-empty">还没有开通渠道</div>';
   renderChannelForm();
   renderDeployments();
 }
@@ -151,7 +158,6 @@ function renderChannelForm() {
   setField(form, "provider", channel?.provider || state.channelTypes[0]?.provider || "website");
   form.elements.provider.disabled = Boolean(channel);
   setField(form, "name", channel?.name || "");
-  form.elements.enabled.checked = channel?.enabled !== false;
   form.elements.webhookSecret.placeholder = channel?.webhookSecretConfigured ? "已配置；留空保持不变" : "可选；用于校验渠道入站消息";
   renderDynamicFields(els.channelConfigFields, currentChannelType()?.channelFields || [], channel?.config || {});
   els.publishChannel.disabled = !channel;
@@ -164,6 +170,9 @@ function renderDeployments() {
     <article class="deployment-row ${deployment.id === state.deployment?.id ? "active" : ""}">
       <button data-deployment-id="${escapeHtml(deployment.id)}"><span><strong>${escapeHtml(deployment.personName)}</strong><small>${escapeHtml(deployment.publicSlug)} · v${deployment.publishedVersion}</small></span></button>
       <button class="secondary preview-button" data-preview-id="${escapeHtml(deployment.id)}"><svg><use href="#i-eye"/></svg>预览</button>
+      <label class="row-switch" title="${deployment.enabled ? "停用" : "启用"}${escapeHtml(deployment.personName)}的部署">
+        <input type="checkbox" data-deployment-toggle="${escapeHtml(deployment.id)}" ${deployment.enabled ? "checked" : ""}/><span></span>
+      </label>
     </article>`).join("") || '<div class="list-empty">该渠道还没有部署人物</div>';
   renderDeploymentForm();
   renderPreview();
@@ -182,7 +191,6 @@ function renderDeploymentForm() {
   form.elements.personId.disabled = Boolean(deployment);
   setField(form, "publicSlug", deployment?.publicSlug || "");
   setField(form, "sortOrder", deployment?.sortOrder ?? 0);
-  form.elements.enabled.checked = deployment?.enabled !== false;
   renderDynamicFields(els.deploymentConfigFields, currentChannelType()?.deploymentFields || [], deployment?.config || {});
 }
 
@@ -283,7 +291,7 @@ async function saveWorkspace(event) {
 async function savePerson(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const body = { id: form.elements.id.value, name: form.elements.name.value, title: form.elements.title.value, avatarUrl: form.elements.avatarUrl.value, enabled: form.elements.enabled.checked, persona: { personality: form.elements.personality.value, speakingStyle: form.elements.speakingStyle.value, responsibilities: form.elements.responsibilities.value, systemPrompt: form.elements.systemPrompt.value } };
+  const body = { id: form.elements.id.value, name: form.elements.name.value, title: form.elements.title.value, avatarUrl: form.elements.avatarUrl.value, persona: { personality: form.elements.personality.value, speakingStyle: form.elements.speakingStyle.value, responsibilities: form.elements.responsibilities.value, systemPrompt: form.elements.systemPrompt.value } };
   if (state.creatingPerson) state.person = await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}/people`, { method: "POST", body });
   else state.person = await api(`/api/admin/people/${encodeURIComponent(state.person.id)}`, { method: "PUT", body });
   await loadWorkspaceContext();
@@ -293,7 +301,7 @@ async function savePerson(event) {
 async function saveChannel(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const body = { id: form.elements.id.value, provider: form.elements.provider.value, name: form.elements.name.value, enabled: form.elements.enabled.checked, config: readDynamicFields(els.channelConfigFields) };
+  const body = { id: form.elements.id.value, provider: form.elements.provider.value, name: form.elements.name.value, config: readDynamicFields(els.channelConfigFields) };
   if (form.elements.webhookSecret.value) body.webhookSecret = form.elements.webhookSecret.value;
   if (state.creatingChannel) state.channel = await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}/channels`, { method: "POST", body });
   else state.channel = await api(`/api/admin/channels/${encodeURIComponent(state.channel.id)}`, { method: "PUT", body });
@@ -304,7 +312,7 @@ async function saveChannel(event) {
 async function saveDeployment(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const body = { id: form.elements.id.value, personId: form.elements.personId.value, workspaceChannelId: state.channel.id, publicSlug: form.elements.publicSlug.value, sortOrder: Number(form.elements.sortOrder.value), enabled: form.elements.enabled.checked, config: readDynamicFields(els.deploymentConfigFields) };
+  const body = { id: form.elements.id.value, personId: form.elements.personId.value, workspaceChannelId: state.channel.id, publicSlug: form.elements.publicSlug.value, sortOrder: Number(form.elements.sortOrder.value), config: readDynamicFields(els.deploymentConfigFields) };
   if (state.creatingDeployment) state.deployment = await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}/deployments`, { method: "POST", body });
   else state.deployment = await api(`/api/admin/deployments/${encodeURIComponent(state.deployment.id)}`, { method: "PUT", body });
   await loadWorkspaceContext();
@@ -337,6 +345,14 @@ async function toggleWorkspace(id, enabled) {
   toast(`${current.name}已${enabled ? "启用" : "停用"}`);
 }
 
+async function toggleAdminItem(collection, id, enabled, endpoint, label) {
+  const current = state[collection].find((item) => item.id === id);
+  if (!current) return;
+  await api(endpoint, { method: "PUT", body: { enabled } });
+  current.enabled = enabled;
+  toast(`${label(current)}已${enabled ? "启用" : "停用"}`);
+}
+
 function activateTab(tab) {
   document.querySelectorAll("[data-tab]").forEach((item) => item.classList.toggle("active", item.dataset.tab === tab));
   document.querySelectorAll("[data-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tab));
@@ -348,8 +364,11 @@ function bindEvents() {
   els.workspaceList.addEventListener("click", (event) => { const button = event.target.closest("[data-workspace-id]"); if (!button) return; state.workspace = state.workspaces.find((item) => item.id === button.dataset.workspaceId); loadWorkspaceContext().catch(handleError); });
   els.workspaceList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-workspace-toggle]"); if (!toggle) return; toggleWorkspace(toggle.dataset.workspaceToggle, toggle.checked).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.personList.addEventListener("click", (event) => { const button = event.target.closest("[data-person-id]"); if (!button) return; state.person = state.people.find((item) => item.id === button.dataset.personId); state.creatingPerson = false; api(`/api/admin/agent-bindings/person/${encodeURIComponent(state.person.id)}`).then((data) => { state.bindings.person = data.binding; renderPeople(); renderBindings(); }).catch(handleError); });
+  els.personList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-person-toggle]"); if (!toggle) return; toggleAdminItem("people", toggle.dataset.personToggle, toggle.checked, `/api/admin/people/${encodeURIComponent(toggle.dataset.personToggle)}`, (item) => item.name).then(() => { toggle.closest("label").title = `${toggle.checked ? "停用" : "启用"}${state.people.find((item) => item.id === toggle.dataset.personToggle)?.name || "人物"}`; }).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.channelList.addEventListener("click", (event) => { const button = event.target.closest("[data-channel-id]"); if (!button) return; state.channel = state.channels.find((item) => item.id === button.dataset.channelId); state.deployment = state.deployments.find((item) => item.workspaceChannelId === state.channel.id) || null; state.creatingChannel = false; state.creatingDeployment = false; renderChannels(); });
+  els.channelList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-channel-toggle]"); if (!toggle) return; toggleAdminItem("channels", toggle.dataset.channelToggle, toggle.checked, `/api/admin/channels/${encodeURIComponent(toggle.dataset.channelToggle)}`, (item) => item.name).then(() => { toggle.closest("label").title = `${toggle.checked ? "停用" : "启用"}${state.channels.find((item) => item.id === toggle.dataset.channelToggle)?.name || "渠道"}`; }).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.deploymentList.addEventListener("click", (event) => { const button = event.target.closest("[data-deployment-id], [data-preview-id]"); if (!button) return; const id = button.dataset.deploymentId || button.dataset.previewId; state.deployment = state.deployments.find((item) => item.id === id); state.creatingDeployment = false; renderDeployments(); });
+  els.deploymentList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-deployment-toggle]"); if (!toggle) return; toggleAdminItem("deployments", toggle.dataset.deploymentToggle, toggle.checked, `/api/admin/deployments/${encodeURIComponent(toggle.dataset.deploymentToggle)}`, (item) => `${item.personName}的部署`).then(() => { toggle.closest("label").title = `${toggle.checked ? "停用" : "启用"}${state.deployments.find((item) => item.id === toggle.dataset.deploymentToggle)?.personName || "人物"}的部署`; }).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.newWorkspace.addEventListener("click", startWorkspace);
   els.newPerson.addEventListener("click", () => { state.creatingPerson = true; state.person = null; renderPeople(); els.personForm.elements.id.focus(); });
   els.newChannel.addEventListener("click", () => { state.creatingChannel = true; state.channel = null; state.deployment = null; renderChannels(); els.channelForm.elements.id.focus(); });

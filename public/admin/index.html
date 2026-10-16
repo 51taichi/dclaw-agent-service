@@ -75,7 +75,7 @@
                   <label><span>表达方式</span><textarea name="speakingStyle" rows="3"></textarea></label>
                   <label class="wide"><span>岗位职责</span><textarea name="responsibilities" rows="3"></textarea></label>
                   <label class="wide"><span>补充人设规则</span><textarea name="systemPrompt" rows="4"></textarea></label>
-                  <div class="form-footer wide"><label class="toggle-line"><input name="enabled" type="checkbox" checked /><span>启用人物</span></label><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存人物</button></div>
+                  <div class="form-footer wide form-actions-end"><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存人物</button></div>
                 </form>
               </div>
             </div>
@@ -91,7 +91,7 @@
                   <label class="wide"><span>渠道名称</span><input name="name" required /></label>
                   <div id="channelConfigFields" class="dynamic-fields wide"></div>
                   <label class="wide"><span>Webhook Secret</span><input name="webhookSecret" type="password" autocomplete="new-password" /></label>
-                  <div class="form-footer wide"><label class="toggle-line"><input name="enabled" type="checkbox" checked /><span>启用渠道</span></label><div class="button-row"><button id="publishChannel" class="secondary" type="button"><svg><use href="#i-send"/></svg>发布配置</button><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存渠道</button></div></div>
+                  <div class="form-footer wide form-actions-end"><div class="button-row"><button id="publishChannel" class="secondary" type="button"><svg><use href="#i-send"/></svg>发布配置</button><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存渠道</button></div></div>
                 </form>
                 <div class="deployment-section">
                   <div class="section-title compact"><div><h2>人物部署</h2><p>绑定人物与渠道，并配置最终展示内容。</p></div><button id="newDeployment" class="secondary"><svg><use href="#i-plus"/></svg>部署人物</button></div>
@@ -102,7 +102,7 @@
                     <label><span>公开标识</span><input name="publicSlug" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
                     <label><span>显示排序</span><input name="sortOrder" type="number" value="0" /></label>
                     <div id="deploymentConfigFields" class="dynamic-fields wide"></div>
-                    <div class="form-footer wide"><label class="toggle-line"><input name="enabled" type="checkbox" checked /><span>启用部署</span></label><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存部署</button></div>
+                    <div class="form-footer wide form-actions-end"><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存部署</button></div>
                   </form>
                 </div>
               </div>
