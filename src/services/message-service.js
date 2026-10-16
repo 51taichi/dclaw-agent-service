@@ -39,6 +39,7 @@ export class MessageService {
     if (conversation.mode === "human") return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, handledBy: "human" };
 
     try {
+      const agentStartedAt = Date.now();
       const flow = this.store.getFlowContext(conversation.id);
       const flowContext = compactFlowForAgent(flow);
       const tagSchema = this.store.getTagSchema(account.id).config;
@@ -50,6 +51,16 @@ export class MessageService {
         history: this.store.conversationContext(conversation.id),
         flowContext,
         tagContext
+      });
+      this.store.recordAgentUsage({
+        bindingId: account.agentBinding?.id || null,
+        accountId: account.id,
+        workspaceId: account.workspaceId,
+        personId: account.personId,
+        conversationId: conversation.id,
+        status: decision.source === "unconfigured-fallback" ? "fallback" : "succeeded",
+        durationMs: Date.now() - agentStartedAt,
+        requestId: `message:${message.id}`
       });
       if (decision.flowDecision) this.store.applyFlowDecision(conversation.id, decision.flowDecision, "agent");
       const currentFlow = this.store.getFlowContext(conversation.id);
@@ -83,6 +94,16 @@ export class MessageService {
       if (!outbound) this.store.audit(account.id, conversation.id, "agent", "agent.silent_reply", { messageId: message.id });
       return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, outboundMessageId: outbound?.id || null, handledBy: "agent" };
     } catch (error) {
+      this.store.recordAgentUsage({
+        bindingId: account.agentBinding?.id || null,
+        accountId: account.id,
+        workspaceId: account.workspaceId,
+        personId: account.personId,
+        conversationId: conversation.id,
+        status: "failed",
+        requestId: `message:${message.id}`,
+        error: String(error.message || error)
+      });
       this.store.createAlert(conversation.id, message.id, { title: "Agent 处理失败", detail: String(error.message || error) });
       this.store.audit(account.id, conversation.id, "agent", "agent.failed", { error: String(error.message || error), messageId: message.id });
       return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, handledBy: "error", error: String(error.message || error) };

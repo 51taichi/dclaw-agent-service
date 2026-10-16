@@ -9,6 +9,7 @@ import { AgentGateway } from "./services/agent-gateway.js";
 import { DeliveryService } from "./services/delivery-service.js";
 import { MessageService } from "./services/message-service.js";
 import { ActivationService } from "./services/activation-service.js";
+import { listChannelTypes } from "./channel-catalog.js";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,7 +36,30 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.get("/health", (_req, res) => res.json({ ok: true, service: "dclaw-agent-service", adapters: registry.list(), time: new Date().toISOString() }));
   app.get("/api/adapters", (_req, res) => res.json({ items: registry.list() }));
 
-  app.get("/api/accounts", (_req, res) => res.json({ items: store.listAccounts() }));
+  app.get("/api/admin/channel-types", (_req, res) => res.json({ items: listChannelTypes() }));
+  app.get("/api/admin/workspaces", (_req, res) => res.json({ items: store.listWorkspaces() }));
+  app.post("/api/admin/workspaces", (req, res) => res.status(201).json(store.createWorkspace(req.body || {})));
+  app.get("/api/admin/workspaces/:workspaceId", (req, res) => respondFound(res, store.getWorkspace(req.params.workspaceId)));
+  app.put("/api/admin/workspaces/:workspaceId", (req, res) => respondFound(res, store.updateWorkspace(req.params.workspaceId, req.body || {})));
+  app.get("/api/admin/workspaces/:workspaceId/people", (req, res) => res.json({ items: store.listPeople(req.params.workspaceId) }));
+  app.post("/api/admin/workspaces/:workspaceId/people", (req, res) => res.status(201).json(store.createPerson(req.params.workspaceId, req.body || {})));
+  app.put("/api/admin/people/:personId", (req, res) => respondFound(res, store.updatePerson(req.params.personId, req.body || {})));
+  app.get("/api/admin/workspaces/:workspaceId/channels", (req, res) => res.json({ items: store.listWorkspaceChannels(req.params.workspaceId) }));
+  app.post("/api/admin/workspaces/:workspaceId/channels", (req, res) => {
+    registry.get(req.body?.provider);
+    res.status(201).json(store.createWorkspaceChannel(req.params.workspaceId, req.body || {}));
+  });
+  app.put("/api/admin/channels/:channelId", (req, res) => respondFound(res, store.updateWorkspaceChannel(req.params.channelId, req.body || {})));
+  app.post("/api/admin/channels/:channelId/publish", (req, res) => respondFound(res, store.publishWorkspaceChannel(req.params.channelId)));
+  app.get("/api/admin/workspaces/:workspaceId/deployments", (req, res) => res.json({ items: store.listDeployments(req.params.workspaceId) }));
+  app.post("/api/admin/workspaces/:workspaceId/deployments", (req, res) => res.status(201).json(store.createDeployment(req.params.workspaceId, req.body || {})));
+  app.put("/api/admin/deployments/:deploymentId", (req, res) => respondFound(res, store.updateDeployment(req.params.deploymentId, req.body || {})));
+  app.get("/api/admin/deployments/:deploymentId/preview", (req, res) => respondFound(res, store.channelPreview(req.params.deploymentId, { published: req.query.published === "1" })));
+  app.get("/api/admin/agent-bindings/:scopeType/:scopeId", (req, res) => res.json({ binding: store.getAgentBinding(req.params.scopeType, req.params.scopeId) }));
+  app.put("/api/admin/agent-bindings/:scopeType/:scopeId", (req, res) => res.json({ binding: store.saveAgentBinding(req.params.scopeType, req.params.scopeId, req.body || {}) }));
+  app.get("/api/public/channels/:publicSlug", (req, res) => respondFound(res, store.publicChannel(req.params.publicSlug)));
+
+  app.get("/api/accounts", (req, res) => res.json({ items: store.listAccounts({ workspaceId: String(req.query.workspace || "") }) }));
   app.post("/api/accounts", (req, res) => {
     registry.get(req.body?.provider);
     res.status(201).json(store.createAccount(req.body || {}));

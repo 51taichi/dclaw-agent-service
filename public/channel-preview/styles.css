@@ -1,0 +1,65 @@
+:root { color-scheme: light; --theme: #2a30d8; font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: #eef0f4; color: #172033; }
+button, input { font: inherit; }
+.preview-loading, .preview-error { display: grid; min-height: 100vh; place-items: center; color: #69748b; }
+.phone { position: relative; width: 100%; min-height: 100vh; padding-bottom: 72px; background: #f1f2f4; overflow: hidden; }
+.card-hero { position: sticky; top: 0; z-index: 3; min-height: 156px; padding: 68px 18px 18px; background-color: #07183e; background-image: radial-gradient(circle at 50% 0, #295bac, #07122f 70%); background-size: cover; background-position: center; color: #fff; }
+.back { position: absolute; top: 18px; left: 16px; font-size: 36px; font-weight: 200; }
+.miniapp-menu { position: absolute; top: 18px; right: 12px; padding: 7px 11px; border-radius: 18px; background: rgba(255,255,255,.78); color: #101724; font-weight: 900; }
+.card-identity { display: flex; align-items: center; gap: 12px; }
+.card-identity strong, .card-identity small { display: block; }
+.card-identity strong { font-size: 18px; }
+.card-identity small { margin-top: 4px; color: rgba(255,255,255,.75); font-size: 12px; }
+.hero-avatar, .assistant-avatar, .widget-avatar, .launcher-avatar { object-fit: cover; border-radius: 50%; }
+.hero-avatar { display: grid; place-items: center; width: 54px; height: 54px; border: 2px solid rgba(255,255,255,.8); background: #fff; color: var(--theme); font-size: 22px; font-weight: 900; }
+.chat-feed { padding: 14px 12px 20px; }
+.assistant-line { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; color: #526078; font-size: 12px; }
+.assistant-avatar { display: grid; place-items: center; width: 30px; height: 30px; background: var(--theme); color: #fff; font-weight: 900; }
+.message-card, .resource-card, .lead-card { margin-bottom: 12px; padding: 16px; border-radius: 7px; background: #fff; box-shadow: 0 2px 8px rgba(31,42,70,.06); }
+.message-card strong { font-size: 15px; }
+.message-card p { margin: 10px 0 0; color: #4c586f; font-size: 13px; line-height: 1.7; }
+.question-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.question-list button, .quick-question { padding: 7px 10px; border: 1px solid color-mix(in srgb, var(--theme) 35%, white); border-radius: 6px; background: #fff; color: var(--theme); }
+.resource-card h3 { margin: 0 0 10px; font-size: 14px; }
+.resource-row { display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid #edf0f4; }
+.resource-row strong { font-size: 12px; }
+.resource-row button, .lead-card button { padding: 6px 10px; border: 0; border-radius: 5px; background: var(--theme); color: #fff; }
+.pdf { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 5px; background: #e44e43; color: #fff; font-size: 10px; font-weight: 900; }
+.lead-card > strong { display: block; margin-bottom: 10px; }
+.lead-card label { display: block; margin-top: 8px; color: #3d485f; font-size: 12px; font-weight: 700; }
+.lead-card input { width: 100%; margin-top: 5px; padding: 9px 0; border: 0; border-bottom: 1px solid #dce1ea; outline: 0; }
+.lead-card button { margin-top: 12px; }
+.chat-composer { position: fixed; right: 0; bottom: 0; left: 0; z-index: 4; display: grid; grid-template-columns: 34px minmax(0,1fr) 34px 34px; align-items: center; gap: 7px; padding: 10px 12px 14px; background: rgba(255,255,255,.96); border-top: 1px solid #dfe3e9; }
+.chat-composer span { padding: 10px 12px; border-radius: 7px; background: #f1f3f6; color: #9aa2b1; }
+.chat-composer button { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: transparent; font-size: 20px; }
+.chat-composer .send { background: #19b86a; color: #fff; }
+
+.website-canvas { position: relative; min-height: 100vh; padding: 18px; background: #f5f7fb; overflow: hidden; }
+.demo-site { min-height: 480px; padding: 18px; border: 1px solid #e0e5ef; border-radius: 7px; background: #fff; color: #778197; }
+.demo-site > strong { color: #202941; }
+.demo-site > span { float: right; font-size: 10px; }
+.demo-site > div { margin-top: 100px; }
+.demo-site h1 { max-width: 220px; margin: 0; color: #27334f; font-size: 24px; line-height: 1.25; }
+.demo-site p { font-size: 12px; }
+.widget-panel { position: absolute; right: 14px; bottom: 82px; display: grid; grid-template-rows: auto 1fr auto; width: min(300px, calc(100% - 28px)); height: 390px; border: 1px solid #cfd6e4; border-radius: 8px; background: #fff; box-shadow: 0 16px 38px rgba(28,39,68,.2); overflow: hidden; }
+.widget-panel header { display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--theme); color: #fff; }
+.widget-panel header > div { display: flex; align-items: center; gap: 8px; }
+.widget-panel header strong, .widget-panel header small { display: block; }
+.widget-panel header small { margin-top: 2px; opacity: .78; font-size: 10px; }
+.widget-panel header button { border: 0; background: transparent; color: #fff; font-size: 22px; }
+.widget-avatar { display: grid; place-items: center; width: 34px; height: 34px; background: #fff; color: var(--theme); font-weight: 900; }
+.widget-chat { padding: 14px; background: #f4f6fa; }
+.widget-message { display: block; max-width: 86%; padding: 10px 12px; border-radius: 3px 7px 7px 7px; background: #fff; font-size: 12px; line-height: 1.6; }
+.quick-question { display: block; margin-top: 8px; font-size: 11px; }
+.widget-panel footer { display: grid; grid-template-columns: 1fr 34px; gap: 6px; padding: 8px; border-top: 1px solid #e1e5ed; }
+.widget-panel footer input { min-width: 0; padding: 8px; border: 0; outline: 0; }
+.widget-panel footer button { border: 0; border-radius: 5px; background: var(--theme); color: #fff; }
+.widget-launcher { position: absolute; right: 14px; bottom: 18px; display: flex; align-items: center; gap: 7px; padding: 7px 12px 7px 7px; border: 0; border-radius: 25px; background: var(--theme); color: #fff; box-shadow: 0 8px 20px rgba(32,44,76,.24); }
+.launcher-avatar { display: grid; place-items: center; width: 34px; height: 34px; background: #fff; color: var(--theme); font-weight: 900; }
+.widget-launcher span { font-weight: 800; }
+
+@media (min-width: 620px) {
+  .phone { width: 390px; min-height: 720px; margin: 18px auto; border: 1px solid #cfd5e0; border-radius: 8px; box-shadow: 0 14px 36px rgba(28,38,65,.16); }
+  .chat-composer { position: absolute; }
+}

@@ -65,7 +65,8 @@ async function bootstrap() {
 }
 
 async function loadAccounts(preferredId = state.account?.id) {
-  const data = await api("/api/accounts");
+  const workspaceId = new URLSearchParams(location.search).get("workspace") || "";
+  const data = await api(`/api/accounts${workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : ""}`);
   state.accounts = data.items;
   const requestedId = new URLSearchParams(location.search).get("account");
   state.account = state.accounts.find((item) => item.id === (preferredId || requestedId)) || state.accounts.find((item) => item.enabled) || state.accounts[0] || null;
@@ -82,7 +83,7 @@ function renderAccounts() {
   els.accountList.innerHTML = state.accounts.map((account) => `
     <article class="bot-card ${account.enabled ? "is-online" : "is-offline"} is-unlocked ${account.id === state.account?.id ? "is-selected" : ""}" data-account-id="${escapeHtml(account.id)}" style="--bot-accent:${escapeHtml(account.accent)}">
       <div class="bot-main">
-        <span class="bot-identity"><span class="bot-identity-content"><img class="bot-avatar" src="./assets/bot-avatar.png" alt="" /><span class="bot-summary"><span class="bot-title-row"><strong>${escapeHtml(account.name)}</strong></span><span class="bot-agent">${escapeHtml(account.provider)} · ${account.agentApiKeyConfigured ? escapeHtml(account.agentId || "Agent 已配置") : "未配置 Agent"}</span></span></span></span>
+        <span class="bot-identity"><span class="bot-identity-content"><img class="bot-avatar" src="${escapeHtml(account.person?.avatarUrl || "./assets/bot-avatar.png")}" alt="" /><span class="bot-summary"><span class="bot-title-row"><strong>${escapeHtml(account.person?.name || account.name)}</strong><em class="channel-badge">${account.provider === "miniapp" ? "智能名片" : "官网客服"}</em></span><span class="bot-agent">${escapeHtml(account.person?.title || account.workspace?.name || "智能员工")} · ${account.agentApiKeyConfigured ? escapeHtml(account.agentId || "Agent 已连接") : "继承配置未完成"}</span></span></span></span>
         <span class="pill ${account.enabled ? "ok" : "off"}">${account.enabled ? "运行中" : "已停用"}</span>
       </div>
       <div class="row-actions bot-actions"><button class="secondary icon-button" data-account-tab="sessions" title="客户会话">${icon("users")}</button><button class="secondary icon-button" data-account-tab="flow" title="状态机">${icon("edit")}</button><button class="secondary icon-button" data-account-tab="tags" title="标签">${icon("tag")}</button><button class="secondary icon-button" data-account-tab="config" title="配置">${icon("link")}</button></div>
@@ -316,31 +317,16 @@ async function loadAudit() {
 function renderAccountForm() {
   const form = els.accountForm;
   const fields = form.elements;
-  fields.namedItem("name").value = state.account.name;
-  fields.namedItem("accent").value = state.account.accent;
-  fields.namedItem("agentApiUrl").value = state.account.agentApiUrl;
-  fields.namedItem("agentId").value = state.account.agentId;
-  fields.namedItem("agentApiKey").value = "";
-  fields.namedItem("agentApiKey").placeholder = state.account.agentApiKeyConfigured ? "已配置；留空保持不变" : "请输入 API Key";
-  fields.namedItem("webhookSecret").value = "";
-  fields.namedItem("webhookSecret").placeholder = state.account.webhookSecretConfigured ? "已配置；留空保持不变" : "可选";
-  fields.namedItem("enabled").checked = state.account.enabled;
+  fields.namedItem("personName").value = state.account.person?.name || "";
+  fields.namedItem("personTitle").value = state.account.person?.title || "";
+  fields.namedItem("channelName").value = `${state.account.provider === "miniapp" ? "智能名片" : "官网客服"} · ${state.account.name}`;
+  fields.namedItem("bindingScope").value = ({ person: "人物级覆盖", workspace: "工作区级覆盖", platform: "平台默认", "legacy-account": "兼容账号配置" })[state.account.agentBinding?.inheritedFrom] || "尚未配置";
+  fields.namedItem("personality").value = state.account.person?.persona?.personality || "";
+  fields.namedItem("speakingStyle").value = state.account.person?.persona?.speakingStyle || "";
+  fields.namedItem("responsibilities").value = state.account.person?.persona?.responsibilities || "";
   const base = location.origin;
   els.inboundEndpoint.textContent = `POST ${base}/api/channels/${state.account.provider}/${state.account.id}/events`;
   els.outboxEndpoint.textContent = `GET ${base}/api/channels/${state.account.provider}/${state.account.id}/conversations/{conversationId}/outbox?after=0`;
-}
-
-async function saveAccount(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const fields = form.elements;
-  const body = { name: fields.namedItem("name").value, accent: fields.namedItem("accent").value, agentApiUrl: fields.namedItem("agentApiUrl").value, agentId: fields.namedItem("agentId").value, enabled: fields.namedItem("enabled").checked };
-  if (fields.namedItem("agentApiKey").value) body.agentApiKey = fields.namedItem("agentApiKey").value;
-  if (fields.namedItem("webhookSecret").value) body.webhookSecret = fields.namedItem("webhookSecret").value;
-  const updated = await api(`/api/accounts/${encodeURIComponent(state.account.id)}`, { method: "PUT", body });
-  state.account = updated;
-  await loadAccounts(updated.id);
-  showToast("渠道配置已保存");
 }
 
 async function loadAlerts() {
@@ -399,7 +385,6 @@ function bindEvents() {
   els.manualReplyComposer.addEventListener("submit", (event) => sendManual(event).catch(handleError));
   els.activationForm.addEventListener("submit", (event) => sendActivation(event).catch(handleError));
   els.refreshAudit.addEventListener("click", () => loadAudit().catch(handleError));
-  els.accountForm.addEventListener("submit", (event) => saveAccount(event).catch(handleError));
   els.alertButton.addEventListener("click", () => { els.alertPanel.hidden = !els.alertPanel.hidden; });
   els.closeAlerts.addEventListener("click", () => { els.alertPanel.hidden = true; });
   els.alertList.addEventListener("click", async (event) => {

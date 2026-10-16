@@ -7,13 +7,15 @@ export class Store {
     this.db = db;
   }
 
-  listAccounts({ includeSecrets = false } = {}) {
-    return this.db.prepare("SELECT * FROM channel_accounts ORDER BY CASE provider WHEN 'website' THEN 1 WHEN 'miniapp' THEN 2 WHEN 'fake' THEN 3 ELSE 4 END, created_at, id").all().map((row) => accountView(row, includeSecrets));
+  listAccounts({ includeSecrets = false, workspaceId = "" } = {}) {
+    const where = workspaceId ? "WHERE workspace_id = ?" : "";
+    const rows = this.db.prepare(`SELECT * FROM channel_accounts ${where} ORDER BY CASE provider WHEN 'website' THEN 1 WHEN 'miniapp' THEN 2 ELSE 3 END, created_at, id`).all(...(workspaceId ? [workspaceId] : []));
+    return rows.map((row) => accountView(row, includeSecrets, this.db));
   }
 
   getAccount(id, { includeSecrets = false } = {}) {
     const row = this.db.prepare("SELECT * FROM channel_accounts WHERE id = ?").get(id);
-    return row ? accountView(row, includeSecrets) : null;
+    return row ? accountView(row, includeSecrets, this.db) : null;
   }
 
   createAccount(input) {
@@ -58,6 +60,237 @@ export class Store {
     `).run(value.name, value.enabled ? 1 : 0, value.accent, value.agentApiUrl, value.agentApiKey, value.agentId, value.webhookSecret, JSON.stringify(value.config), isoNow(), id);
     this.audit(id, null, "configuration", "account.updated", { fields: Object.keys(input).filter((key) => !key.toLowerCase().includes("key") && !key.toLowerCase().includes("secret")) });
     return this.getAccount(id);
+  }
+
+  listWorkspaces() {
+    return this.db.prepare(`
+      SELECT w.*,
+        (SELECT COUNT(*) FROM people p WHERE p.workspace_id = w.id) AS person_count,
+        (SELECT COUNT(*) FROM workspace_channels c WHERE c.workspace_id = w.id) AS channel_count
+      FROM workspaces w ORDER BY w.created_at, w.id
+    `).all().map(workspaceView);
+  }
+
+  getWorkspace(id) {
+    const row = this.db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id);
+    return row ? workspaceView(row) : null;
+  }
+
+  createWorkspace(input) {
+    const id = identifier(input.id || input.slug);
+    const slug = identifier(input.slug || input.id);
+    const name = requiredText(input.name, "Workspace name", 120);
+    this.db.prepare(`INSERT INTO workspaces (id, slug, name, enabled, accent, logo_url, company_context_json) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, slug, name, input.enabled === false ? 0 : 1, color(input.accent), cleanText(input.logoUrl, "", 2000), JSON.stringify(objectValue(input.companyContext)));
+    return this.getWorkspace(id);
+  }
+
+  updateWorkspace(id, input) {
+    const existing = this.getWorkspace(id);
+    if (!existing) return null;
+    const value = {
+      slug: input.slug === undefined ? existing.slug : identifier(input.slug),
+      name: cleanText(input.name, existing.name, 120) || existing.name,
+      enabled: input.enabled === undefined ? existing.enabled : Boolean(input.enabled),
+      accent: input.accent === undefined ? existing.accent : color(input.accent),
+      logoUrl: cleanText(input.logoUrl, existing.logoUrl, 2000),
+      companyContext: input.companyContext === undefined ? existing.companyContext : objectValue(input.companyContext)
+    };
+    this.db.prepare(`UPDATE workspaces SET slug = ?, name = ?, enabled = ?, accent = ?, logo_url = ?, company_context_json = ?, updated_at = ? WHERE id = ?`)
+      .run(value.slug, value.name, value.enabled ? 1 : 0, value.accent, value.logoUrl, JSON.stringify(value.companyContext), isoNow(), id);
+    return this.getWorkspace(id);
+  }
+
+  listPeople(workspaceId) {
+    return this.db.prepare(`
+      SELECT p.*,
+        (SELECT COUNT(*) FROM channel_deployments d WHERE d.person_id = p.id) AS deployment_count
+      FROM people p WHERE p.workspace_id = ? ORDER BY p.created_at, p.id
+    `).all(workspaceId).map(personView);
+  }
+
+  getPerson(id) {
+    const row = this.db.prepare("SELECT * FROM people WHERE id = ?").get(id);
+    return row ? personView(row) : null;
+  }
+
+  createPerson(workspaceId, input) {
+    if (!this.getWorkspace(workspaceId)) throw new TypeError("Workspace not found");
+    const id = identifier(input.id);
+    this.db.prepare(`INSERT INTO people (id, workspace_id, name, title, avatar_url, enabled, persona_json) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, workspaceId, requiredText(input.name, "Person name", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, JSON.stringify(objectValue(input.persona)));
+    return this.getPerson(id);
+  }
+
+  updatePerson(id, input) {
+    const existing = this.getPerson(id);
+    if (!existing) return null;
+    this.db.prepare(`UPDATE people SET name = ?, title = ?, avatar_url = ?, enabled = ?, persona_json = ?, updated_at = ? WHERE id = ?`)
+      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.title, existing.title, 160), cleanText(input.avatarUrl, existing.avatarUrl, 2000), input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), JSON.stringify(input.persona === undefined ? existing.persona : objectValue(input.persona)), isoNow(), id);
+    return this.getPerson(id);
+  }
+
+  listWorkspaceChannels(workspaceId) {
+    return this.db.prepare(`
+      SELECT c.*, (SELECT COUNT(*) FROM channel_deployments d WHERE d.workspace_channel_id = c.id) AS deployment_count
+      FROM workspace_channels c WHERE c.workspace_id = ? ORDER BY CASE c.provider WHEN 'website' THEN 1 WHEN 'miniapp' THEN 2 ELSE 3 END, c.created_at
+    `).all(workspaceId).map(channelView);
+  }
+
+  getWorkspaceChannel(id, { includeSecrets = false } = {}) {
+    const row = this.db.prepare("SELECT * FROM workspace_channels WHERE id = ?").get(id);
+    return row ? channelView(row, includeSecrets) : null;
+  }
+
+  createWorkspaceChannel(workspaceId, input) {
+    if (!this.getWorkspace(workspaceId)) throw new TypeError("Workspace not found");
+    const id = identifier(input.id);
+    const provider = cleanText(input.provider, "", 32);
+    if (!["website", "miniapp"].includes(provider)) throw new TypeError("Unsupported channel provider");
+    this.db.prepare(`INSERT INTO workspace_channels (id, workspace_id, provider, name, enabled, webhook_secret, draft_config_json) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, workspaceId, provider, requiredText(input.name, "Channel name", 120), input.enabled === false ? 0 : 1, cleanText(input.webhookSecret, "", 500), JSON.stringify(objectValue(input.config)));
+    return this.getWorkspaceChannel(id);
+  }
+
+  updateWorkspaceChannel(id, input) {
+    const existing = this.getWorkspaceChannel(id, { includeSecrets: true });
+    if (!existing) return null;
+    const secret = input.webhookSecret === undefined || input.webhookSecret === "••••••••" ? existing.webhookSecret : cleanText(input.webhookSecret, "", 500);
+    this.db.prepare(`UPDATE workspace_channels SET name = ?, enabled = ?, webhook_secret = ?, draft_config_json = ?, updated_at = ? WHERE id = ?`)
+      .run(cleanText(input.name, existing.name, 120) || existing.name, input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), secret, JSON.stringify(input.config === undefined ? existing.config : objectValue(input.config)), isoNow(), id);
+    this.db.prepare("UPDATE channel_accounts SET name = ?, enabled = ?, webhook_secret = ?, updated_at = ? WHERE workspace_channel_id = ?")
+      .run(cleanText(input.name, existing.name, 120) || existing.name, input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), secret, isoNow(), id);
+    return this.getWorkspaceChannel(id);
+  }
+
+  listDeployments(workspaceId) {
+    return this.db.prepare(`
+      SELECT d.*, c.workspace_id, c.provider, c.name AS channel_name, p.name AS person_name, p.title AS person_title, p.avatar_url
+      FROM channel_deployments d
+      JOIN workspace_channels c ON c.id = d.workspace_channel_id
+      JOIN people p ON p.id = d.person_id
+      WHERE c.workspace_id = ? ORDER BY c.created_at, d.sort_order, d.created_at
+    `).all(workspaceId).map(deploymentView);
+  }
+
+  getDeployment(id) {
+    const row = this.db.prepare(`
+      SELECT d.*, c.workspace_id, c.provider, c.name AS channel_name, p.name AS person_name, p.title AS person_title, p.avatar_url
+      FROM channel_deployments d JOIN workspace_channels c ON c.id = d.workspace_channel_id JOIN people p ON p.id = d.person_id
+      WHERE d.id = ?
+    `).get(id);
+    return row ? deploymentView(row) : null;
+  }
+
+  createDeployment(workspaceId, input) {
+    const channel = this.getWorkspaceChannel(input.workspaceChannelId);
+    const person = this.getPerson(input.personId);
+    if (!channel || !person || channel.workspaceId !== workspaceId || person.workspaceId !== workspaceId) throw new TypeError("Channel and person must belong to workspace");
+    const id = identifier(input.id);
+    const accountId = identifier(input.accountId || id);
+    const publicSlug = identifier(input.publicSlug || id);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(`INSERT INTO channel_accounts (id, provider, name, enabled, accent, webhook_secret, config_json, workspace_id, person_id, workspace_channel_id, deployment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(accountId, channel.provider, `${person.name} · ${channel.name}`, input.enabled === false ? 0 : 1, this.getWorkspace(workspaceId).accent, channel.webhookSecret || "", JSON.stringify({ delivery: "poll" }), workspaceId, person.id, channel.id, id);
+      this.db.prepare(`INSERT INTO channel_deployments (id, workspace_channel_id, person_id, account_id, public_slug, enabled, sort_order, draft_config_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, channel.id, person.id, accountId, publicSlug, input.enabled === false ? 0 : 1, safeInteger(input.sortOrder), JSON.stringify(objectValue(input.config)));
+      this.db.prepare("UPDATE people SET config_account_id = COALESCE(NULLIF(config_account_id, ''), ?), updated_at = ? WHERE id = ?").run(accountId, isoNow(), person.id);
+      this.db.prepare("INSERT INTO state_machine_configs (account_id, config_json, enabled) VALUES (?, ?, 0)").run(accountId, JSON.stringify(defaultFlowConfig(person.name)));
+      this.db.prepare("INSERT INTO tag_schemas (account_id, config_json) VALUES (?, ?)").run(accountId, JSON.stringify(normalizeStoredTagSchema({ dateTag: { enabled: true, cutoffTime: "00:00" }, groups: [] })));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return this.getDeployment(id);
+  }
+
+  updateDeployment(id, input) {
+    const existing = this.getDeployment(id);
+    if (!existing) return null;
+    const publicSlug = input.publicSlug === undefined ? existing.publicSlug : identifier(input.publicSlug);
+    this.db.prepare(`UPDATE channel_deployments SET public_slug = ?, enabled = ?, sort_order = ?, draft_config_json = ?, updated_at = ? WHERE id = ?`)
+      .run(publicSlug, input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), input.sortOrder === undefined ? existing.sortOrder : safeInteger(input.sortOrder), JSON.stringify(input.config === undefined ? existing.config : objectValue(input.config)), isoNow(), id);
+    this.db.prepare("UPDATE channel_accounts SET enabled = ?, updated_at = ? WHERE id = ?").run(input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), isoNow(), existing.accountId);
+    return this.getDeployment(id);
+  }
+
+  publishWorkspaceChannel(id) {
+    const channel = this.getWorkspaceChannel(id);
+    if (!channel) return null;
+    const timestamp = isoNow();
+    this.db.prepare(`UPDATE workspace_channels SET published_config_json = draft_config_json, published_version = published_version + 1, published_at = ?, updated_at = ? WHERE id = ?`).run(timestamp, timestamp, id);
+    this.db.prepare(`UPDATE channel_deployments SET published_config_json = draft_config_json, published_version = published_version + 1, published_at = ?, updated_at = ? WHERE workspace_channel_id = ?`).run(timestamp, timestamp, id);
+    return this.getWorkspaceChannel(id);
+  }
+
+  getAgentBinding(scopeType, scopeId, { includeSecrets = false } = {}) {
+    const row = this.db.prepare("SELECT * FROM agent_bindings WHERE scope_type = ? AND scope_id = ?").get(scopeType, scopeId);
+    return row ? bindingView(row, includeSecrets) : null;
+  }
+
+  saveAgentBinding(scopeType, scopeId, input) {
+    if (!["platform", "workspace", "person"].includes(scopeType)) throw new TypeError("Invalid Agent binding scope");
+    if (scopeType === "platform" && scopeId !== "default") throw new TypeError("Invalid platform scope");
+    if (scopeType === "workspace" && !this.getWorkspace(scopeId)) throw new TypeError("Workspace not found");
+    if (scopeType === "person" && !this.getPerson(scopeId)) throw new TypeError("Person not found");
+    const existing = this.getAgentBinding(scopeType, scopeId, { includeSecrets: true });
+    const key = input.agentApiKey === undefined || input.agentApiKey === "••••••••" ? existing?.agentApiKey || "" : cleanText(input.agentApiKey, "", 2000);
+    const value = {
+      id: existing?.id || `${scopeType}-${scopeId}`,
+      name: cleanText(input.name, existing?.name || "", 120),
+      enabled: input.enabled === undefined ? existing?.enabled !== false : Boolean(input.enabled),
+      agentApiUrl: cleanText(input.agentApiUrl, existing?.agentApiUrl || "", 2000),
+      agentApiKey: key,
+      agentId: cleanText(input.agentId, existing?.agentId || "", 200),
+      concurrencyLimit: Math.max(0, safeInteger(input.concurrencyLimit ?? existing?.concurrencyLimit)),
+      billingLabel: cleanText(input.billingLabel, existing?.billingLabel || "", 120)
+    };
+    this.db.prepare(`INSERT INTO agent_bindings (id, scope_type, scope_id, name, enabled, agent_api_url, agent_api_key, agent_id, concurrency_limit, billing_label, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(scope_type, scope_id) DO UPDATE SET name = excluded.name, enabled = excluded.enabled, agent_api_url = excluded.agent_api_url, agent_api_key = excluded.agent_api_key, agent_id = excluded.agent_id, concurrency_limit = excluded.concurrency_limit, billing_label = excluded.billing_label, updated_at = excluded.updated_at`)
+      .run(value.id, scopeType, scopeId, value.name, value.enabled ? 1 : 0, value.agentApiUrl, value.agentApiKey, value.agentId, value.concurrencyLimit, value.billingLabel, isoNow());
+    return this.getAgentBinding(scopeType, scopeId);
+  }
+
+  resolveAgentBindingForAccount(accountId, { includeSecrets = false } = {}) {
+    const row = this.db.prepare("SELECT * FROM channel_accounts WHERE id = ?").get(accountId);
+    if (!row) return null;
+    return resolveBinding(this.db, row, includeSecrets);
+  }
+
+  channelPreview(id, { published = false } = {}) {
+    const deployment = this.getDeployment(id);
+    if (!deployment) return null;
+    const workspace = this.getWorkspace(deployment.workspaceId);
+    const person = this.getPerson(deployment.personId);
+    const channel = this.getWorkspaceChannel(deployment.workspaceChannelId);
+    return {
+      schemaVersion: 1,
+      mode: published ? "published" : "draft",
+      channelType: channel.provider,
+      workspace,
+      person,
+      channel: { ...channel, config: published ? channel.publishedConfig : channel.config },
+      deployment: { ...deployment, config: published ? deployment.publishedConfig : deployment.config },
+      endpoints: channelEndpoints(deployment.accountId, channel.provider)
+    };
+  }
+
+  publicChannel(publicSlug) {
+    const deployment = this.db.prepare("SELECT id FROM channel_deployments WHERE public_slug = ? AND enabled = 1").get(publicSlug);
+    if (!deployment) return null;
+    const payload = this.channelPreview(deployment.id, { published: true });
+    if (!payload?.workspace.enabled || !payload.person.enabled || !payload.channel.enabled || payload.channel.publishedVersion < 1) return null;
+    delete payload.workspace.companyContext;
+    delete payload.person.persona;
+    delete payload.person.configurationAccountId;
+    delete payload.channel.webhookSecret;
+    return payload;
+  }
+
+  recordAgentUsage({ bindingId = null, accountId, workspaceId = null, personId = null, conversationId = null, status, durationMs = 0, requestId = "", error = "" }) {
+    this.db.prepare(`INSERT INTO agent_usage_logs (binding_id, account_id, workspace_id, person_id, conversation_id, status, duration_ms, request_id, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(bindingId, accountId, workspaceId, personId, conversationId, cleanText(status, "unknown", 40), Math.max(0, safeInteger(durationMs)), cleanText(requestId, "", 200), cleanText(error, "", 2000));
   }
 
   dashboard(accountId) {
@@ -258,11 +491,12 @@ export class Store {
   }
 
   getFlowMachine(accountId, { useDefault = false } = {}) {
-    const row = this.db.prepare("SELECT config_json, enabled, updated_at FROM state_machine_configs WHERE account_id = ?").get(accountId);
+    const configurationAccountId = this.configurationAccountId(accountId);
+    const row = this.db.prepare("SELECT config_json, enabled, updated_at FROM state_machine_configs WHERE account_id = ?").get(configurationAccountId);
     let raw = json(row?.config_json, null);
     if (!raw?.nodes) raw = defaultFlowConfig(this.getAccount(accountId)?.name || "客服");
     const config = normalizeFlowConfig(raw);
-    return { accountId, enabled: useDefault ? false : Boolean(row?.enabled), config, updatedAt: row?.updated_at || null };
+    return { accountId, configurationAccountId, enabled: useDefault ? false : Boolean(row?.enabled), config, updatedAt: row?.updated_at || null };
   }
 
   saveFlowMachine(accountId, input = {}) {
@@ -270,7 +504,8 @@ export class Store {
     const config = normalizeFlowConfig(input.config || input);
     const enabled = input.enabled !== false;
     const timestamp = isoNow();
-    this.db.prepare(`INSERT INTO state_machine_configs (account_id, config_json, enabled, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET config_json = excluded.config_json, enabled = excluded.enabled, updated_at = excluded.updated_at`).run(accountId, JSON.stringify(config), enabled ? 1 : 0, timestamp);
+    const configurationAccountId = this.configurationAccountId(accountId);
+    this.db.prepare(`INSERT INTO state_machine_configs (account_id, config_json, enabled, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET config_json = excluded.config_json, enabled = excluded.enabled, updated_at = excluded.updated_at`).run(configurationAccountId, JSON.stringify(config), enabled ? 1 : 0, timestamp);
     this.audit(accountId, null, "configuration", "flow_machine.updated", { enabled, nodeCount: config.nodes.length, version: config.version });
     return this.getFlowMachine(accountId);
   }
@@ -359,8 +594,9 @@ export class Store {
   }
 
   getTagSchema(accountId) {
-    const row = this.db.prepare("SELECT config_json, updated_at FROM tag_schemas WHERE account_id = ?").get(accountId);
-    return { accountId, config: normalizeStoredTagSchema(json(row?.config_json, { dateTag: { enabled: true, cutoffTime: "00:00" }, groups: [] })), updatedAt: row?.updated_at || null };
+    const configurationAccountId = this.configurationAccountId(accountId);
+    const row = this.db.prepare("SELECT config_json, updated_at FROM tag_schemas WHERE account_id = ?").get(configurationAccountId);
+    return { accountId, configurationAccountId, config: normalizeStoredTagSchema(json(row?.config_json, { dateTag: { enabled: true, cutoffTime: "00:00" }, groups: [] })), updatedAt: row?.updated_at || null };
   }
 
   saveTagSchema(accountId, schema) {
@@ -368,13 +604,22 @@ export class Store {
     const config = normalizeStoredTagSchema(schema?.schema || schema);
     validateTagSchema(config);
     const timestamp = isoNow();
-    this.db.prepare(`INSERT INTO tag_schemas (account_id, config_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET config_json = excluded.config_json, updated_at = excluded.updated_at`).run(accountId, JSON.stringify(config), timestamp);
+    const configurationAccountId = this.configurationAccountId(accountId);
+    this.db.prepare(`INSERT INTO tag_schemas (account_id, config_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET config_json = excluded.config_json, updated_at = excluded.updated_at`).run(configurationAccountId, JSON.stringify(config), timestamp);
     this.audit(accountId, null, "configuration", "tag_schema.updated", { groupCount: config.groups.length, tagCount: config.groups.reduce((sum, group) => sum + group.tags.length, 0) });
     return this.getTagSchema(accountId);
   }
 
   listTags(accountId) {
     return this.getTagSchema(accountId).config.groups.flatMap((group) => group.tags.map((tag) => ({ ...tag, groupId: group.id, groupName: group.name })));
+  }
+
+  configurationAccountId(accountId) {
+    return this.db.prepare(`
+      SELECT COALESCE(NULLIF(p.config_account_id, ''), a.id) AS id
+      FROM channel_accounts a LEFT JOIN people p ON p.id = a.person_id
+      WHERE a.id = ?
+    `).get(accountId)?.id || accountId;
   }
 
   listConversationTags(conversationId) {
@@ -445,24 +690,164 @@ export class Store {
   }
 }
 
-function accountView(row, includeSecrets = false) {
+function accountView(row, includeSecrets = false, db = null) {
+  const binding = db ? resolveBinding(db, row, includeSecrets) : null;
+  const workspace = db && row.workspace_id ? db.prepare("SELECT * FROM workspaces WHERE id = ?").get(row.workspace_id) : null;
+  const person = db && row.person_id ? db.prepare("SELECT * FROM people WHERE id = ?").get(row.person_id) : null;
   const result = {
     id: row.id,
     provider: row.provider,
     name: row.name,
     enabled: Boolean(row.enabled),
     accent: row.accent,
-    agentApiUrl: row.agent_api_url,
-    agentApiKeyConfigured: Boolean(row.agent_api_key),
-    agentApiKey: includeSecrets ? row.agent_api_key : row.agent_api_key ? "••••••••" : "",
-    agentId: row.agent_id,
+    agentApiUrl: binding?.agentApiUrl || row.agent_api_url,
+    agentApiKeyConfigured: Boolean(binding?.agentApiKeyConfigured || row.agent_api_key),
+    agentApiKey: binding ? binding.agentApiKey : (includeSecrets ? row.agent_api_key : row.agent_api_key ? "••••••••" : ""),
+    agentId: binding?.agentId || row.agent_id,
+    agentBinding: binding,
     webhookSecretConfigured: Boolean(row.webhook_secret),
     webhookSecret: includeSecrets ? row.webhook_secret : row.webhook_secret ? "••••••••" : "",
     config: json(row.config_json),
+    workspaceId: row.workspace_id || null,
+    workspace: workspace ? { id: workspace.id, slug: workspace.slug, name: workspace.name, accent: workspace.accent, logoUrl: workspace.logo_url, companyContext: json(workspace.company_context_json) } : null,
+    personId: row.person_id || null,
+    person: person ? { id: person.id, name: person.name, title: person.title, avatarUrl: person.avatar_url, persona: json(person.persona_json) } : null,
+    workspaceChannelId: row.workspace_channel_id || null,
+    deploymentId: row.deployment_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
   return result;
+}
+
+function workspaceView(row) {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    enabled: Boolean(row.enabled),
+    accent: row.accent,
+    logoUrl: row.logo_url,
+    companyContext: json(row.company_context_json),
+    personCount: Number(row.person_count || 0),
+    channelCount: Number(row.channel_count || 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function personView(row) {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    title: row.title,
+    avatarUrl: row.avatar_url,
+    enabled: Boolean(row.enabled),
+    persona: json(row.persona_json),
+    configurationAccountId: row.config_account_id || null,
+    deploymentCount: Number(row.deployment_count || 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function channelView(row, includeSecrets = false) {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    provider: row.provider,
+    name: row.name,
+    enabled: Boolean(row.enabled),
+    webhookSecretConfigured: Boolean(row.webhook_secret),
+    webhookSecret: includeSecrets ? row.webhook_secret : row.webhook_secret ? "••••••••" : "",
+    config: json(row.draft_config_json),
+    publishedConfig: json(row.published_config_json),
+    publishedVersion: Number(row.published_version || 0),
+    publishedAt: row.published_at,
+    deploymentCount: Number(row.deployment_count || 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function deploymentView(row) {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    workspaceChannelId: row.workspace_channel_id,
+    channelName: row.channel_name,
+    provider: row.provider,
+    personId: row.person_id,
+    personName: row.person_name,
+    personTitle: row.person_title,
+    avatarUrl: row.avatar_url,
+    accountId: row.account_id,
+    publicSlug: row.public_slug,
+    enabled: Boolean(row.enabled),
+    sortOrder: Number(row.sort_order || 0),
+    config: json(row.draft_config_json),
+    publishedConfig: json(row.published_config_json),
+    publishedVersion: Number(row.published_version || 0),
+    publishedAt: row.published_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function bindingView(row, includeSecrets = false) {
+  return {
+    id: row.id,
+    scopeType: row.scope_type,
+    scopeId: row.scope_id,
+    name: row.name,
+    enabled: Boolean(row.enabled),
+    agentApiUrl: row.agent_api_url,
+    agentApiKeyConfigured: Boolean(row.agent_api_key),
+    agentApiKey: includeSecrets ? row.agent_api_key : row.agent_api_key ? "••••••••" : "",
+    agentId: row.agent_id,
+    concurrencyLimit: Number(row.concurrency_limit || 0),
+    billingLabel: row.billing_label,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function resolveBinding(db, accountRow, includeSecrets) {
+  const candidates = [
+    accountRow.person_id ? ["person", accountRow.person_id] : null,
+    accountRow.workspace_id ? ["workspace", accountRow.workspace_id] : null,
+    ["platform", "default"]
+  ].filter(Boolean);
+  for (const [scopeType, scopeId] of candidates) {
+    const row = db.prepare("SELECT * FROM agent_bindings WHERE scope_type = ? AND scope_id = ? AND enabled = 1").get(scopeType, scopeId);
+    if (row?.agent_api_url && row?.agent_api_key) return { ...bindingView(row, includeSecrets), inheritedFrom: scopeType };
+  }
+  if (accountRow.agent_api_url && accountRow.agent_api_key) {
+    return {
+      id: `legacy-${accountRow.id}`,
+      scopeType: "legacy-account",
+      scopeId: accountRow.id,
+      inheritedFrom: "legacy-account",
+      name: "兼容账号配置",
+      enabled: true,
+      agentApiUrl: accountRow.agent_api_url,
+      agentApiKeyConfigured: true,
+      agentApiKey: includeSecrets ? accountRow.agent_api_key : "••••••••",
+      agentId: accountRow.agent_id,
+      concurrencyLimit: 0,
+      billingLabel: ""
+    };
+  }
+  return null;
+}
+
+function channelEndpoints(accountId, provider) {
+  return {
+    inbound: `/api/channels/${provider}/${accountId}/events`,
+    outbox: `/api/channels/${provider}/${accountId}/conversations/{conversationId}/outbox?after=0`,
+    receipts: `/api/channels/${provider}/${accountId}/receipts`
+  };
 }
 
 function conversationView(row) {
@@ -530,6 +915,31 @@ function activationTaskView(row) {
 function cleanText(value, fallback = "", max = 1000) {
   if (value === undefined || value === null) return fallback;
   return String(value).trim().slice(0, max);
+}
+
+function requiredText(value, label, max) {
+  const result = cleanText(value, "", max);
+  if (!result) throw new TypeError(`${label} is required`);
+  return result;
+}
+
+function identifier(value) {
+  const result = cleanText(value, "", 80);
+  if (!/^[a-z][a-z0-9-]{2,79}$/.test(result)) throw new TypeError("Invalid identifier");
+  return result;
+}
+
+function color(value) {
+  return /^#[0-9a-f]{6}$/i.test(value || "") ? value : "#2a30d8";
+}
+
+function objectValue(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function safeInteger(value) {
+  const result = Number(value);
+  return Number.isSafeInteger(result) ? result : 0;
 }
 
 function validateTagSchema(schema) {

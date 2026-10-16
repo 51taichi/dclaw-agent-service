@@ -108,6 +108,21 @@ function buildAgentMessage({ account, conversation, inboundMessage, history, flo
     .map((item) => ({ id: String(item.id), text: item.content }));
   const payload = {
     channel: { provider: account.provider, accountId: account.id },
+    tenantContext: {
+      workspace: account.workspace ? {
+        id: account.workspace.id,
+        name: account.workspace.name,
+        companyContext: account.workspace.companyContext || {}
+      } : null,
+      person: account.person ? {
+        id: account.person.id,
+        name: account.person.name,
+        title: account.person.title,
+        persona: account.person.persona || {}
+      } : null,
+      deploymentId: account.deploymentId || null,
+      agentBindingScope: account.agentBinding?.inheritedFrom || account.agentBinding?.scopeType || "unconfigured"
+    },
     worktoolMessage: {
       channel: account.provider,
       eventType: "inbound_message",
@@ -140,6 +155,7 @@ function buildAgentMessage({ account, conversation, inboundMessage, history, flo
   if (tagContext) payload.tagRules = tagContext;
   return [
     `你收到的是 ${account.provider} 渠道经 DClaw Agent Service 转发的标准 JSON 业务包。请只输出 JSON 对象，不要使用 Markdown 代码块。`,
+    "tenantContext 由服务端生成。必须遵循其中的公司边界和人物人设，只能以当前人物身份回答；不得把其他工作区、人物或渠道的数据混入回复。",
     "必须严格遵守 responseContract。输入含 flow 时必须输出 flowDecision，currentNodeId 必须是 flow.currentNode.id；未完成时 nextNodeId 保持当前节点，完成时只能进入 allowedNextNodeId。collectedDataPatch 只能填写当前节点配置的字段。",
     "输入含 tagRules 时必须逐一输出 tagEvaluation；客户证据必须引用 tagEvidenceCandidates 中的 id，evidenceText 必须逐字一致。",
     "attachments 使用 type、url、name、title 字段。attentionAlert 仅在确实需要人工关注时设置 required=true，否则必须设置 required=false。",

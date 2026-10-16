@@ -212,6 +212,94 @@ function migrate(db) {
       created_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      accent TEXT NOT NULL DEFAULT '#2a30d8',
+      logo_url TEXT NOT NULL DEFAULT '',
+      company_context_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
+    CREATE TABLE IF NOT EXISTS people (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      avatar_url TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      persona_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${nowSql}),
+      UNIQUE(workspace_id, id)
+    );
+
+    CREATE TABLE IF NOT EXISTS workspace_channels (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      webhook_secret TEXT NOT NULL DEFAULT '',
+      draft_config_json TEXT NOT NULL DEFAULT '{}',
+      published_config_json TEXT NOT NULL DEFAULT '{}',
+      published_version INTEGER NOT NULL DEFAULT 0,
+      published_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${nowSql}),
+      UNIQUE(workspace_id, id)
+    );
+
+    CREATE TABLE IF NOT EXISTS channel_deployments (
+      id TEXT PRIMARY KEY,
+      workspace_channel_id TEXT NOT NULL REFERENCES workspace_channels(id) ON DELETE CASCADE,
+      person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+      account_id TEXT NOT NULL UNIQUE REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      public_slug TEXT NOT NULL UNIQUE,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      draft_config_json TEXT NOT NULL DEFAULT '{}',
+      published_config_json TEXT NOT NULL DEFAULT '{}',
+      published_version INTEGER NOT NULL DEFAULT 0,
+      published_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${nowSql}),
+      UNIQUE(workspace_channel_id, person_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_bindings (
+      id TEXT PRIMARY KEY,
+      scope_type TEXT NOT NULL CHECK(scope_type IN ('platform', 'workspace', 'person')),
+      scope_id TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      agent_api_url TEXT NOT NULL DEFAULT '',
+      agent_api_key TEXT NOT NULL DEFAULT '',
+      agent_id TEXT NOT NULL DEFAULT '',
+      concurrency_limit INTEGER NOT NULL DEFAULT 0,
+      billing_label TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      updated_at TEXT NOT NULL DEFAULT (${nowSql}),
+      UNIQUE(scope_type, scope_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_usage_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      binding_id TEXT,
+      account_id TEXT NOT NULL,
+      workspace_id TEXT,
+      person_id TEXT,
+      conversation_id INTEGER,
+      status TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      request_id TEXT NOT NULL DEFAULT '',
+      error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
     CREATE INDEX IF NOT EXISTS idx_conversations_account_recent ON conversations(account_id, last_message_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_recent ON messages(conversation_id, id DESC);
     CREATE INDEX IF NOT EXISTS idx_alerts_status_recent ON attention_alerts(status, created_at DESC);
@@ -220,9 +308,18 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_rule_tags_conversation ON conversation_rule_tags(conversation_id, group_id);
     CREATE INDEX IF NOT EXISTS idx_tag_events_conversation ON tag_events(conversation_id, id);
     CREATE INDEX IF NOT EXISTS idx_activation_tasks_due ON activation_tasks(status, due_at, id);
+    CREATE INDEX IF NOT EXISTS idx_people_workspace ON people(workspace_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workspace_channels_workspace ON workspace_channels(workspace_id, provider);
+    CREATE INDEX IF NOT EXISTS idx_channel_deployments_channel ON channel_deployments(workspace_channel_id, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_agent_usage_scope ON agent_usage_logs(workspace_id, person_id, created_at DESC);
   `);
 
   ensureColumn(db, "state_machine_configs", "enabled", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "channel_accounts", "workspace_id", "TEXT");
+  ensureColumn(db, "channel_accounts", "person_id", "TEXT");
+  ensureColumn(db, "channel_accounts", "workspace_channel_id", "TEXT");
+  ensureColumn(db, "channel_accounts", "deployment_id", "TEXT");
+  ensureColumn(db, "people", "config_account_id", "TEXT");
 }
 
 function seed(db) {
@@ -232,10 +329,10 @@ function seed(db) {
   `);
   insertAccount.run("website-default", "website", "官网客服", "#2a30d8", JSON.stringify({ delivery: "poll" }));
   insertAccount.run("miniapp-default", "miniapp", "智能名片", "#18a66a", JSON.stringify({ delivery: "poll" }));
-  insertAccount.run("fake-demo", "fake", "本地演示", "#ef2625", JSON.stringify({ delivery: "memory" }));
+  db.prepare("DELETE FROM channel_accounts WHERE id = 'fake-demo'").run();
 
   const insertMachine = db.prepare("INSERT OR IGNORE INTO state_machine_configs (account_id, config_json, enabled) VALUES (?, ?, 0)");
-  for (const id of ["website-default", "miniapp-default", "fake-demo"]) {
+  for (const id of ["website-default", "miniapp-default"]) {
     insertMachine.run(id, JSON.stringify(defaultFlowConfig(id === "miniapp-default" ? "智能名片" : id === "website-default" ? "官网客服" : "本地演示")));
   }
 
@@ -268,7 +365,31 @@ function seed(db) {
     ]
   });
   const insertSchema = db.prepare("INSERT OR IGNORE INTO tag_schemas (account_id, config_json) VALUES (?, ?)");
-  for (const id of ["website-default", "miniapp-default", "fake-demo"]) insertSchema.run(id, JSON.stringify(defaultSchema));
+  for (const id of ["website-default", "miniapp-default"]) insertSchema.run(id, JSON.stringify(defaultSchema));
+
+  db.prepare(`INSERT OR IGNORE INTO workspaces (id, slug, name, accent, company_context_json) VALUES (?, ?, ?, ?, ?)`)
+    .run("wuhe", "wuhe", "伍合 AIGC", "#2a30d8", JSON.stringify({ industry: "AIGC 内容服务", description: "伍合配音与 AIGC 服务工作区" }));
+  db.prepare(`INSERT OR IGNORE INTO people (id, workspace_id, name, title, persona_json) VALUES (?, ?, ?, ?, ?)`)
+    .run("wuhe-assistant", "wuhe", "伍合智能顾问", "AIGC 服务顾问", JSON.stringify({
+      personality: "专业、耐心、表达清晰",
+      speakingStyle: "先理解客户需求，再给出明确建议",
+      responsibilities: "介绍伍合配音与 AIGC 服务，收集客户需求并推进后续沟通",
+      systemPrompt: "你是伍合 AIGC 的智能服务顾问，应基于公司资料准确回答，不确定时主动转人工。"
+    }));
+
+  const insertChannel = db.prepare(`INSERT OR IGNORE INTO workspace_channels (id, workspace_id, provider, name, draft_config_json) VALUES (?, ?, ?, ?, ?)`);
+  insertChannel.run("wuhe-website", "wuhe", "website", "伍合官网客服", JSON.stringify({ themeColor: "#2a30d8", position: "right", launcherLabel: "在线咨询", rosterLayout: "avatars" }));
+  insertChannel.run("wuhe-miniapp", "wuhe", "miniapp", "伍合智能名片", JSON.stringify({ themeColor: "#1677ff", assistantName: "伍合助手", leadFormEnabled: true, voiceEnabled: false }));
+
+  const insertDeployment = db.prepare(`INSERT OR IGNORE INTO channel_deployments (id, workspace_channel_id, person_id, account_id, public_slug, sort_order, draft_config_json) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  insertDeployment.run("wuhe-website-assistant", "wuhe-website", "wuhe-assistant", "website-default", "wuhe-assistant-web", 10, JSON.stringify({ welcomeMessage: "您好，我是伍合智能顾问，有什么可以帮您？", suggestedQuestions: ["了解配音服务", "咨询 AIGC 方案"] }));
+  insertDeployment.run("wuhe-miniapp-assistant", "wuhe-miniapp", "wuhe-assistant", "miniapp-default", "wuhe-assistant", 10, JSON.stringify({ coverUrl: "", welcomeMessage: "您好，我是伍合智能顾问，很高兴认识您。", suggestedQuestions: ["你是谁", "怎么合作"], resources: [], leadForm: { enabled: true, fields: ["name", "contact"] } }));
+
+  db.prepare(`UPDATE channel_accounts SET workspace_id = 'wuhe', person_id = 'wuhe-assistant', workspace_channel_id = 'wuhe-website', deployment_id = 'wuhe-website-assistant' WHERE id = 'website-default' AND (workspace_id IS NULL OR workspace_id = '')`).run();
+  db.prepare(`UPDATE channel_accounts SET workspace_id = 'wuhe', person_id = 'wuhe-assistant', workspace_channel_id = 'wuhe-miniapp', deployment_id = 'wuhe-miniapp-assistant' WHERE id = 'miniapp-default' AND (workspace_id IS NULL OR workspace_id = '')`).run();
+  db.prepare(`UPDATE workspace_channels SET webhook_secret = COALESCE(NULLIF((SELECT webhook_secret FROM channel_accounts WHERE id = 'website-default'), ''), webhook_secret) WHERE id = 'wuhe-website' AND webhook_secret = ''`).run();
+  db.prepare(`UPDATE workspace_channels SET webhook_secret = COALESCE(NULLIF((SELECT webhook_secret FROM channel_accounts WHERE id = 'miniapp-default'), ''), webhook_secret) WHERE id = 'wuhe-miniapp' AND webhook_secret = ''`).run();
+  db.prepare(`UPDATE people SET config_account_id = 'miniapp-default' WHERE id = 'wuhe-assistant' AND (config_account_id IS NULL OR config_account_id = '')`).run();
 
 }
 

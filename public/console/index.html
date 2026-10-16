@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DClaw AI 客服管理中台</title>
+    <title>DClaw Agent管理中台</title>
     <link rel="icon" type="image/png" href="./assets/console-favicon.png" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./agent.css" />
@@ -43,12 +43,11 @@
       <div class="topbar-inner">
         <div class="brand">
           <img class="brand-logo" src="./assets/deepmega-dclaw-logo-cropped.png" alt="DeepMega DClaw" />
-          <div class="brand-copy"><h1>DClaw AI 客服管理中台</h1></div>
+          <div class="brand-copy"><h1>DClaw Agent管理中台</h1></div>
         </div>
         <div class="topbar-platforms" aria-label="支持渠道">
           <span class="platform-logo" aria-label="官网客服" title="官网客服"><svg class="icon"><use href="#icon-monitor"></use></svg></span>
           <span class="platform-logo" aria-label="微信小程序" title="微信小程序"><svg class="icon"><use href="#icon-phone"></use></svg></span>
-          <a class="secondary admin-entry" href="/admin/" title="渠道管理"><svg class="icon"><use href="#icon-code"></use></svg></a>
         </div>
       </div>
     </header>
@@ -57,7 +56,7 @@
       <div class="left-rail">
         <aside class="panel bot-sidebar">
           <div class="section-head">
-            <h2 class="module-title"><svg class="icon"><use href="#icon-users"></use></svg>已配置渠道</h2>
+            <h2 class="module-title"><svg class="icon"><use href="#icon-users"></use></svg>智能员工</h2>
             <span id="accountCount" class="muted"></span>
           </div>
           <div id="accountList" class="bot-list"></div>
@@ -196,17 +195,17 @@
 
         <div class="tab-panel" data-panel="config" hidden>
           <section class="panel bot-context-panel editor-panel">
-            <div class="section-head"><h2 class="module-title"><svg class="icon"><use href="#icon-link"></use></svg>Agent Gateway 与渠道配置</h2><a href="/admin/" class="secondary"><svg class="icon"><use href="#icon-code"></use></svg>渠道管理</a></div>
+            <div class="section-head"><h2 class="module-title"><svg class="icon"><use href="#icon-link"></use></svg>人物与渠道配置</h2></div>
             <form id="accountForm" class="form-grid compact-form account-config-form">
-              <label><span class="field-label">渠道名称</span><input name="name" required /></label>
-              <label><span class="field-label">品牌色</span><input name="accent" type="color" /></label>
-              <label class="wide"><span class="field-label">DClaw OpenAPI URL</span><input name="agentApiUrl" type="url" placeholder="https://.../openapi/chat" /></label>
-              <label><span class="field-label">Agent ID</span><input name="agentId" /></label>
-              <label><span class="field-label">OpenAPI API Key</span><input name="agentApiKey" type="password" autocomplete="new-password" placeholder="未修改则保留原值" /></label>
-              <label class="wide"><span class="field-label">Webhook Secret</span><input name="webhookSecret" type="password" autocomplete="new-password" placeholder="可选；设置后入口需传 X-Channel-Secret" /></label>
-              <label class="toggle switch-toggle"><input name="enabled" type="checkbox" /><span class="switch-slider"></span><span class="switch-label">启用渠道</span></label>
+              <label><span class="field-label">智能员工</span><input name="personName" disabled /></label>
+              <label><span class="field-label">职务</span><input name="personTitle" disabled /></label>
+              <label><span class="field-label">渠道</span><input name="channelName" disabled /></label>
+              <label><span class="field-label">Agent 配置来源</span><input name="bindingScope" disabled /></label>
+              <label class="wide"><span class="field-label">人物性格</span><textarea name="personality" rows="3" disabled></textarea></label>
+              <label class="wide"><span class="field-label">表达方式</span><textarea name="speakingStyle" rows="3" disabled></textarea></label>
+              <label class="wide"><span class="field-label">岗位职责</span><textarea name="responsibilities" rows="3" disabled></textarea></label>
               <div class="integration-endpoints wide"><strong>接入地址</strong><code id="inboundEndpoint"></code><strong>消息拉取</strong><code id="outboxEndpoint"></code></div>
-              <div class="actions wide"><button class="primary" type="submit"><svg class="icon"><use href="#icon-save"></use></svg>保存配置</button></div>
+              <p class="muted wide">人物、渠道和 Agent API 由平台管理员在后台维护。</p>
             </form>
           </section>
         </div>

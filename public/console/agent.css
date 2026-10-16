@@ -125,3 +125,21 @@
   .flow-config-footer-actions,
   .tag-schema-footer-actions { display: grid; grid-template-columns: 1fr; }
 }
+.channel-badge {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--bot-accent, var(--accent)) 35%, white);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bot-accent, var(--accent)) 8%, white);
+  color: var(--bot-accent, var(--accent));
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.account-config-form textarea:disabled,
+.account-config-form input:disabled {
+  color: var(--ink);
+  background: #f7f8fb;
+  opacity: 1;
+}

@@ -3,67 +3,122 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DClaw AI 客服管理后台</title>
+    <title>DClaw Agent 管理后台</title>
     <link rel="icon" type="image/png" href="./assets/admin-favicon.png" />
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./agent.css" />
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
-      <symbol id="admin-icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></symbol>
-      <symbol id="admin-icon-bot" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"></rect><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"></path></symbol>
-      <symbol id="admin-icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></symbol>
-      <symbol id="admin-icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></symbol>
-      <symbol id="admin-icon-save" viewBox="0 0 24 24"><path d="M4 4h14l2 2v14H4zM8 4v6h8V4M8 20v-6h8v6"></path></symbol>
-      <symbol id="admin-icon-open" viewBox="0 0 24 24"><path d="M14 3h7v7M10 14 21 3M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6"></path></symbol>
-      <symbol id="admin-icon-power" viewBox="0 0 24 24"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"></path></symbol>
-      <symbol id="admin-icon-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8" cy="11" r="2"></circle><path d="M5.5 16a3 3 0 0 1 5 0M14 10h4M14 14h4"></path></symbol>
-      <symbol id="admin-icon-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"></circle><path d="m11 12 9-9M15 7l2 2M17 5l2 2"></path></symbol>
-      <symbol id="admin-icon-name" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h16"></path></symbol>
-      <symbol id="admin-icon-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"></path></symbol>
-      <symbol id="admin-icon-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5M6.1 9A7 7 0 0 1 18 6l2 5M17.9 15A7 7 0 0 1 6 18l-2-5"></path></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2A5 5 0 0 0 12 4l-1 1M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1-1"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1A8 8 0 0 0 15 6l-.4-2.5h-4L10 6a8 8 0 0 0-1.5 1L6 6 4 9.5 6 11a7 7 0 0 0 0 2l-2 1.5L6 18l2.5-1a8 8 0 0 0 1.5 1l.5 2.5h4L15 18a8 8 0 0 0 1.5-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1Z"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 4h14l2 2v14H4zM8 4v6h8V4M8 20v-6h8v6"/></symbol>
+      <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 3h7v7M10 14 21 3M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+      <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"/></symbol>
     </svg>
 
     <header class="topbar admin-topbar">
       <div class="topbar-inner">
-        <div class="brand"><img class="brand-logo" src="/console/assets/deepmega-dclaw-logo-cropped.png" alt="DeepMega DClaw" /><div class="brand-copy"><h1>DClaw AI 客服管理后台</h1></div></div>
-        <a class="secondary console-link" href="/console/"><svg><use href="#admin-icon-open"></use></svg>打开管理中台</a>
+        <div class="brand"><img class="brand-logo" src="/console/assets/deepmega-dclaw-logo-cropped.png" alt="DeepMega DClaw" /><div class="brand-copy"><h1>DClaw Agent 管理后台</h1></div></div>
+        <div class="admin-head-actions"><span class="role-badge">平台管理员</span><a id="openConsole" class="secondary" href="/console/"><svg><use href="#i-open"/></svg>进入管理中台</a></div>
       </div>
     </header>
 
     <main class="admin-page">
-      <nav class="admin-tabs" aria-label="管理员功能">
-        <button class="active" data-tab="channels"><svg><use href="#admin-icon-grid"></use></svg>渠道账号</button>
-        <button data-tab="adapters"><svg><use href="#admin-icon-settings"></use></svg>Adapter 能力</button>
-      </nav>
+      <aside class="workspace-sidebar panel-flat">
+        <div class="sidebar-head"><div><small>租户管理</small><h2>公司工作区</h2></div><button id="newWorkspace" class="icon-action" title="新增工作区"><svg><use href="#i-plus"/></svg></button></div>
+        <div id="workspaceList" class="admin-list"></div>
+      </aside>
 
-      <section class="admin-panel active" data-panel="channels">
-        <div class="admin-panel-head"><h1>渠道账号</h1><button id="newAccountButton" class="secondary"><svg><use href="#admin-icon-plus"></use></svg>新增渠道</button></div>
-        <div class="admin-workspace-layout">
-          <aside id="accountList" class="admin-list"></aside>
-          <div class="admin-detail">
-            <form id="accountForm" class="admin-form">
-              <label><span><svg><use href="#admin-icon-id"></use></svg>账号 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
-              <label><span><svg><use href="#admin-icon-settings"></use></svg>Adapter</span><select name="provider" required></select></label>
-              <label><span><svg><use href="#admin-icon-name"></use></svg>显示名称</span><input name="name" required /></label>
-              <label><span><svg><use href="#admin-icon-settings"></use></svg>品牌色</span><input name="accent" type="color" value="#2a30d8" /></label>
-              <label class="admin-span-two"><span><svg><use href="#admin-icon-link"></use></svg>OpenAPI URL</span><input name="agentApiUrl" type="url" /></label>
-              <label><span><svg><use href="#admin-icon-id"></use></svg>Agent ID</span><input name="agentId" /></label>
-              <label><span><svg><use href="#admin-icon-key"></use></svg>OpenAPI Key</span><input name="agentApiKey" type="password" autocomplete="new-password" /></label>
-              <label class="admin-span-two"><span><svg><use href="#admin-icon-key"></use></svg>Webhook Secret</span><input name="webhookSecret" type="password" autocomplete="new-password" /></label>
-              <div class="admin-form-control-row admin-span-two">
-                <label class="toggle-line admin-switch-field switch-toggle"><svg><use href="#admin-icon-power"></use></svg><span>启用渠道</span><input name="enabled" type="checkbox" checked /><span class="switch-slider"></span></label>
-                <button class="primary" type="submit"><svg><use href="#admin-icon-save"></use></svg>保存渠道</button>
-              </div>
-            </form>
-            <section id="endpointCard" class="endpoint-card" hidden><h2>渠道接入</h2><div><strong>接收消息</strong><code id="inboundEndpoint"></code></div><div><strong>拉取回复</strong><code id="outboxEndpoint"></code></div><div><strong>上报回执</strong><code id="receiptEndpoint"></code></div></section>
+      <section class="admin-main">
+        <div id="adminEmpty" class="admin-empty">请选择或创建一个工作区</div>
+        <div id="workspaceShell" hidden>
+          <div class="workspace-titlebar">
+            <div><small id="workspaceSlug"></small><h1 id="workspaceTitle"></h1></div>
+            <span id="workspaceStatus" class="pill ok"></span>
           </div>
-        </div>
-      </section>
+          <nav class="admin-tabs" aria-label="工作区管理">
+            <button class="active" data-tab="workspace"><svg><use href="#i-grid"/></svg>工作区</button>
+            <button data-tab="people"><svg><use href="#i-user"/></svg>智能员工</button>
+            <button data-tab="channels"><svg><use href="#i-link"/></svg>渠道与发布</button>
+            <button data-tab="agent"><svg><use href="#i-bot"/></svg>Agent API</button>
+          </nav>
 
-      <section class="admin-panel" data-panel="adapters">
-        <div class="admin-panel-head"><h1>Adapter 能力</h1><button id="refreshAdapters" class="secondary"><svg><use href="#admin-icon-refresh"></use></svg>刷新</button></div>
-        <div id="adapterGrid" class="adapter-grid"></div>
+          <section class="admin-panel active" data-panel="workspace">
+            <div class="section-title"><div><h2>公司资料</h2><p>工作区是公司级数据、权限和计费边界。</p></div></div>
+            <form id="workspaceForm" class="admin-form">
+              <label><span>工作区 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+              <label><span>公开标识</span><input name="slug" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+              <label><span>公司名称</span><input name="name" required /></label>
+              <label><span>品牌色</span><input name="accent" type="color" value="#2a30d8" /></label>
+              <label class="wide"><span>公司 Logo URL</span><input name="logoUrl" type="url" /></label>
+              <label><span>所属行业</span><input name="industry" /></label>
+              <label><span>公司简介</span><textarea name="description" rows="3"></textarea></label>
+              <div class="form-footer wide"><label class="toggle-line"><input name="enabled" type="checkbox" checked /><span>启用工作区</span></label><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存工作区</button></div>
+            </form>
+          </section>
+
+          <section class="admin-panel" data-panel="people">
+            <div class="split-layout">
+              <aside><div class="section-title compact"><div><h2>智能员工</h2><p>一个人物可部署到多个渠道。</p></div><button id="newPerson" class="secondary"><svg><use href="#i-plus"/></svg>新增</button></div><div id="personList" class="entity-list"></div></aside>
+              <div id="personEditor" class="editor-surface">
+                <form id="personForm" class="admin-form">
+                  <label><span>人物 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                  <label><span>姓名</span><input name="name" required /></label>
+                  <label><span>职务</span><input name="title" /></label>
+                  <label><span>头像 URL</span><input name="avatarUrl" type="url" /></label>
+                  <label><span>性格特征</span><textarea name="personality" rows="3"></textarea></label>
+                  <label><span>表达方式</span><textarea name="speakingStyle" rows="3"></textarea></label>
+                  <label class="wide"><span>岗位职责</span><textarea name="responsibilities" rows="3"></textarea></label>
+                  <label class="wide"><span>补充人设规则</span><textarea name="systemPrompt" rows="4"></textarea></label>
+                  <div class="form-footer wide"><label class="toggle-line"><input name="enabled" type="checkbox" checked /><span>启用人物</span></label><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存人物</button></div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          <section class="admin-panel" data-panel="channels">
+            <div class="channel-grid">
+              <aside><div class="section-title compact"><div><h2>已开通渠道</h2><p>为当前公司开通展示端口。</p></div><button id="newChannel" class="secondary"><svg><use href="#i-plus"/></svg>新增</button></div><div id="channelList" class="entity-list"></div></aside>
+              <div class="editor-surface">
+                <form id="channelForm" class="admin-form">
+                  <label><span>渠道 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                  <label><span>渠道类型</span><select name="provider"></select></label>
+                  <label class="wide"><span>渠道名称</span><input name="name" required /></label>
+                  <div id="channelConfigFields" class="dynamic-fields wide"></div>
+                  <label class="wide"><span>Webhook Secret</span><input name="webhookSecret" type="password" autocomplete="new-password" /></label>
+                  <div class="form-footer wide"><label class="toggle-line"><input name="enabled" type="checkbox" checked /><span>启用渠道</span></label><div class="button-row"><button id="publishChannel" class="secondary" type="button"><svg><use href="#i-send"/></svg>发布配置</button><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存渠道</button></div></div>
+                </form>
+                <div class="deployment-section">
+                  <div class="section-title compact"><div><h2>人物部署</h2><p>绑定人物与渠道，并配置最终展示内容。</p></div><button id="newDeployment" class="secondary"><svg><use href="#i-plus"/></svg>部署人物</button></div>
+                  <div id="deploymentList" class="deployment-list"></div>
+                  <form id="deploymentForm" class="admin-form deployment-form" hidden>
+                    <label><span>部署 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                    <label><span>选择人物</span><select name="personId"></select></label>
+                    <label><span>公开标识</span><input name="publicSlug" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                    <label><span>显示排序</span><input name="sortOrder" type="number" value="0" /></label>
+                    <div id="deploymentConfigFields" class="dynamic-fields wide"></div>
+                    <div class="form-footer wide"><label class="toggle-line"><input name="enabled" type="checkbox" checked /><span>启用部署</span></label><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存部署</button></div>
+                  </form>
+                </div>
+              </div>
+              <aside class="preview-pane"><div class="preview-head"><div><strong>渠道实时预览</strong><small id="previewMode">选择一个人物部署</small></div><button id="openPreview" class="icon-action" title="新窗口预览" disabled><svg><use href="#i-open"/></svg></button></div><iframe id="channelPreview" title="渠道实时预览"></iframe></aside>
+            </div>
+          </section>
+
+          <section class="admin-panel" data-panel="agent">
+            <div class="inheritance-map"><span>平台默认</span><b>→</b><span>工作区覆盖</span><b>→</b><span>人物覆盖</span></div>
+            <div class="agent-binding-grid">
+              <form id="platformBindingForm" class="binding-card"></form>
+              <form id="workspaceBindingForm" class="binding-card"></form>
+              <div class="binding-card person-binding-card"><div class="binding-card-head"><div><small>人物级</small><h3>智能员工覆盖</h3></div></div><label><span>选择人物</span><select id="bindingPerson"></select></label><form id="personBindingForm"></form></div>
+            </div>
+          </section>
+        </div>
       </section>
     </main>
     <div id="toast" class="admin-toast" hidden></div>

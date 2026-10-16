@@ -1,6 +1,24 @@
 # DClaw Agent Service
 
-独立、渠道中立的 DClaw 客服运行时。它复用一套会话、消息、状态机、标签、提醒、人工接管与 Agent Gateway 机制，并把渠道差异限制在 Channel Adapter 层。
+独立、渠道中立的 DClaw Agent 运行时。它复用一套会话、消息、状态机、标签、提醒、人工接管与 Agent Gateway 机制，并把渠道差异限制在 Channel Adapter 和渠道展示层。
+
+## 管理边界
+
+- 管理后台 `/admin/`：平台管理员维护公司工作区、智能员工、人设、渠道、发布配置，以及平台级/工作区级/人物级 Agent API 继承。
+- 管理中台 `/console/?workspace={workspaceId}`：公司客户处理会话、状态机、标签、激活、提醒与人工接管；人物和渠道配置只读。
+- 渠道预览 `/channel-preview/?deployment={deploymentId}`：使用渠道草稿配置渲染官网客服或智能名片预览。
+
+领域关系为：
+
+```text
+工作区 / 公司
+├── 智能员工 / 人物（1-N）
+├── 已开通渠道（1-N）
+├── 人物渠道部署（N-N）
+└── Agent API：人物覆盖 -> 工作区覆盖 -> 平台默认
+```
+
+同一人物部署到多个渠道时，会话和消息按渠道隔离，状态机与标签配置按人物共用。Agent 请求会携带服务端生成的工作区、人物和部署上下文，并记录实际生效的绑定，便于并发和计费归集。
 
 ## 本地运行
 
@@ -10,11 +28,11 @@ npm install
 npm start
 ```
 
-- 管理中台：`http://127.0.0.1:4310/console/`
-- 渠道管理：`http://127.0.0.1:4310/admin/`
+- 管理中台：`http://127.0.0.1:4310/console/?workspace=wuhe`
+- 管理后台：`http://127.0.0.1:4310/admin/`
 - 健康检查：`http://127.0.0.1:4310/health`
 
-Node.js 需为 24 或更高版本，数据库使用 Node 内置 SQLite。首次启动会创建 `data/dclaw-agent.sqlite`，并预置 `website`、`miniapp`、`fake` 三个示例账号。
+Node.js 需为 24 或更高版本，数据库使用 Node 内置 SQLite。首次启动会创建 `data/dclaw-agent.sqlite`，预置伍合工作区、一个智能员工，以及官网客服和智能名片两个渠道部署。旧的 `fake-demo` 本地演示数据会在迁移时清理。
 
 ## Docker 本地测试
 
@@ -26,8 +44,8 @@ docker compose logs -f agent-service
 
 默认访问地址仍为：
 
-- 管理中台：`http://127.0.0.1:4310/console/`
-- 渠道管理：`http://127.0.0.1:4310/admin/`
+- 管理中台：`http://127.0.0.1:4310/console/?workspace=wuhe`
+- 管理后台：`http://127.0.0.1:4310/admin/`
 - 健康检查：`http://127.0.0.1:4310/health`
 
 SQLite 数据保存在命名卷 `dclaw-agent-service-data`。停止容器不会删除数据：
@@ -109,7 +127,7 @@ POST /api/channels/{provider}/{accountId}/receipts
 
 ## Agent Gateway
 
-每个渠道账号独立配置 OpenAPI URL、API Key 与 Agent ID。请求使用：
+OpenAPI URL、API Key 与 Agent ID 采用人物级、工作区级、平台级的逐级继承。兼容期内，旧渠道账号上的 Agent 配置只在三级配置均不可用时生效。请求使用：
 
 - Bearer API Key
 - `Idempotency-Key`
@@ -154,7 +172,19 @@ POST /api/channels/{provider}/{accountId}/receipts
 
 未配置 Agent 时，服务使用明确的兜底回复，便于在接通真实 OpenAPI 前完整测试渠道链路。
 
-任务流支持节点目标、完成条件、收集字段、交流技巧、顺序拖拽、客户激活和末节点静默回复。标签机支持日期标签、分组、互斥、单向变更、证据、语音提醒、自动人工接管及标签触发任务。两者的配置接口分别是 `GET/PUT /api/flow-machines/{accountId}` 和 `GET/PUT /api/tag-schemas/{accountId}`。
+任务流支持节点目标、完成条件、收集字段、交流技巧、顺序拖拽、客户激活和末节点静默回复。标签机支持日期标签、分组、互斥、单向变更、证据、语音提醒、自动人工接管及标签触发任务。两者的配置接口分别是 `GET/PUT /api/flow-machines/{accountId}` 和 `GET/PUT /api/tag-schemas/{accountId}`；服务端会把同一人物的不同渠道账号解析到同一个人物配置源。
+
+## 渠道草稿与发布
+
+后台保存的是草稿配置，实时预览读取草稿。只有执行“发布配置”后，公开读取接口才会返回新版本：
+
+```text
+GET /api/admin/deployments/{deploymentId}/preview
+POST /api/admin/channels/{channelId}/publish
+GET /api/public/channels/{publicSlug}
+```
+
+官网渠道的交付形态为植入脚本创建的隔离 iframe；智能名片渠道的交付形态为响应式 H5 URL，并可在后续由微信小程序 `web-view` 承载。当前工程先提供共享配置协议和后台预览渲染器。
 
 ## 验证
 
