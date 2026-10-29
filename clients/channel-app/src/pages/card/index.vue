@@ -696,7 +696,7 @@ function setTextInputMode() {
 .scene-video { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; pointer-events: none; }
 .scene-image { position: absolute; z-index: 0; top: 0; right: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(180deg,#c6e8ff,#f3fbff); object-position: center bottom; pointer-events: none; }
 .assistant-scroll { position: relative; z-index: 1; flex: 1; min-height: 0; }
-.assistant-content { display: grid; grid-template-rows: minmax(0,7fr) minmax(0,3fr) auto; min-height: calc(100vh - 152rpx - env(safe-area-inset-bottom)); }
+.assistant-content { display: grid; grid-template-rows: minmax(0,7fr) minmax(0,3fr) auto; min-height: calc(100vh - 136rpx - env(safe-area-inset-bottom)); }
 .assistant-scene { position: relative; min-height: 0; overflow: hidden; background: linear-gradient(#c6e8ff, #f3fbff); }
 .back-face.has-video .assistant-scene { background: linear-gradient(180deg,rgba(222,244,255,.08),rgba(223,243,255,.04)); }
 .scene-overlay { position: absolute; inset: 0; z-index: 2; }
@@ -705,7 +705,7 @@ function setTextInputMode() {
 .topic-button { position: absolute; width: auto; min-height: 52rpx; padding: 6rpx 16rpx; border-radius: 26rpx; background: rgba(255,255,255,.86); color: #315176; font-size: 20rpx; line-height: 38rpx; }
 .topic-button:nth-child(1) { top: 290rpx; left: 20rpx; }.topic-button:nth-child(2) { top: 320rpx; right: 26rpx; }.topic-button:nth-child(3) { bottom: 142rpx; left: 24rpx; }.topic-button:nth-child(4) { right: 34rpx; bottom: 72rpx; }
 .shortcut-area { position: relative; z-index: 2; display: grid; grid-template-rows: auto minmax(0,1fr); min-height: 0; padding: 24rpx 24rpx 0; background: linear-gradient(180deg, rgba(235,248,255,.2), rgba(239,249,255,.78)); box-sizing: border-box; }
-.shortcut-prompt { display: block; margin-bottom: 10rpx; color: #69758a; font-size: 21rpx; }
+.shortcut-prompt { display: block; margin-bottom: 10rpx; color: #fff; font-size: 21rpx; font-weight: 700; text-shadow: 0 2rpx 8rpx rgba(15,31,72,.86); }
 .shortcut-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); grid-template-rows: minmax(0,1fr); gap: 18rpx; min-height: 0; }
 .shortcut-group { display: flex; flex-direction: column; overflow: hidden; border-radius: 14rpx; background: rgba(255,255,255,.95); box-shadow: 0 8rpx 26rpx rgba(41,62,92,.08); }
 .shortcut-title { display: block; padding: 12rpx 18rpx; color: #fff; font-size: 21rpx; font-weight: 800; }.primary-title { background: linear-gradient(90deg,#4285e8,#6db7ed); }.secondary-title { background: linear-gradient(90deg,#7768e9,#a085f4); }
@@ -713,7 +713,7 @@ function setTextInputMode() {
 .company-conversation { background: #f5f6f8; }
 .voice-dock { position: relative; z-index: 3; flex: 0 0 auto; padding: 0 24rpx calc(14rpx + env(safe-area-inset-bottom)); background: rgba(240,249,255,.76); text-align: center; }
 .voice-button { display: grid; grid-template-columns: 44rpx minmax(0,1fr) 44rpx; align-items: center; width: 100%; min-height: 88rpx; margin: 0; padding: 0 28rpx; border-radius: 44rpx; background: linear-gradient(90deg,#1766da,#193cc9); color: #fff; font-size: 25rpx; font-weight: 700; line-height: 88rpx; }
-.voice-hint { display: block; margin-top: 10rpx; color: #9aa3b0; font-size: 17rpx; }
+.voice-hint { display: block; margin-top: 10rpx; color: rgba(48,60,84,.78); font-size: 17rpx; font-weight: 600; text-shadow: 0 2rpx 4rpx rgba(255,255,255,.86); }
 .face-switch { position: absolute; z-index: 30; right: 24rpx; display: flex; align-items: center; width: 108rpx; height: 108rpx; margin: 0; padding: 6rpx; overflow: visible; border: 4rpx solid rgba(255,255,255,.92); border-radius: 50%; background: #fff; box-shadow: 0 18rpx 48rpx rgba(10,21,44,.28); touch-action: none; }
 .switch-label { position: absolute; bottom: calc(100% - 4rpx); left: 50%; min-width: 58rpx; max-width: 180rpx; padding: 7rpx 14rpx; overflow: hidden; border: 4rpx solid #fff; border-radius: 24rpx; background: #1478f2; color: #fff; box-shadow: 0 8rpx 22rpx rgba(10,21,44,.2); font-size: 22rpx; font-weight: 800; line-height: 28rpx; text-align: center; text-overflow: ellipsis; white-space: nowrap; transform: translateX(-50%); }
 .switch-avatar { width: 88rpx; height: 88rpx; border-radius: 50%; }.switch-badge { position: absolute; right: -6rpx; bottom: -6rpx; display: flex; align-items: center; justify-content: center; width: 42rpx; height: 42rpx; border: 4rpx solid #fff; border-radius: 50%; background: #1478f2; }
