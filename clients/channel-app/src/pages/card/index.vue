@@ -639,7 +639,8 @@ function setTextInputMode() {
 .center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24rpx; height: 100%; color: #687386; font-size: 26rpx; }
 .retry-button { width: auto; padding: 8rpx 24rpx; background: #3864f4; color: #fff; font-size: 24rpx; }
 .hero { position: relative; flex: 0 0 510rpx; padding: calc(var(--status-bar-height) + 66rpx) 34rpx 30rpx; overflow: hidden; background-color: #101827; background-position: center; background-size: cover; color: #fff; box-sizing: border-box; transition: flex-basis .24s ease, padding .24s ease; }
-.hero::before { position: absolute; z-index: 2; right: 0; bottom: 30rpx; left: 0; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,.84) 0 calc(50% - 42rpx), transparent calc(50% - 42rpx) calc(50% + 42rpx), rgba(255,255,255,.84) calc(50% + 42rpx)); content: ""; pointer-events: none; }
+.hero::before { position: absolute; z-index: 2; right: 0; bottom: 18rpx; left: 0; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,.84) 0 calc(50% - 42rpx), transparent calc(50% - 42rpx) calc(50% + 42rpx), rgba(255,255,255,.84) calc(50% + 42rpx)); content: ""; pointer-events: none; }
+.hero::after { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; height: 48rpx; background: rgba(255,255,255,.22); content: ""; pointer-events: none; }
 .miniapp-chrome { position: absolute; top: calc(var(--status-bar-height) + 12rpx); right: 22rpx; left: 22rpx; z-index: 3; display: flex; align-items: center; justify-content: space-between; color: #fff; font-size: 24rpx; }
 .back-button { display: flex; align-items: center; justify-content: center; width: 56rpx; height: 56rpx; margin: 0; padding: 0; background: transparent; color: #fff; font-size: 52rpx; font-weight: 300; line-height: 52rpx; }
 .preview-menu { padding: 12rpx 20rpx; border-radius: 30rpx; background: rgba(255,255,255,.88); color: #101724; font-size: 20rpx; font-weight: 900; }
@@ -668,8 +669,8 @@ function setTextInputMode() {
 .qr-lightbox-title { margin-top: 32rpx; color: #20242c; font-size: 32rpx; font-weight: 800; }
 .qr-lightbox-hint { margin-top: 10rpx; color: #858b96; font-size: 22rpx; }
 .hero-toggle { position: absolute; z-index: 4; bottom: 0; left: 50%; display: flex; align-items: center; justify-content: center; width: 86rpx; height: 70rpx; margin: 0; padding: 0; overflow: visible; border: 0; background: transparent; transform: translateX(-50%); }
-.hero-toggle::before { position: absolute; top: 0; left: 0; width: 86rpx; height: 42rpx; box-sizing: border-box; border: 2rpx solid rgba(255,255,255,.84); border-bottom: 0; border-radius: 43rpx 43rpx 0 0; content: ""; }
-.toggle-chevron { position: relative; z-index: 1; top: 10rpx; width: 14rpx; height: 14rpx; border-right: 3rpx solid #fff; border-bottom: 3rpx solid #fff; transform: translateY(-12rpx) rotate(225deg); transition: transform .18s ease; }
+.hero-toggle::before { position: absolute; top: 12rpx; left: 0; width: 86rpx; height: 42rpx; box-sizing: border-box; border: 2rpx solid rgba(255,255,255,.84); border-bottom: 0; border-radius: 43rpx 43rpx 0 0; content: ""; }
+.toggle-chevron { position: relative; z-index: 1; top: 22rpx; width: 14rpx; height: 14rpx; border-right: 3rpx solid #fff; border-bottom: 3rpx solid #fff; transform: translateY(-12rpx) rotate(225deg); transition: transform .18s ease; }
 .toggle-chevron.down { transform: translateY(-12rpx) rotate(45deg); }
 .hero.compact { flex-basis: 246rpx; padding-top: 88rpx; }
 .hero.compact .identity, .hero.compact .contact-panel { opacity: 0; pointer-events: none; }
