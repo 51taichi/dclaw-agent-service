@@ -153,3 +153,15 @@ test("admin browser and header use the website card management title", () => {
   assert.match(adminMarkup, /<h1>官网名片智能体管理后台<\/h1>/);
   assert.doesNotMatch(adminMarkup, /DClaw Agent 管理后台/);
 });
+
+test("channel publishing and miniapp credential saving stay visible near their settings", () => {
+  const adminMarkup = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
+  assert.match(adminMarkup, /data-publish-provider="miniapp"[^>]*>[\s\S]*?发布配置/);
+  assert.match(adminMarkup, /id="saveMiniappCredential"[^>]*>[\s\S]*?保存小程序配置/);
+  assert.match(adminMarkup, /后台显示名称/);
+  assert.match(adminSource, /async function saveMiniappCredential\(\)/);
+  assert.match(adminSource, /saveMiniappCredential\.addEventListener/);
+  assert.match(adminSource, /async function publishProviderConfig\(provider\)/);
+  assert.match(adminSource, /await persistProviderConfig\(provider, form\)/);
+});

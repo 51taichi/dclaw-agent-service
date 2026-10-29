@@ -554,6 +554,12 @@ async function savePerson(event) {
 async function saveProviderConfig(event, provider) {
   event.preventDefault();
   const form = event.currentTarget;
+  await persistProviderConfig(provider, form);
+  await loadWorkspaceContext();
+  toast(`${provider === "website" ? "官网客服" : "智能名片"}配置已保存，可点击预览`);
+}
+
+async function persistProviderConfig(provider, form) {
   const channel = channelFor(provider);
   if (!channel) throw new Error(`${provider === "website" ? "官网客服" : "智能名片"}尚未初始化`);
   const container = provider === "website" ? els.websiteConfigFields : els.miniappConfigFields;
@@ -563,18 +569,45 @@ async function saveProviderConfig(event, provider) {
     config: { ...(channel.config || {}), ...readDynamicFields(container) }
   };
   if (provider === "miniapp") {
-    const miniappBody = {
-      mode: form.elements.miniappMode.value,
-      name: form.elements.miniappName.value,
-      appId: form.elements.miniappAppId.value,
-      originalId: form.elements.miniappOriginalId.value
-    };
-    if (form.elements.miniappAppSecret.value) miniappBody.appSecret = form.elements.miniappAppSecret.value;
-    await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}/miniapp`, { method: "PUT", body: miniappBody });
+    await persistMiniappCredential(form);
   }
   await api(`/api/admin/channels/${encodeURIComponent(channel.id)}`, { method: "PUT", body });
+  return channel;
+}
+
+function miniappCredentialBody(form = els.miniappConfigForm) {
+  const body = {
+    mode: form.elements.miniappMode.value,
+    name: form.elements.miniappName.value,
+    appId: form.elements.miniappAppId.value,
+    originalId: form.elements.miniappOriginalId.value
+  };
+  if (form.elements.miniappAppSecret.value) body.appSecret = form.elements.miniappAppSecret.value;
+  return body;
+}
+
+async function persistMiniappCredential(form = els.miniappConfigForm) {
+  state.miniappConfig = await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}/miniapp`, {
+    method: "PUT",
+    body: miniappCredentialBody(form)
+  });
+  return state.miniappConfig;
+}
+
+async function saveMiniappCredential() {
+  if (!els.miniappConfigForm.reportValidity()) return;
+  await persistMiniappCredential();
+  renderMiniappCredentialForm(els.miniappConfigForm);
+  toast("小程序配置已保存");
+}
+
+async function publishProviderConfig(provider) {
+  const form = provider === "website" ? els.websiteConfigForm : els.miniappConfigForm;
+  if (!form.reportValidity()) return;
+  const channel = await persistProviderConfig(provider, form);
+  await api(`/api/admin/channels/${encodeURIComponent(channel.id)}/publish`, { method: "POST" });
   await loadWorkspaceContext();
-  toast(`${provider === "website" ? "官网客服" : "智能名片"}配置已保存，可点击预览`);
+  toast("当前配置已保存并发布");
 }
 
 async function verifyMiniappCredential() {
@@ -749,11 +782,7 @@ function bindEvents() {
   els.personForm.addEventListener("click", handleMediaClear);
   els.workspaceForm.addEventListener("submit", (event) => saveWorkspace(event).catch(handleError));
   els.personForm.addEventListener("submit", (event) => savePerson(event).catch(handleError));
-  document.querySelectorAll("[data-publish-provider]").forEach((button) => button.addEventListener("click", () => {
-    const channel = channelFor(button.dataset.publishProvider);
-    if (!channel) return;
-    api(`/api/admin/channels/${encodeURIComponent(channel.id)}/publish`, { method: "POST" }).then(loadWorkspaceContext).then(() => toast("配置已发布")).catch(handleError);
-  }));
+  document.querySelectorAll("[data-publish-provider]").forEach((button) => button.addEventListener("click", () => publishProviderConfig(button.dataset.publishProvider).catch(handleError)));
   document.querySelectorAll("[data-preview-provider]").forEach((button) => button.addEventListener("click", () => {
     const url = previewUrlFor(button.dataset.previewProvider);
     if (url) window.open(url, "_blank", "noopener");
@@ -761,6 +790,7 @@ function bindEvents() {
   els.agentConfigForm.addEventListener("submit", (event) => saveAgentConfig(event).catch(handleError));
   els.agentDefaultsForm.addEventListener("submit", (event) => saveAgentDefaults(event).catch(handleError));
   els.deleteAgentConfig.addEventListener("click", () => deleteAgentConfig().catch(handleError));
+  els.saveMiniappCredential.addEventListener("click", () => saveMiniappCredential().catch(handleError));
   els.verifyMiniappCredential.addEventListener("click", () => verifyMiniappCredential().catch(handleError));
 
   let draggingLauncher = false;

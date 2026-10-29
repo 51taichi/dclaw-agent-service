@@ -349,6 +349,8 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .workspace-miniapp-fields input, .workspace-miniapp-fields select { min-width: 0; width: 100%; min-height: 42px; padding: 9px 11px; border: 0; outline: 0; background: #fff; color: #202842; font: inherit; }
 .workspace-miniapp-actions small { color: #7b8598; font-size: 11px; }
 .workspace-miniapp-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.workspace-miniapp-action-copy { display: grid; gap: 3px; min-width: 0; }
+.workspace-miniapp-action-copy small { display: block; }
 .pill.warn { background: #fff4dc; color: #9b6714; }
 
 .scope-binding-section { margin-top: 18px; padding-top: 18px; border-top: 1px solid #dce1ec; }
@@ -411,6 +413,8 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
   .media-clear-button { grid-column: 3; }
   .binding-fields > label { grid-template-columns: 118px minmax(0, 1fr); }
   .workspace-miniapp-fields > label, .workspace-miniapp-fields > label.wide { grid-column: auto; grid-template-columns: 118px minmax(0, 1fr); }
+  .workspace-miniapp-actions { align-items: stretch; flex-direction: column; }
+  .workspace-miniapp-actions .button-row { flex-wrap: wrap; }
   .person-channel-list { grid-template-columns: 1fr; }
   .form-footer { align-items: stretch; flex-direction: column; }
   .button-row { justify-content: flex-end; }
