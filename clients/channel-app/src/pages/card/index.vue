@@ -704,14 +704,14 @@ function setTextInputMode() {
 .speech { position: absolute; top: 180rpx; left: 50%; width: 70%; padding: 18rpx 24rpx; border-radius: 26rpx; background: rgba(255,255,255,.88); color: #28344b; font-size: 23rpx; text-align: center; transform: translateX(-50%); }
 .topic-button { position: absolute; width: auto; min-height: 52rpx; padding: 6rpx 16rpx; border-radius: 26rpx; background: rgba(255,255,255,.86); color: #315176; font-size: 20rpx; line-height: 38rpx; }
 .topic-button:nth-child(1) { top: 290rpx; left: 20rpx; }.topic-button:nth-child(2) { top: 320rpx; right: 26rpx; }.topic-button:nth-child(3) { bottom: 142rpx; left: 24rpx; }.topic-button:nth-child(4) { right: 34rpx; bottom: 72rpx; }
-.shortcut-area { position: relative; z-index: 2; display: grid; grid-template-rows: auto minmax(0,1fr); min-height: 0; padding: 24rpx; background: rgba(239,248,255,.94); box-sizing: border-box; }
+.shortcut-area { position: relative; z-index: 2; display: grid; grid-template-rows: auto minmax(0,1fr); min-height: 0; padding: 24rpx; background: linear-gradient(180deg, rgba(235,248,255,.2), rgba(239,249,255,.78)); box-sizing: border-box; }
 .shortcut-prompt { display: block; margin-bottom: 10rpx; color: #69758a; font-size: 21rpx; }
 .shortcut-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); grid-template-rows: minmax(0,1fr); gap: 18rpx; min-height: 0; }
 .shortcut-group { display: flex; flex-direction: column; overflow: hidden; border-radius: 14rpx; background: rgba(255,255,255,.95); box-shadow: 0 8rpx 26rpx rgba(41,62,92,.08); }
 .shortcut-title { display: block; padding: 12rpx 18rpx; color: #fff; font-size: 21rpx; font-weight: 800; }.primary-title { background: linear-gradient(90deg,#4285e8,#6db7ed); }.secondary-title { background: linear-gradient(90deg,#7768e9,#a085f4); }
 .shortcut-button { display: flex; flex: 1 1 0; align-items: center; justify-content: space-between; width: 100%; min-height: 58rpx; margin: 0; padding: 6rpx 18rpx; border-top: 1rpx solid #eef1f5; border-radius: 0; background: transparent; color: #28344b; font-size: 20rpx; line-height: 46rpx; text-align: left; }
 .company-conversation { background: #f5f6f8; }
-.voice-dock { position: relative; z-index: 3; flex: 0 0 auto; padding: 16rpx 24rpx calc(14rpx + env(safe-area-inset-bottom)); background: rgba(240,249,255,.96); text-align: center; }
+.voice-dock { position: relative; z-index: 3; flex: 0 0 auto; padding: 16rpx 24rpx calc(14rpx + env(safe-area-inset-bottom)); background: rgba(240,249,255,.76); box-shadow: 0 -8rpx 22rpx rgba(35,52,84,.08); text-align: center; }
 .voice-button { display: grid; grid-template-columns: 44rpx minmax(0,1fr) 44rpx; align-items: center; width: 100%; min-height: 88rpx; margin: 0; padding: 0 28rpx; border-radius: 44rpx; background: linear-gradient(90deg,#1766da,#193cc9); color: #fff; font-size: 25rpx; font-weight: 700; line-height: 88rpx; }
 .voice-hint { display: block; margin-top: 10rpx; color: #9aa3b0; font-size: 17rpx; }
 .face-switch { position: absolute; z-index: 30; right: 24rpx; display: flex; align-items: center; width: 108rpx; height: 108rpx; margin: 0; padding: 6rpx; overflow: visible; border: 4rpx solid rgba(255,255,255,.92); border-radius: 50%; background: #fff; box-shadow: 0 18rpx 48rpx rgba(10,21,44,.28); touch-action: none; }
