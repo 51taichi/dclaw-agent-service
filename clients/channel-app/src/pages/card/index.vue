@@ -239,7 +239,11 @@ onLoad((query = {}) => {
 
 onReady(measureStage);
 
-onShareAppMessage(() => ({ title: `${profile.value.name} · ${companyName.value}`, path: `/pages/card/index?slug=${encodeURIComponent(options.slug)}` }));
+onShareAppMessage(() => ({
+  title: `${profile.value.name} · ${companyName.value}`,
+  path: `/pages/card/index?slug=${encodeURIComponent(options.slug)}`,
+  imageUrl: profile.value.avatar
+}));
 
 function asset(value) { return preparedAssets[value] || resolveAssetUrl(value); }
 function message(type, payload = {}) { return { id: createId(), type, ...payload }; }

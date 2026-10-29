@@ -63,6 +63,7 @@ test("miniapp opens on a workspace roster and navigates to independently shareab
   assert.match(homeSource, /uni\.navigateTo\(\{ url: `\/pages\/card\/index\?slug=/);
   assert.match(cardSource, /uni\.reLaunch\(\{ url: "\/pages\/home\/index" \}\)/);
   assert.doesNotMatch(cardSource, /query\.slug \|\| "wuhe-assistant"/);
+  assert.match(cardSource, /imageUrl: profile\.value\.avatar/);
 });
 
 test("agent responses render as plain answer cards and message defaults to customer", () => {
