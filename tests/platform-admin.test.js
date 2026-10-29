@@ -81,6 +81,7 @@ test("workspace miniapp credentials are encrypted and never returned to the admi
   assert.equal(fetched.data.config.appId, "wx48fa13a3cc0dcf72");
   assert.equal("encryptedAppSecret" in fetched.data.config, false);
 
+  app.store.markWorkspaceMiniappVerified("dingmai");
   const updated = await request(app.baseUrl, "/api/admin/workspaces/dingmai/miniapp", { method: "PUT", body: {
     mode: "dedicated",
     name: "顶脉智能名片（已更新）",
@@ -89,7 +90,19 @@ test("workspace miniapp credentials are encrypted and never returned to the admi
   } });
   assert.equal(updated.response.status, 200);
   assert.equal(updated.data.name, "顶脉智能名片（已更新）");
+  assert.equal(updated.data.status, "verified");
+  assert.ok(updated.data.verifiedAt);
   assert.equal(app.store.getWorkspaceMiniapp("dingmai", { includeSecrets: true }).encryptedAppSecret, stored.encryptedAppSecret);
+
+  const credentialChanged = await request(app.baseUrl, "/api/admin/workspaces/dingmai/miniapp", { method: "PUT", body: {
+    mode: "dedicated",
+    name: "顶脉智能名片（已更新）",
+    appId: "wx48fa13a3cc0dcf72",
+    appSecret: "rotated-server-only-secret",
+    originalId: "gh_test"
+  } });
+  assert.equal(credentialChanged.data.status, "configured");
+  assert.equal(credentialChanged.data.verifiedAt, null);
 });
 
 test("employee cockpit aggregates business results across website and miniapp channels", async (t) => {

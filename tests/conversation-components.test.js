@@ -157,7 +157,7 @@ test("admin browser and header use the website card management title", () => {
 test("channel publishing and miniapp credential saving stay visible near their settings", () => {
   const adminMarkup = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
-  assert.match(adminMarkup, /data-publish-provider="miniapp"[^>]*>[\s\S]*?发布配置/);
+  assert.match(adminMarkup, /class="primary"[^>]*data-publish-provider="miniapp"[^>]*>[\s\S]*?发布配置/);
   assert.match(adminMarkup, /id="saveMiniappCredential"[^>]*>[\s\S]*?保存小程序配置/);
   assert.match(adminMarkup, /后台显示名称/);
   assert.match(adminSource, /async function saveMiniappCredential\(\)/);

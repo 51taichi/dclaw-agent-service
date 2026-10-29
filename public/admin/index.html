@@ -113,16 +113,16 @@
             <div id="configEditorLayout" class="config-editor-layout">
               <div class="config-editor-column">
                 <form id="websiteConfigForm" class="admin-form channel-config-form" data-provider-form="website">
-                  <div class="config-section-head wide"><h2>官网客服</h2><div class="config-section-actions"><button class="secondary" type="button" data-publish-provider="website"><svg><use href="#i-send"/></svg>发布配置</button><button class="secondary config-preview-button" type="button" data-preview-provider="website"><svg><use href="#i-eye"/></svg>预览</button><label class="row-switch" title="启用官网客服"><input name="enabled" type="checkbox"/><span></span></label></div></div>
+                  <div class="config-section-head wide"><h2>官网客服</h2><div class="config-section-actions"><button class="primary" type="button" data-publish-provider="website"><svg><use href="#i-send"/></svg>发布配置</button><button class="secondary config-preview-button" type="button" data-preview-provider="website"><svg><use href="#i-eye"/></svg>预览</button><label class="row-switch" title="启用官网客服"><input name="enabled" type="checkbox"/><span></span></label></div></div>
                   <div id="websiteConfigFields" class="dynamic-fields wide"></div>
                   <section class="agent-binding-block wide">
                     <div class="agent-binding-head"><span><svg><use href="#i-bot"/></svg>绑定公司助手 Agent</span><label class="row-switch" title="使用独立 Agent"><input name="assistantAgentOverrideEnabled" type="checkbox"/><span></span></label></div>
                     <label class="agent-binding-select"><span><svg><use href="#i-link"/></svg>Agent 配置</span><select name="assistantAgentConfigId"></select></label>
                   </section>
-                  <div class="form-footer wide form-actions-end"><div class="button-row"><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存官网配置</button></div></div>
+                  <div class="form-footer wide form-actions-end"><div class="button-row"><button class="secondary" type="submit"><svg><use href="#i-save"/></svg>保存官网配置</button></div></div>
                 </form>
                 <form id="miniappConfigForm" class="admin-form channel-config-form" data-provider-form="miniapp" hidden>
-                  <div class="config-section-head wide"><h2>智能名片</h2><div class="config-section-actions"><button class="secondary" type="button" data-publish-provider="miniapp"><svg><use href="#i-send"/></svg>发布配置</button><button class="secondary config-preview-button" type="button" data-preview-provider="miniapp"><svg><use href="#i-eye"/></svg>预览</button><label class="row-switch" title="启用智能名片"><input name="enabled" type="checkbox"/><span></span></label></div></div>
+                  <div class="config-section-head wide"><h2>智能名片</h2><div class="config-section-actions"><button class="primary" type="button" data-publish-provider="miniapp"><svg><use href="#i-send"/></svg>发布配置</button><button class="secondary config-preview-button" type="button" data-preview-provider="miniapp"><svg><use href="#i-eye"/></svg>预览</button><label class="row-switch" title="启用智能名片"><input name="enabled" type="checkbox"/><span></span></label></div></div>
                   <section class="workspace-miniapp-card wide">
                     <div class="workspace-miniapp-head"><span><svg><use href="#i-key"/></svg><strong>公司微信小程序</strong></span><span id="miniappCredentialStatus" class="pill off">未配置</span></div>
                     <div class="workspace-miniapp-fields">
@@ -132,14 +132,14 @@
                       <label><span><svg><use href="#i-key"/></svg>AppSecret</span><input name="miniappAppSecret" type="password" maxlength="256" placeholder="填写后加密保存" autocomplete="new-password" /></label>
                       <label class="wide"><span><svg><use href="#i-link"/></svg>原始 ID</span><input name="miniappOriginalId" maxlength="120" placeholder="可选，例如 gh_..." /></label>
                     </div>
-                    <div class="workspace-miniapp-actions"><span class="workspace-miniapp-action-copy"><small id="miniappCredentialHint">每个工作区独立保存，密钥不会返回浏览器。</small><small>后台显示名称仅用于管理；微信端正式名称请在公众平台修改。</small></span><div class="button-row"><button id="saveMiniappCredential" class="primary" type="button"><svg><use href="#i-save"/></svg>保存小程序配置</button><button id="verifyMiniappCredential" class="secondary" type="button"><svg><use href="#i-link"/></svg>验证配置</button></div></div>
+                    <div class="workspace-miniapp-actions"><span class="workspace-miniapp-action-copy"><small id="miniappCredentialHint">每个工作区独立保存，密钥不会返回浏览器。</small><small>后台显示名称仅用于管理；微信端正式名称请在公众平台修改。</small></span><div class="button-row"><button id="saveMiniappCredential" class="secondary" type="button"><svg><use href="#i-save"/></svg>保存小程序配置</button><button id="verifyMiniappCredential" class="secondary" type="button"><svg><use href="#i-link"/></svg>验证配置</button></div></div>
                   </section>
                   <div id="miniappConfigFields" class="dynamic-fields wide"></div>
                   <section class="agent-binding-block wide">
                     <div class="agent-binding-head"><span><svg><use href="#i-bot"/></svg>绑定反面 Agent</span><label class="row-switch" title="使用独立 Agent"><input name="assistantAgentOverrideEnabled" type="checkbox"/><span></span></label></div>
                     <label class="agent-binding-select"><span><svg><use href="#i-link"/></svg>Agent 配置</span><select name="assistantAgentConfigId"></select></label>
                   </section>
-                  <div class="form-footer wide form-actions-end"><div class="button-row"><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存名片展示配置</button></div></div>
+                  <div class="form-footer wide form-actions-end"><div class="button-row"><button class="secondary" type="submit"><svg><use href="#i-save"/></svg>保存名片展示配置</button></div></div>
                 </form>
               </div>
               <aside id="fieldMapPane" class="field-map-pane">

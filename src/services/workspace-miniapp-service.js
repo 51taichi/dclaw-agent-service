@@ -16,17 +16,19 @@ export class WorkspaceMiniappService {
     if (!this.store.getWorkspace(workspaceId)) return null;
     const existing = this.store.getWorkspaceMiniapp(workspaceId, { includeSecrets: true });
     const suppliedSecret = input?.appSecret === undefined || input.appSecret === "••••••••" ? "" : String(input.appSecret || "").trim();
+    const appId = String(input?.appId || "").trim();
+    const credentialsChanged = !existing || existing.appId !== appId || Boolean(suppliedSecret);
     let encryptedSecret = existing?.encryptedAppSecret || "";
     if (suppliedSecret) encryptedSecret = this.vault.encrypt(suppliedSecret);
     if (!encryptedSecret) throw typeError("请配置小程序 AppSecret");
     return this.store.saveWorkspaceMiniapp(workspaceId, {
       mode: input?.mode,
       name: input?.name,
-      appId: input?.appId,
+      appId,
       encryptedAppSecret: encryptedSecret,
       originalId: input?.originalId,
-      status: "configured",
-      verifiedAt: existing?.appId === input?.appId ? existing?.verifiedAt : null
+      status: !credentialsChanged && existing?.verifiedAt ? "verified" : "configured",
+      verifiedAt: credentialsChanged ? null : existing?.verifiedAt
     });
   }
 
