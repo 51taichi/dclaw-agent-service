@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DClaw Agent管理中台</title>
+    <title>官网名片智能体管理中台</title>
     <link rel="icon" type="image/png" href="./assets/console-favicon.png" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./agent.css" />
@@ -42,8 +42,8 @@
     <header class="topbar">
       <div class="topbar-inner">
         <div class="brand">
-          <img class="brand-logo" src="./assets/deepmega-dclaw-logo-cropped.png" alt="DeepMega DClaw" />
-          <div class="brand-copy"><h1>DClaw Agent管理中台</h1></div>
+          <img class="brand-logo" src="../admin/assets/dclaw-logo.png" alt="DClaw" />
+          <div class="brand-copy"><h1>官网名片智能体管理中台</h1></div>
         </div>
         <div class="topbar-platforms" aria-label="支持渠道">
           <span class="platform-logo" aria-label="官网客服" title="官网客服"><svg class="icon"><use href="#icon-monitor"></use></svg></span>
@@ -71,7 +71,6 @@
             <button data-tab="flow" type="button"><svg class="icon"><use href="#icon-edit"></use></svg>状态机</button>
             <button data-tab="tags" type="button"><svg class="icon"><use href="#icon-tag"></use></svg>标签</button>
             <button data-tab="push" type="button"><svg class="icon"><use href="#icon-send"></use></svg>激活</button>
-            <button data-tab="logs" type="button"><svg class="icon"><use href="#icon-eye"></use></svg>日志</button>
             <button data-tab="config" type="button"><svg class="icon"><use href="#icon-link"></use></svg>配置</button>
           </div>
           <div class="current-bot-actions">
@@ -88,48 +87,56 @@
 
         <div class="tab-panel" data-panel="cockpit">
           <section class="panel bot-context-panel cockpit-shell">
-            <div class="cockpit-content">
-              <div class="cockpit-heading">
-                <span><small>当前渠道</small><strong id="cockpitTitle">经营驾驶舱</strong></span>
-                <span id="healthPill" class="pill ok">运行正常</span>
+            <div id="businessDashboard" class="cockpit-content business-dashboard">
+              <div class="business-dashboard-head">
+                <div class="business-dashboard-title"><small>智能员工经营概览</small><strong id="cockpitTitle">经营驾驶舱</strong><span id="cockpitScopeChannels" class="cockpit-scope-channels"></span></div>
+                <span id="healthPill" class="pill ok">Agent 运行正常</span>
               </div>
               <div id="metricGrid" class="cockpit-metric-grid"></div>
-              <div class="agent-dashboard-grid">
-                <section class="dashboard-band"><div class="section-head"><h2 class="module-title"><svg class="icon"><use href="#icon-edit"></use></svg>会话状态分布</h2></div><div id="stateBreakdown" class="state-breakdown"></div></section>
-                <section class="dashboard-band"><div class="section-head"><h2 class="module-title"><svg class="icon"><use href="#icon-alert"></use></svg>待处理提醒</h2><button class="secondary compact-button" data-go-tab="sessions">进入会话</button></div><div id="dashboardAlerts" class="dashboard-alert-list"></div></section>
+              <div class="cockpit-primary-grid">
+                <section class="dashboard-band cockpit-trend-panel"><div class="section-head"><div><h2 class="module-title"><svg class="icon"><use href="#icon-eye"></use></svg>近 7 日客户互动</h2><small>新访客与客户主动消息</small></div><div class="trend-legend"><span><i class="visitor"></i>新访客</span><span><i class="message"></i>客户消息</span></div></div><div id="trendChart" class="cockpit-trend-chart"></div></section>
+                <section class="dashboard-band cockpit-quality-panel"><div class="section-head"><div><h2 class="module-title"><svg class="icon"><use href="#icon-robot"></use></svg>Agent 接待质量</h2><small>近 7 日真实调用</small></div></div><div id="agentQuality" class="agent-quality"></div></section>
               </div>
+              <div class="cockpit-secondary-grid">
+                <section class="dashboard-band"><div class="section-head"><div><h2 class="module-title"><svg class="icon"><use href="#icon-edit"></use></svg>客户阶段分布</h2><small>按状态机当前节点统计</small></div><button class="secondary compact-button" data-go-tab="flow">配置状态机</button></div><div id="stateBreakdown" class="state-breakdown business-state-breakdown"></div></section>
+                <section class="dashboard-band"><div class="section-head"><div><h2 class="module-title"><svg class="icon"><use href="#icon-alert"></use></svg>待人工跟进</h2><small>提醒与异常优先处理</small></div><button class="secondary compact-button" data-go-tab="sessions">全部会话</button></div><div id="dashboardAlerts" class="dashboard-alert-list business-alert-list"></div></section>
+              </div>
+              <section class="dashboard-band channel-performance-panel"><div class="section-head"><div><h2 class="module-title"><svg class="icon"><use href="#icon-monitor"></use></svg>渠道表现</h2><small>官网客服与智能名片独立统计</small></div></div><div id="channelPerformance" class="channel-performance-grid"></div></section>
             </div>
           </section>
         </div>
 
         <div class="tab-panel" data-panel="sessions" hidden>
-          <section id="flowSessionsPanel" class="panel bot-context-panel">
+          <section id="flowSessionsPanel" class="panel bot-context-panel collapsible-panel">
             <div class="section-head flow-session-head">
               <div class="flow-session-filters session-filter-grid">
                 <label class="flow-session-search"><span class="field-label"><svg class="icon"><use href="#icon-search"></use></svg>搜索客户</span><input id="conversationSearch" type="search" placeholder="搜索姓名或用户 ID" /></label>
-                <label><span class="field-label"><svg class="icon"><use href="#icon-edit"></use></svg>会话状态</span><select id="conversationStateFilter"><option value="">全部状态</option></select></label>
-                <label><span class="field-label"><svg class="icon"><use href="#icon-user"></use></svg>接待模式</span><select id="conversationModeFilter"><option value="">全部模式</option><option value="ai">AI 接待</option><option value="human">人工接待</option></select></label>
+                <label class="flow-session-date-filter"><span class="field-label"><svg class="icon"><use href="#icon-clock"></use></svg>会话日期</span><input id="conversationDateFilter" type="date" /></label>
+                <label><span class="field-label"><svg class="icon"><use href="#icon-edit"></use></svg>任务状态</span><select id="conversationStateFilter"><option value="">全部状态</option></select></label>
+                <label class="tag-multi-select"><span class="field-label"><svg class="icon"><use href="#icon-tag"></use></svg>按标签选择</span><button id="conversationTagFilterButton" class="tag-multi-select-button" type="button" aria-haspopup="listbox" aria-expanded="false">选择标签</button><div id="conversationTagFilterMenu" class="tag-multi-select-menu" role="listbox" aria-label="会话标签选择" hidden></div><select id="conversationTagFilter" multiple hidden></select></label>
               </div>
-              <button id="refreshConversations" class="secondary" type="button"><svg class="icon"><use href="#icon-refresh"></use></svg>刷新</button>
+              <div class="section-actions"><button id="refreshConversations" class="secondary" type="button"><svg class="icon"><use href="#icon-refresh"></use></svg>刷新</button></div>
             </div>
             <div class="collapsible-content flow-workbench">
               <div class="flow-session-sidebar">
-                <div class="segmented flow-session-type-tabs"><button class="active" type="button"><svg class="icon"><use href="#icon-user"></use></svg>客户会话</button><button id="openAlertFilter" type="button"><svg class="icon"><use href="#icon-alert"></use></svg>待处理</button></div>
+                <div id="conversationChannelTabs" class="segmented flow-session-type-tabs channel-conversation-tabs" role="tablist" aria-label="消息渠道"></div>
                 <div id="conversationList" class="flow-session-list"></div>
                 <div id="conversationSummary" class="pagination-bar"></div>
               </div>
               <div class="chat-view">
                 <div class="chat-head">
-                  <div class="chat-title-wrap"><img class="chat-title-avatar" src="./assets/bot-avatar.png" alt="" /><strong id="chatTitle">请选择一个会话</strong><span id="chatTags" class="chat-tag-list conversation-metadata-flow"></span></div>
+                  <div class="chat-title-wrap"><img class="chat-title-avatar" src="./assets/ddeer.png" alt="" /><strong id="chatTitle">请选择一个客户会话</strong><span id="chatTags" class="chat-tag-list conversation-metadata-flow"></span></div>
                   <div class="chat-head-actions">
-                    <label class="chat-state-select"><span>状态</span><select id="chatState" disabled></select></label>
+                    <button id="assetsButton" class="secondary asset-button" type="button" hidden><svg class="icon"><use href="#icon-briefcase"></use></svg>资产 <span id="assetsCount">0</span></button>
                     <span id="handoffSwitch" class="handoff-switch conversation-handoff-switch" role="switch" tabindex="0" aria-checked="false" title="切换 AI / 人工接待" hidden><span class="handoff-switch-option is-ai"><svg class="icon"><use href="#icon-robot"></use></svg></span><span class="handoff-switch-option is-human"><svg class="icon"><use href="#icon-user"></use></svg></span><span class="handoff-switch-thumb"></span></span>
+                    <button id="resetConversationButton" class="danger icon-button conversation-reset-button" type="button" title="删除会话" aria-label="删除会话" disabled><svg class="icon"><use href="#icon-reset"></use></svg></button>
                   </div>
                 </div>
+                <div id="assetsPanel" class="assets-panel" hidden></div>
                 <div id="chatMessages" class="chat-messages"><div class="empty-state">请选择左侧客户会话</div></div>
                 <form id="manualReplyComposer" class="manual-reply-composer is-ai" hidden>
                   <div class="ai-takeover-card"><img src="./assets/ai-chatting.png" alt="" /><div class="ai-takeover-copy"><span>AI 正在和客户沟通中</span><small>AI is chatting with the customer</small></div></div>
-                  <div class="manual-reply-box" hidden><textarea id="manualReplyInput" rows="3" placeholder="输入人工回复"></textarea><div class="manual-reply-tools"><span class="muted">消息将通过当前渠道 Adapter 投递</span><button class="primary" type="submit"><svg class="icon"><use href="#icon-send"></use></svg>发送</button></div></div>
+                  <div class="manual-reply-box" hidden><textarea id="manualReplyInput" rows="3" placeholder="输入人工回复，支持 emoji"></textarea><input id="manualReplyUploadFile" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm" multiple hidden /><button id="manualReplyAttachmentButton" class="icon-button manual-reply-attachment-button" type="button" title="添加附件" aria-label="添加附件"><svg class="icon"><use href="#icon-upload"></use></svg></button><div class="manual-reply-tools"><div id="manualReplyEmojiBar" class="manual-reply-emoji-bar" aria-label="快捷表情"></div><div id="manualReplyAttachmentList" class="manual-reply-attachment-list" aria-live="polite"></div><button id="manualReplySendButton" class="primary" type="submit"><svg class="icon"><use href="#icon-send"></use></svg>发送</button></div></div>
                 </form>
                 <details class="flow-events-wrap"><summary>状态事件与收集数据</summary><pre id="flowEventsOutput" class="flow-events"></pre></details>
               </div>
@@ -189,10 +196,6 @@
           </section>
         </div>
 
-        <div class="tab-panel" data-panel="logs" hidden>
-          <section class="panel bot-context-panel editor-panel"><div class="section-head"><h2 class="module-title"><svg class="icon"><use href="#icon-eye"></use></svg>运行审计</h2><button id="refreshAudit" class="secondary"><svg class="icon"><use href="#icon-refresh"></use></svg>刷新</button></div><div id="auditList" class="audit-list"></div></section>
-        </div>
-
         <div class="tab-panel" data-panel="config" hidden>
           <section class="panel bot-context-panel editor-panel">
             <div class="section-head"><h2 class="module-title"><svg class="icon"><use href="#icon-link"></use></svg>人物与渠道配置</h2></div>
@@ -218,7 +221,7 @@
     </div>
     <audio id="tagVoiceAlertAudio" preload="auto" src="./assets/tag-voice-alert.mp3"></audio>
     <audio id="attentionAlertAudio" preload="auto" src="./assets/attention-alert.mp3"></audio>
-    <div id="toast" class="toast" role="status" hidden></div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

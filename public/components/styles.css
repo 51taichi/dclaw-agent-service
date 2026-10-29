@@ -1,0 +1,33 @@
+:root { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; color: #17181c; background: #f4f5f7; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+#componentRoot { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 56px; }
+.library-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 4px 0 22px; border-bottom: 1px solid #dfe3e9; }
+.library-header small { color: #718096; font-size: 11px; font-weight: 800; }
+.library-header h1 { margin: 5px 0 0; font-size: 25px; letter-spacing: 0; }
+.library-header > span { padding: 6px 9px; border-radius: 6px; background: #e8f2ff; color: #2364ad; font-size: 12px; font-weight: 800; }
+.library-nav { display: flex; gap: 6px; padding: 18px 0 22px; overflow-x: auto; }
+.library-nav a { flex: 0 0 auto; padding: 7px 10px; border: 1px solid #d8dde6; border-radius: 6px; background: #fff; color: #49556a; font-size: 12px; text-decoration: none; }
+.library-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 34px 42px; align-items: start; }
+.component-specimen > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.component-specimen > header span { color: #8791a2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.component-specimen > header strong { font-size: 13px; }
+.component-stage { min-height: 128px; padding: 18px; border-top: 1px solid #dfe3e9; background: #eef0f3; }
+.component-stage > .component-card:last-child, .component-stage > .question-list:last-child { margin-bottom: 0; }
+.variant-stack { display: grid; gap: 10px; }
+.variant-stack .dclaw-message { margin-top: 0; margin-bottom: 0; }
+.component-state-list { display: grid; gap: 18px; }
+.component-state { min-width: 0; }
+.component-state-label { display: block; margin-bottom: 7px; color: #717b8c; font-size: 10px; font-weight: 800; }
+.component-state-customer { display: grid; justify-items: end; gap: 5px; margin-top: -2px; }
+.component-state-customer small { color: #8791a2; font-size: 9px; }
+.component-state-customer .dclaw-message { margin: 0; }
+.component-feedback { position: fixed; z-index: 20; left: 50%; bottom: 24px; max-width: min(360px, calc(100% - 32px)); padding: 9px 13px; border-radius: 6px; background: rgba(27,32,43,.92); color: #fff; font-size: 12px; opacity: 0; pointer-events: none; transform: translate(-50%, 8px); transition: opacity .16s ease, transform .16s ease; }
+.component-feedback.is-visible { opacity: 1; transform: translate(-50%, 0); }
+@media (max-width: 760px) {
+  #componentRoot { width: min(100% - 24px, 480px); padding-top: 18px; }
+  .library-grid { grid-template-columns: 1fr; gap: 28px; }
+  .component-stage { padding: 14px; }
+}

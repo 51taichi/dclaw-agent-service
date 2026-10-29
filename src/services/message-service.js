@@ -9,7 +9,7 @@ export class MessageService {
     this.delivery = delivery;
   }
 
-  async receive({ provider, accountId, payload, secret = "" }) {
+  async receive({ provider, accountId, payload, secret = "", forceAgent = false }) {
     const account = this.store.getAccount(accountId, { includeSecrets: true });
     if (!account || account.provider !== provider) {
       const error = new Error("Channel account not found");
@@ -28,14 +28,21 @@ export class MessageService {
     }
     const events = await this.registry.get(provider).normalizeInbound({ accountId, payload });
     const results = [];
-    for (const event of events) results.push(await this.#processEvent(account, event));
+    for (const event of events) results.push(await this.#processEvent(account, event, { forceAgent }));
     return results;
   }
 
-  async #processEvent(account, event) {
+  async #processEvent(account, event, { forceAgent = false } = {}) {
     const received = this.store.recordInbound(event);
     if (received.duplicate) return { eventId: event.eventId, duplicate: true };
-    const { conversation, message } = received;
+    let { conversation } = received;
+    const { message } = received;
+    if (forceAgent && conversation.mode === "human") {
+      conversation = this.store.setConversationMode(conversation.id, "ai", {
+        operator: "admin-preview",
+        note: "后台预览消息自动恢复 Agent"
+      });
+    }
     if (conversation.mode === "human") return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, handledBy: "human" };
 
     try {

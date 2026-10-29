@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DClaw Agent 管理后台</title>
+    <title>官网名片智能体管理后台</title>
     <link rel="icon" type="image/png" href="./assets/admin-favicon.png" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20261029-2" />
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -19,12 +19,25 @@
       <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
       <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
       <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"/></symbol>
+      <symbol id="i-hash" viewBox="0 0 24 24"><path d="M10 3 8 21M16 3l-2 18M4 9h17M3 15h17"/></symbol>
+      <symbol id="i-building" viewBox="0 0 24 24"><path d="M3 21h18M6 21V5l6-2v18M18 21V9l-6-2M9 9h.01M9 13h.01M9 17h.01M15 13h.01M15 17h.01"/></symbol>
+      <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M15 8l3 3M17 6l2 2"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a8 8 0 1 1 16 0M12 18l4-5M7 18h10"/></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20 13 11 22l-9-9V4h9Z"/><circle cx="7" cy="9" r="1"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 10v7M14 10v7"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13h.01M10 13h.01M13 13h.01M16 13h.01M8 16h8"/></symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.6-2L20 12M4 12l2.3 5a7 7 0 0 0 11.6-2"/></symbol>
     </svg>
 
     <header class="topbar admin-topbar">
       <div class="topbar-inner">
-        <div class="brand"><img class="brand-logo" src="/console/assets/deepmega-dclaw-logo-cropped.png" alt="DeepMega DClaw" /><div class="brand-copy"><h1>DClaw Agent 管理后台</h1></div></div>
-        <div class="admin-head-actions"><span class="role-badge">平台管理员</span><a id="openConsole" class="secondary" href="/console/"><svg><use href="#i-open"/></svg>进入管理中台</a></div>
+        <div class="brand"><img class="brand-logo" src="./assets/dclaw-logo.png" alt="DClaw" /><div class="brand-copy"><h1>官网名片智能体管理后台</h1></div></div>
+        <div class="admin-head-actions"><span class="role-badge">平台管理员</span><a id="openConsole" class="secondary" href="/console/" target="_blank" rel="noopener"><svg><use href="#i-open"/></svg>进入管理中台</a></div>
       </div>
     </header>
 
@@ -34,94 +47,173 @@
         <div id="workspaceShell" hidden>
           <nav class="admin-tabs" aria-label="工作区管理">
             <button class="active" data-tab="workspace"><svg><use href="#i-grid"/></svg>工作区</button>
+            <button data-tab="config"><svg><use href="#i-settings"/></svg>渠道配置</button>
             <button data-tab="people"><svg><use href="#i-user"/></svg>智能员工</button>
-            <button data-tab="channels"><svg><use href="#i-link"/></svg>渠道与发布</button>
-            <button data-tab="agent"><svg><use href="#i-bot"/></svg>Agent API</button>
+            <button data-tab="agent"><svg><use href="#i-bot"/></svg>Agent</button>
           </nav>
           <div class="workspace-titlebar contextual-titlebar" hidden>
-            <div><small id="workspaceSlug"></small><h1 id="workspaceTitle"></h1></div>
+            <div><h1 id="workspaceTitle"></h1></div>
             <span id="workspaceStatus" class="pill ok"></span>
           </div>
 
           <section class="admin-panel active" data-panel="workspace">
-            <div class="section-title workspace-section-head"><div><h2>工作区</h2><p>一个工作区对应一家公司，是数据、权限和计费边界。</p></div><button id="newWorkspace" class="secondary"><svg><use href="#i-plus"/></svg>新增工作区</button></div>
+            <div class="section-title workspace-section-head"><h2>工作区</h2><button id="newWorkspace" class="secondary"><svg><use href="#i-plus"/></svg>新增工作区</button></div>
             <div class="workspace-management-layout">
               <aside class="workspace-list-pane"><div id="workspaceList" class="admin-list"></div></aside>
               <div class="workspace-detail-pane">
                 <form id="workspaceForm" class="admin-form">
-                  <label><span>工作区 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
-                  <label><span>公开标识</span><input name="slug" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
-                  <label><span>公司名称</span><input name="name" required /></label>
-                  <label><span>品牌色</span><input name="accent" type="color" value="#2a30d8" /></label>
-                  <label class="wide"><span>公司 Logo URL</span><input name="logoUrl" type="url" /></label>
-                  <label><span>所属行业</span><input name="industry" /></label>
-                  <label><span>公司简介</span><textarea name="description" rows="3"></textarea></label>
-                  <div class="form-footer wide workspace-form-actions"><span id="workspaceFormHint" class="muted"></span><div class="button-row"><a id="openWorkspaceConsole" class="secondary" href="/console/"><svg><use href="#i-open"/></svg>打开工作区</a><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存</button></div></div>
+                  <label><span><svg><use href="#i-hash"/></svg>工作区 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                  <label><span><svg><use href="#i-globe"/></svg>公开标识</span><input name="slug" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                  <label><span><svg><use href="#i-building"/></svg>公司名称</span><input name="name" required /></label>
+                  <div id="workspaceLogoField" class="media-field-host"></div>
+                  <label><span><svg><use href="#i-briefcase"/></svg>所属行业</span><input name="industry" /></label>
+                  <label><span><svg><use href="#i-edit"/></svg>公司简介</span><textarea name="description" rows="3"></textarea></label>
+                  <div class="form-footer wide workspace-form-actions"><div class="button-row"><a id="openWorkspaceConsole" class="secondary" href="/console/" target="_blank" rel="noopener"><svg><use href="#i-open"/></svg>打开工作区</a><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存</button></div></div>
                 </form>
               </div>
             </div>
           </section>
 
           <section class="admin-panel" data-panel="people">
-            <div class="split-layout">
-              <aside><div class="section-title compact"><div><h2>智能员工</h2><p>一个人物可部署到多个渠道。</p></div><button id="newPerson" class="secondary"><svg><use href="#i-plus"/></svg>新增</button></div><div id="personList" class="entity-list"></div></aside>
+            <div class="people-grid">
+              <aside><div class="section-title compact"><h2>智能员工</h2><button id="newPerson" class="secondary"><svg><use href="#i-plus"/></svg>新增</button></div><div id="personList" class="entity-list"></div></aside>
               <div id="personEditor" class="editor-surface">
                 <form id="personForm" class="admin-form">
-                  <label><span>人物 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
-                  <label><span>姓名</span><input name="name" required /></label>
-                  <label><span>职务</span><input name="title" /></label>
-                  <label><span>头像 URL</span><input name="avatarUrl" type="url" /></label>
-                  <label><span>性格特征</span><textarea name="personality" rows="3"></textarea></label>
-                  <label><span>表达方式</span><textarea name="speakingStyle" rows="3"></textarea></label>
-                  <label class="wide"><span>岗位职责</span><textarea name="responsibilities" rows="3"></textarea></label>
-                  <label class="wide"><span>补充人设规则</span><textarea name="systemPrompt" rows="4"></textarea></label>
+                  <label><span><svg><use href="#i-hash"/></svg>人物 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                  <label><span><svg><use href="#i-user"/></svg>姓名</span><input name="name" required /></label>
+                  <label><span><svg><use href="#i-briefcase"/></svg>职务</span><input name="title" /></label>
+                  <div id="personAvatarField" class="media-field-host"></div>
+                  <label><span><svg><use href="#i-user"/></svg>性格特征</span><textarea name="personality" rows="3"></textarea></label>
+                  <label><span><svg><use href="#i-edit"/></svg>表达方式</span><textarea name="speakingStyle" rows="3"></textarea></label>
+                  <label><span><svg><use href="#i-briefcase"/></svg>岗位职责</span><textarea name="responsibilities" rows="3"></textarea></label>
+                  <label><span><svg><use href="#i-bot"/></svg>补充人设规则</span><textarea name="systemPrompt" rows="3"></textarea></label>
+                  <section class="agent-binding-block wide">
+                    <div class="agent-binding-head">
+                      <span><svg><use href="#i-bot"/></svg>绑定 Agent</span>
+                      <label class="row-switch" title="使用独立 Agent"><input name="agentOverrideEnabled" type="checkbox"/><span></span></label>
+                    </div>
+                    <label class="agent-binding-select"><span><svg><use href="#i-link"/></svg>Agent 配置</span><select name="agentConfigId"></select></label>
+                  </section>
+                  <div id="personProfileFields" class="dynamic-fields wide"></div>
+                  <section class="person-channel-section wide">
+                    <div class="section-title compact"><h2>开通端口</h2></div>
+                    <div id="personChannelList" class="person-channel-list"></div>
+                  </section>
                   <div class="form-footer wide form-actions-end"><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存人物</button></div>
                 </form>
               </div>
             </div>
           </section>
 
-          <section class="admin-panel" data-panel="channels">
-            <div class="channel-grid">
-              <aside><div class="section-title compact"><div><h2>已开通渠道</h2><p>为当前公司开通展示端口。</p></div><button id="newChannel" class="secondary"><svg><use href="#i-plus"/></svg>新增</button></div><div id="channelList" class="entity-list"></div></aside>
-              <div class="editor-surface">
-                <form id="channelForm" class="admin-form">
-                  <label><span>渠道 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
-                  <label><span>渠道类型</span><select name="provider"></select></label>
-                  <label class="wide"><span>渠道名称</span><input name="name" required /></label>
-                  <div id="channelConfigFields" class="dynamic-fields wide"></div>
-                  <label class="wide"><span>Webhook Secret</span><input name="webhookSecret" type="password" autocomplete="new-password" /></label>
-                  <div class="form-footer wide form-actions-end"><div class="button-row"><button id="publishChannel" class="secondary" type="button"><svg><use href="#i-send"/></svg>发布配置</button><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存渠道</button></div></div>
+          <section class="admin-panel" data-panel="config">
+            <div class="config-type-tabs" role="tablist" aria-label="配置类型">
+              <button class="active" type="button" data-config-provider="website"><span class="channel-glyph">网</span><span><strong>官网客服</strong><small>入口与员工列表</small></span></button>
+              <button type="button" data-config-provider="miniapp"><span class="channel-glyph">名</span><span><strong>智能名片</strong><small>公司助手与名片反面</small></span></button>
+            </div>
+            <div id="configEditorLayout" class="config-editor-layout">
+              <div class="config-editor-column">
+                <form id="websiteConfigForm" class="admin-form channel-config-form" data-provider-form="website">
+                  <div class="config-section-head wide"><h2>官网客服</h2><div class="config-section-actions"><button class="secondary config-preview-button" type="button" data-preview-provider="website"><svg><use href="#i-eye"/></svg>预览</button><label class="row-switch" title="启用官网客服"><input name="enabled" type="checkbox"/><span></span></label></div></div>
+                  <div id="websiteConfigFields" class="dynamic-fields wide"></div>
+                  <section class="agent-binding-block wide">
+                    <div class="agent-binding-head"><span><svg><use href="#i-bot"/></svg>绑定公司助手 Agent</span><label class="row-switch" title="使用独立 Agent"><input name="assistantAgentOverrideEnabled" type="checkbox"/><span></span></label></div>
+                    <label class="agent-binding-select"><span><svg><use href="#i-link"/></svg>Agent 配置</span><select name="assistantAgentConfigId"></select></label>
+                  </section>
+                  <div class="form-footer wide form-actions-end"><div class="button-row"><button class="secondary" type="button" data-publish-provider="website"><svg><use href="#i-send"/></svg>发布</button><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存官网配置</button></div></div>
                 </form>
-                <div class="deployment-section">
-                  <div class="section-title compact"><div><h2>人物部署</h2><p>绑定人物与渠道，并配置最终展示内容。</p></div><button id="newDeployment" class="secondary"><svg><use href="#i-plus"/></svg>部署人物</button></div>
-                  <div id="deploymentList" class="deployment-list"></div>
-                  <form id="deploymentForm" class="admin-form deployment-form" hidden>
-                    <label><span>部署 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
-                    <label><span>选择人物</span><select name="personId"></select></label>
-                    <label><span>公开标识</span><input name="publicSlug" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
-                    <label><span>显示排序</span><input name="sortOrder" type="number" value="0" /></label>
-                    <div id="deploymentConfigFields" class="dynamic-fields wide"></div>
-                    <div class="form-footer wide form-actions-end"><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存部署</button></div>
-                  </form>
-                </div>
+                <form id="miniappConfigForm" class="admin-form channel-config-form" data-provider-form="miniapp" hidden>
+                  <div class="config-section-head wide"><h2>智能名片</h2><div class="config-section-actions"><button class="secondary config-preview-button" type="button" data-preview-provider="miniapp"><svg><use href="#i-eye"/></svg>预览</button><label class="row-switch" title="启用智能名片"><input name="enabled" type="checkbox"/><span></span></label></div></div>
+                  <section class="workspace-miniapp-card wide">
+                    <div class="workspace-miniapp-head"><span><svg><use href="#i-key"/></svg><strong>公司微信小程序</strong></span><span id="miniappCredentialStatus" class="pill off">未配置</span></div>
+                    <div class="workspace-miniapp-fields">
+                      <label><span><svg><use href="#i-settings"/></svg>接入模式</span><select name="miniappMode"><option value="dedicated">公司独立小程序</option><option value="shared">平台公共小程序</option></select></label>
+                      <label><span><svg><use href="#i-edit"/></svg>小程序名称</span><input name="miniappName" maxlength="120" placeholder="例如：顶脉智能名片" /></label>
+                      <label><span><svg><use href="#i-hash"/></svg>AppID</span><input name="miniappAppId" required maxlength="80" placeholder="wx..." autocomplete="off" /></label>
+                      <label><span><svg><use href="#i-key"/></svg>AppSecret</span><input name="miniappAppSecret" type="password" maxlength="256" placeholder="填写后加密保存" autocomplete="new-password" /></label>
+                      <label class="wide"><span><svg><use href="#i-link"/></svg>原始 ID</span><input name="miniappOriginalId" maxlength="120" placeholder="可选，例如 gh_..." /></label>
+                    </div>
+                    <div class="workspace-miniapp-actions"><small id="miniappCredentialHint">每个工作区独立保存，密钥不会返回浏览器。</small><button id="verifyMiniappCredential" class="secondary" type="button"><svg><use href="#i-link"/></svg>验证配置</button></div>
+                  </section>
+                  <div id="miniappConfigFields" class="dynamic-fields wide"></div>
+                  <section class="agent-binding-block wide">
+                    <div class="agent-binding-head"><span><svg><use href="#i-bot"/></svg>绑定反面 Agent</span><label class="row-switch" title="使用独立 Agent"><input name="assistantAgentOverrideEnabled" type="checkbox"/><span></span></label></div>
+                    <label class="agent-binding-select"><span><svg><use href="#i-link"/></svg>Agent 配置</span><select name="assistantAgentConfigId"></select></label>
+                  </section>
+                  <div class="form-footer wide form-actions-end"><div class="button-row"><button class="secondary" type="button" data-publish-provider="miniapp"><svg><use href="#i-send"/></svg>发布</button><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存名片配置</button></div></div>
+                </form>
               </div>
-              <aside class="preview-pane"><div class="preview-head"><div><strong>渠道实时预览</strong><small id="previewMode">选择一个人物部署</small></div><button id="openPreview" class="icon-action" title="新窗口预览" disabled><svg><use href="#i-open"/></svg></button></div><iframe id="channelPreview" title="渠道实时预览"></iframe></aside>
+              <aside id="fieldMapPane" class="field-map-pane">
+                <div class="preview-head"><div><strong>配置效果</strong><small id="fieldMapHint">点击左侧字段查看对应位置</small></div></div>
+                <div id="websiteFieldMap" class="field-map website-field-map" data-field-map="website">
+                  <div class="map-browser-bar" data-template-slot="allowedDomains"><i></i><i></i><i></i><span>允许接入域名</span></div>
+                  <div class="map-site-nav"><strong data-template-slot="companyName" data-color-slot="companyNameColor" data-live-text="companyName">顶脉教育集团</strong><span>产品　服务　案例　关于我们</span></div>
+                  <div class="map-site-hero" data-template-slot="homepageImageUrl">
+                    <div><small>智能服务中心</small><h3 data-color-slot="companyNameColor" data-live-text="companyName" data-live-color="companyNameColor">顶脉教育集团</h3><strong>在线服务中心</strong><p data-template-slot="companyDescription" data-color-slot="companyDescriptionColor" data-live-text="companyDescription" data-live-color="companyDescriptionColor">多位团队成员，随时为访客提供一对一服务。</p><span class="map-site-action"><button type="button" data-template-slot="heroButtonLabel" data-color-slot="heroButtonLabelColor" data-live-text="heroButtonLabel" data-live-color="heroButtonLabelColor">了解更多</button><small data-template-slot="heroButtonUrl"><i>跳转至</i><b data-live-text="heroButtonUrl" data-empty-text="未配置跳转地址">未配置跳转地址</b></small></span></div>
+                  </div>
+                  <div id="websiteRosterMap" class="map-widget-panel" hidden>
+                    <header><div><img data-live-image="mascotImageUrl" alt=""/><span><strong data-template-slot="rosterTitle" data-color-slot="rosterTitleColor" data-live-text="rosterTitle" data-live-color="rosterTitleColor">选择成员</strong><small id="mapRosterCount">成员在线</small></span></div><button id="closeWebsiteRosterMap" type="button" title="关闭">×</button></header>
+                    <div id="mapRosterPeople" class="map-roster-people"></div>
+                  </div>
+                  <button id="launcherPositionHandle" class="map-launcher" type="button" data-template-slot="launcherPosition"><img data-template-slot="mascotImageUrl" data-live-image="mascotImageUrl" alt=""/><b data-template-slot="launcherLabel" data-color-slot="launcherLabelColor" data-live-text="launcherLabel" data-live-color="launcherLabelColor">在线咨询</b></button>
+                </div>
+                <div id="miniappFieldMap" class="field-map miniapp-field-map" data-field-map="miniapp" hidden>
+                  <div class="map-face-toolbar" aria-label="名片正反面">
+                    <button type="button" data-miniapp-map-face="front"><span>正面</span><small>智能员工名片</small></button>
+                    <i><svg><use href="#i-open"/></svg><span>点击切换，可翻面</span></i>
+                    <button class="active" type="button" data-miniapp-map-face="back"><span>反面</span><small>公司助手</small></button>
+                  </div>
+                  <div class="miniapp-face-preview miniapp-map-front" data-miniapp-map-panel="front" hidden>
+                    <header class="map-person-hero" id="mapPersonHero"><span class="map-miniapp-chrome">‹ <i>•••　◉</i></span><div class="map-person-identity"><span id="mapPersonAvatar" class="map-person-avatar">向</span><span><strong id="mapPersonName">向小顶</strong><i>在线</i><small><b id="mapPersonTitle">总裁</b> · <b id="mapPersonCompany">顶脉教育集团</b></small></span></div></header>
+                    <main class="map-person-chat"><div class="map-person-message">您好，很高兴认识您。您可以直接输入问题与我沟通。</div><span class="map-person-suggestions"><i>了解集团服务</i><i>怎么合作</i></span></main>
+                    <footer class="map-person-composer"><span>发消息...</span><b>＋</b></footer>
+                    <div class="map-front-flip-entry"><span id="mapFrontAssistantName">D仔</span><img id="mapFrontAssistantAvatar" alt=""/><i>翻面</i></div>
+                  </div>
+                  <div class="miniapp-face-preview miniapp-map-back" data-miniapp-map-panel="back">
+                    <div class="map-assistant-stage" data-template-slot="assistantSceneVideoUrl">
+                      <video id="mapAssistantVideo" muted loop playsinline autoplay></video>
+                      <img id="mapAssistantPoster" data-template-slot="assistantScenePosterUrl" alt=""/>
+                      <div class="map-assistant-brand" data-template-slot="assistantBrandText" data-color-slot="assistantBrandColor" data-live-text="assistantBrandText" data-live-color="assistantBrandColor">DClaw</div>
+                      <div class="map-assistant-identity"><img data-template-slot="assistantAvatarUrl" data-live-image="assistantAvatarUrl" alt=""/><span><strong data-template-slot="assistantName" data-color-slot="assistantNameColor" data-live-text="assistantName" data-live-color="assistantNameColor">D仔</strong><small>企业智能助手</small></span></div>
+                      <div class="map-assistant-speech" data-template-slot="assistantGreeting" data-color-slot="assistantGreetingColor" data-live-text="assistantGreeting" data-live-color="assistantGreetingColor">你好，我是D仔，很高兴为你服务</div>
+                      <div id="mapAssistantTopics" class="map-card-topics" data-template-slot="assistantTopics" data-color-slot="assistantTopicsColor" aria-label="环绕快捷话题"></div>
+                      <img class="map-assistant-fallback" data-template-slot="assistantMascotImageUrl" data-live-image="assistantMascotImageUrl" alt=""/>
+                    </div>
+                    <section class="map-assistant-content">
+                      <div class="map-assistant-prompt" data-template-slot="assistantPrompt" data-color-slot="assistantPromptColor" data-live-text="assistantPrompt" data-live-color="assistantPromptColor">你可以这样对我说：</div>
+                      <div class="map-card-actions"><section class="primary-group" data-template-slot="assistantPrimaryItems" data-color-slot="assistantPrimaryItemsColor"><strong data-template-slot="assistantPrimaryTitle" data-color-slot="assistantPrimaryTitleColor" data-live-text="assistantPrimaryTitle" data-live-color="assistantPrimaryTitleColor">D仔小助手</strong><div id="mapAssistantPrimaryItems"></div></section><section class="recommended-group" data-template-slot="assistantRecommendedItems" data-color-slot="assistantRecommendedItemsColor"><strong data-template-slot="assistantRecommendedTitle" data-color-slot="assistantRecommendedTitleColor" data-live-text="assistantRecommendedTitle" data-live-color="assistantRecommendedTitleColor">专题推荐</strong><div id="mapAssistantRecommendedItems"></div></section></div>
+                      <div class="map-card-lead" data-template-slot="leadFormEnabled">填写联系方式，获取专属服务</div>
+                    </section>
+                    <div class="map-card-composer" data-template-slot="assistantVoiceLabel"><span data-template-slot="voiceEnabled"><svg><use href="#i-mic"/></svg><b data-color-slot="assistantVoiceLabelColor" data-live-text="assistantVoiceLabel" data-live-color="assistantVoiceLabelColor">按住 说话</b><svg><use href="#i-keyboard"/></svg></span><small data-template-slot="assistantVoiceHint" data-color-slot="assistantVoiceHintColor" data-live-text="assistantVoiceHint" data-live-color="assistantVoiceHintColor">回答由 AI 生成，内容仅供参考</small></div>
+                    <div class="map-back-flip-entry"><span id="mapBackPersonName">向小顶</span><img id="mapBackPersonAvatar" alt=""/><i><svg><use href="#i-rotate"/></svg></i></div>
+                  </div>
+                </div>
+              </aside>
             </div>
           </section>
 
           <section class="admin-panel" data-panel="agent">
-            <div class="inheritance-map"><span>平台默认</span><b>→</b><span>工作区覆盖</span><b>→</b><span>人物覆盖</span></div>
-            <div class="agent-binding-grid">
-              <form id="platformBindingForm" class="binding-card"></form>
-              <form id="workspaceBindingForm" class="binding-card"></form>
-              <div class="binding-card person-binding-card"><div class="binding-card-head"><div><small>人物级</small><h3>智能员工覆盖</h3></div></div><label><span>选择人物</span><select id="bindingPerson"></select></label><form id="personBindingForm"></form></div>
+            <div class="section-title"><h2>Agent 配置</h2><button id="newAgentConfig" class="secondary"><svg><use href="#i-plus"/></svg>新增 Agent</button></div>
+            <form id="agentDefaultsForm" class="admin-form agent-defaults-form">
+              <label><span><svg><use href="#i-bot"/></svg>默认 Agent</span><select name="defaultAgentConfigId" required></select></label>
+              <button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存默认配置</button>
+            </form>
+            <div class="agent-library-layout">
+              <div id="agentConfigList" class="agent-card-grid"></div>
+              <form id="agentConfigForm" class="admin-form">
+                <label><span><svg><use href="#i-hash"/></svg>配置 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                <label><span><svg><use href="#i-edit"/></svg>配置名称</span><input name="name" required /></label>
+                <label><span><svg><use href="#i-globe"/></svg>Base URL / 接口</span><input name="agentApiUrl" type="url" placeholder="https://dclaw.example.com" /></label>
+                <label><span><svg><use href="#i-bot"/></svg>Agent ID（Public ID）</span><input name="agentId" placeholder="support_agent" /></label>
+                <label><span><svg><use href="#i-key"/></svg>API Key</span><input name="agentApiKey" type="password" autocomplete="new-password" /></label>
+                <div class="form-footer wide agent-form-actions"><button id="deleteAgentConfig" class="secondary danger" type="button"><svg><use href="#i-trash"/></svg>删除</button><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存 Agent</button></div>
+              </form>
             </div>
           </section>
+
         </div>
       </section>
     </main>
     <div id="toast" class="admin-toast" hidden></div>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=20261029-2"></script>
   </body>
 </html>

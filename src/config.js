@@ -11,7 +11,16 @@ export function loadConfig(env = process.env) {
     databasePath: path.resolve(projectRoot, env.DATABASE_PATH || "data/dclaw-agent.sqlite"),
     publicBaseUrl: env.PUBLIC_BASE_URL || "http://127.0.0.1:4310",
     agentTimeoutMs: positiveInteger(env.AGENT_TIMEOUT_MS, 90_000),
-    deliveryMaxAttempts: positiveInteger(env.DELIVERY_MAX_ATTEMPTS, 3)
+    deliveryMaxAttempts: positiveInteger(env.DELIVERY_MAX_ATTEMPTS, 3),
+    speechApiUrl: env.SPEECH_API_URL || "",
+    speechApiKey: env.SPEECH_API_KEY || "",
+    speechModel: env.SPEECH_MODEL || "",
+    speechLanguage: env.SPEECH_LANGUAGE || "zh",
+    speechTimeoutMs: positiveInteger(env.SPEECH_TIMEOUT_MS, 60_000),
+    wechatMiniappAppId: env.WECHAT_MINIAPP_APP_ID || "",
+    wechatMiniappAppSecret: env.WECHAT_MINIAPP_APP_SECRET || "",
+    wechatSessionTtlDays: positiveInteger(env.WECHAT_SESSION_TTL_DAYS, 30),
+    credentialEncryptionKey: env.CREDENTIAL_ENCRYPTION_KEY || ""
   });
 }
 

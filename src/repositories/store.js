@@ -66,7 +66,8 @@ export class Store {
     return this.db.prepare(`
       SELECT w.*,
         (SELECT COUNT(*) FROM people p WHERE p.workspace_id = w.id) AS person_count,
-        (SELECT COUNT(*) FROM workspace_channels c WHERE c.workspace_id = w.id) AS channel_count
+        (SELECT COUNT(*) FROM workspace_channels c WHERE c.workspace_id = w.id) AS channel_count,
+        (SELECT status FROM workspace_miniapps m WHERE m.workspace_id = w.id) AS miniapp_status
       FROM workspaces w ORDER BY w.created_at, w.id
     `).all().map(workspaceView);
   }
@@ -101,6 +102,68 @@ export class Store {
     return this.getWorkspace(id);
   }
 
+  getWorkspaceMiniapp(workspaceId, { includeSecrets = false } = {}) {
+    const row = this.db.prepare("SELECT * FROM workspace_miniapps WHERE workspace_id = ?").get(workspaceId);
+    return row ? workspaceMiniappView(row, includeSecrets) : null;
+  }
+
+  saveWorkspaceMiniapp(workspaceId, input) {
+    if (!this.getWorkspace(workspaceId)) return null;
+    const appId = requiredText(input.appId, "小程序 AppID", 80);
+    if (!/^wx[A-Za-z0-9_-]{8,40}$/.test(appId)) throw new TypeError("小程序 AppID 格式不正确");
+    const mode = ["shared", "dedicated"].includes(input.mode) ? input.mode : "dedicated";
+    const status = ["configured", "verified", "error"].includes(input.status) ? input.status : "configured";
+    const encryptedAppSecret = requiredText(input.encryptedAppSecret, "Encrypted AppSecret", 4000);
+    this.db.prepare(`INSERT INTO workspace_miniapps (workspace_id, mode, name, app_id, encrypted_app_secret, original_id, status, verified_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(workspace_id) DO UPDATE SET mode = excluded.mode, name = excluded.name, app_id = excluded.app_id,
+        encrypted_app_secret = excluded.encrypted_app_secret, original_id = excluded.original_id, status = excluded.status,
+        verified_at = excluded.verified_at, updated_at = ?`)
+      .run(workspaceId, mode, cleanText(input.name, "", 120), appId, encryptedAppSecret, cleanText(input.originalId, "", 120), status, input.verifiedAt || null, isoNow());
+    return this.getWorkspaceMiniapp(workspaceId);
+  }
+
+  markWorkspaceMiniappVerified(workspaceId) {
+    const timestamp = isoNow();
+    const result = this.db.prepare("UPDATE workspace_miniapps SET status = 'verified', verified_at = ?, updated_at = ? WHERE workspace_id = ?").run(timestamp, timestamp, workspaceId);
+    return result.changes ? this.getWorkspaceMiniapp(workspaceId) : null;
+  }
+
+  resolveMiniappWorkspace({ publicSlug = "", deploymentId = "" } = {}) {
+    const field = deploymentId ? "d.id" : "d.public_slug";
+    const value = deploymentId || publicSlug;
+    if (!value) return null;
+    const row = this.db.prepare(`SELECT c.workspace_id, d.id AS deployment_id, d.public_slug
+      FROM channel_deployments d JOIN workspace_channels c ON c.id = d.workspace_channel_id
+      WHERE ${field} = ? AND c.provider = 'miniapp' AND c.enabled = 1 AND d.enabled = 1`).get(value);
+    return row ? { workspaceId: row.workspace_id, deploymentId: row.deployment_id, publicSlug: row.public_slug } : null;
+  }
+
+  getWechatVisitor(workspaceId, appId, openid) {
+    const row = this.db.prepare("SELECT * FROM workspace_wechat_visitors WHERE workspace_id = ? AND app_id = ? AND openid = ?")
+      .get(String(workspaceId || ""), String(appId || ""), String(openid || ""));
+    return row ? wechatVisitorView(row) : null;
+  }
+
+  ensureWechatVisitor(workspaceId, appId, openid, unionid = "") {
+    const normalizedWorkspaceId = requiredText(workspaceId, "Workspace ID", 80);
+    const normalizedAppId = requiredText(appId, "WeChat AppID", 80);
+    const normalizedOpenid = requiredText(openid, "WeChat openid", 160);
+    this.db.prepare(`INSERT INTO workspace_wechat_visitors (workspace_id, app_id, openid, unionid) VALUES (?, ?, ?, ?)
+      ON CONFLICT(workspace_id, app_id, openid) DO UPDATE SET unionid = CASE WHEN excluded.unionid <> '' THEN excluded.unionid ELSE workspace_wechat_visitors.unionid END, updated_at = ?`)
+      .run(normalizedWorkspaceId, normalizedAppId, normalizedOpenid, cleanText(unionid, "", 160), isoNow());
+    return this.getWechatVisitor(normalizedWorkspaceId, normalizedAppId, normalizedOpenid);
+  }
+
+  saveWechatVisitorProfile(workspaceId, appId, openid, input) {
+    const existing = this.ensureWechatVisitor(workspaceId, appId, openid);
+    const nickname = requiredText(input?.nickName, "微信昵称", 32);
+    const avatarUrl = cleanText(input?.avatarUrl, existing.avatarUrl, 2000);
+    this.db.prepare("UPDATE workspace_wechat_visitors SET nickname = ?, avatar_url = ?, updated_at = ? WHERE workspace_id = ? AND app_id = ? AND openid = ?")
+      .run(nickname, avatarUrl, isoNow(), String(workspaceId), String(appId), String(openid));
+    return this.getWechatVisitor(workspaceId, appId, openid);
+  }
+
   listPeople(workspaceId) {
     return this.db.prepare(`
       SELECT p.*,
@@ -117,16 +180,18 @@ export class Store {
   createPerson(workspaceId, input) {
     if (!this.getWorkspace(workspaceId)) throw new TypeError("Workspace not found");
     const id = identifier(input.id);
-    this.db.prepare(`INSERT INTO people (id, workspace_id, name, title, avatar_url, enabled, persona_json) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, workspaceId, requiredText(input.name, "Person name", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, JSON.stringify(objectValue(input.persona)));
+    const agentConfigId = this.agentConfigReference(input.agentConfigId);
+    this.db.prepare(`INSERT INTO people (id, workspace_id, name, title, avatar_url, enabled, persona_json, profile_json, agent_config_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, workspaceId, requiredText(input.name, "Person name", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, JSON.stringify(objectValue(input.persona)), JSON.stringify(objectValue(input.profile)), agentConfigId);
     return this.getPerson(id);
   }
 
   updatePerson(id, input) {
     const existing = this.getPerson(id);
     if (!existing) return null;
-    this.db.prepare(`UPDATE people SET name = ?, title = ?, avatar_url = ?, enabled = ?, persona_json = ?, updated_at = ? WHERE id = ?`)
-      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.title, existing.title, 160), cleanText(input.avatarUrl, existing.avatarUrl, 2000), input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), JSON.stringify(input.persona === undefined ? existing.persona : objectValue(input.persona)), isoNow(), id);
+    const agentConfigId = input.agentConfigId === undefined ? existing.agentConfigId : this.agentConfigReference(input.agentConfigId);
+    this.db.prepare(`UPDATE people SET name = ?, title = ?, avatar_url = ?, enabled = ?, persona_json = ?, profile_json = ?, agent_config_id = ?, updated_at = ? WHERE id = ?`)
+      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.title, existing.title, 160), cleanText(input.avatarUrl, existing.avatarUrl, 2000), input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), JSON.stringify(input.persona === undefined ? existing.persona : objectValue(input.persona)), JSON.stringify(input.profile === undefined ? existing.profile : objectValue(input.profile)), agentConfigId, isoNow(), id);
     return this.getPerson(id);
   }
 
@@ -147,8 +212,23 @@ export class Store {
     const id = identifier(input.id);
     const provider = cleanText(input.provider, "", 32);
     if (!["website", "miniapp"].includes(provider)) throw new TypeError("Unsupported channel provider");
-    this.db.prepare(`INSERT INTO workspace_channels (id, workspace_id, provider, name, enabled, webhook_secret, draft_config_json) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, workspaceId, provider, requiredText(input.name, "Channel name", 120), input.enabled === false ? 0 : 1, cleanText(input.webhookSecret, "", 500), JSON.stringify(objectValue(input.config)));
+    const name = requiredText(input.name, "Channel name", 120);
+    const assistantAccountId = `${id}-company-assistant`;
+    const secret = cleanText(input.webhookSecret, "", 500);
+    const assistantAgentConfigId = this.agentConfigReference(input.assistantAgentConfigId);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(`INSERT INTO channel_accounts (id, provider, name, enabled, accent, webhook_secret, config_json, workspace_id, workspace_channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(assistantAccountId, provider, `${name} · 公司助手`, input.enabled === false ? 0 : 1, this.getWorkspace(workspaceId).accent, secret, JSON.stringify({ delivery: "poll", surface: "company-assistant" }), workspaceId, id);
+      this.db.prepare(`INSERT INTO workspace_channels (id, workspace_id, provider, name, enabled, webhook_secret, assistant_account_id, assistant_agent_config_id, draft_config_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, workspaceId, provider, name, input.enabled === false ? 0 : 1, secret, assistantAccountId, assistantAgentConfigId, JSON.stringify(objectValue(input.config)));
+      this.db.prepare("INSERT INTO state_machine_configs (account_id, config_json, enabled) VALUES (?, ?, 0)").run(assistantAccountId, JSON.stringify(defaultFlowConfig(`${name}公司助手`)));
+      this.db.prepare("INSERT INTO tag_schemas (account_id, config_json) VALUES (?, ?)").run(assistantAccountId, JSON.stringify(normalizeStoredTagSchema({ dateTag: { enabled: true, cutoffTime: "00:00" }, groups: [] })));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
     return this.getWorkspaceChannel(id);
   }
 
@@ -156,8 +236,13 @@ export class Store {
     const existing = this.getWorkspaceChannel(id, { includeSecrets: true });
     if (!existing) return null;
     const secret = input.webhookSecret === undefined || input.webhookSecret === "••••••••" ? existing.webhookSecret : cleanText(input.webhookSecret, "", 500);
-    this.db.prepare(`UPDATE workspace_channels SET name = ?, enabled = ?, webhook_secret = ?, draft_config_json = ?, updated_at = ? WHERE id = ?`)
-      .run(cleanText(input.name, existing.name, 120) || existing.name, input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), secret, JSON.stringify(input.config === undefined ? existing.config : objectValue(input.config)), isoNow(), id);
+    const assistantAgentConfigId = input.assistantAgentConfigId === undefined ? existing.assistantAgentConfigId : this.agentConfigReference(input.assistantAgentConfigId);
+    const nextConfig = input.config === undefined ? existing.config : objectValue(input.config);
+    if (existing.provider === "website" && nextConfig.heroButtonUrl && !isHttpUrl(nextConfig.heroButtonUrl)) {
+      throw new TypeError("首页按钮跳转地址必须是完整的 HTTP 或 HTTPS 地址");
+    }
+    this.db.prepare(`UPDATE workspace_channels SET name = ?, enabled = ?, webhook_secret = ?, assistant_agent_config_id = ?, draft_config_json = ?, updated_at = ? WHERE id = ?`)
+      .run(cleanText(input.name, existing.name, 120) || existing.name, input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), secret, assistantAgentConfigId, JSON.stringify(nextConfig), isoNow(), id);
     this.db.prepare("UPDATE channel_accounts SET name = ?, enabled = ?, webhook_secret = ?, updated_at = ? WHERE workspace_channel_id = ?")
       .run(cleanText(input.name, existing.name, 120) || existing.name, input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), secret, isoNow(), id);
     return this.getWorkspaceChannel(id);
@@ -221,8 +306,72 @@ export class Store {
     if (!channel) return null;
     const timestamp = isoNow();
     this.db.prepare(`UPDATE workspace_channels SET published_config_json = draft_config_json, published_version = published_version + 1, published_at = ?, updated_at = ? WHERE id = ?`).run(timestamp, timestamp, id);
-    this.db.prepare(`UPDATE channel_deployments SET published_config_json = draft_config_json, published_version = published_version + 1, published_at = ?, updated_at = ? WHERE workspace_channel_id = ?`).run(timestamp, timestamp, id);
+    this.db.prepare(`UPDATE channel_deployments
+      SET published_config_json = COALESCE((SELECT profile_json FROM people WHERE people.id = channel_deployments.person_id), '{}'),
+          published_version = published_version + 1, published_at = ?, updated_at = ?
+      WHERE workspace_channel_id = ?`).run(timestamp, timestamp, id);
     return this.getWorkspaceChannel(id);
+  }
+
+  listAgentConfigs({ includeSecrets = false } = {}) {
+    return this.db.prepare("SELECT * FROM agent_configs ORDER BY created_at, id").all().map((row) => agentConfigView(row, includeSecrets));
+  }
+
+  getAgentConfig(id, { includeSecrets = false } = {}) {
+    const row = this.db.prepare("SELECT * FROM agent_configs WHERE id = ?").get(id);
+    return row ? agentConfigView(row, includeSecrets) : null;
+  }
+
+  createAgentConfig(input) {
+    const id = identifier(input.id);
+    const name = requiredText(input.name, "Agent config name", 120);
+    this.db.prepare(`INSERT INTO agent_configs (id, name, agent_api_url, agent_api_key, agent_id, concurrency_limit, billing_label) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, name, cleanText(input.agentApiUrl, "", 2000), cleanText(input.agentApiKey, "", 2000), cleanText(input.agentId, "", 200), 0, "");
+    return this.getAgentConfig(id);
+  }
+
+  updateAgentConfig(id, input) {
+    const existing = this.getAgentConfig(id, { includeSecrets: true });
+    if (!existing) return null;
+    const key = input.agentApiKey === undefined || input.agentApiKey === "••••••••" ? existing.agentApiKey : cleanText(input.agentApiKey, "", 2000);
+    this.db.prepare(`UPDATE agent_configs SET name = ?, agent_api_url = ?, agent_api_key = ?, agent_id = ?, concurrency_limit = ?, billing_label = ?, updated_at = ? WHERE id = ?`)
+      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.agentApiUrl, existing.agentApiUrl, 2000), key, cleanText(input.agentId, existing.agentId, 200), 0, "", isoNow(), id);
+    return this.getAgentConfig(id);
+  }
+
+  deleteAgentConfig(id) {
+    const existing = this.getAgentConfig(id);
+    if (!existing) return false;
+    if (existing.isDefault) throw new TypeError("Default Agent config cannot be deleted");
+    const used = this.db.prepare("SELECT 1 FROM people WHERE agent_config_id = ? UNION ALL SELECT 1 FROM workspace_channels WHERE assistant_agent_config_id = ? LIMIT 1").get(id, id);
+    if (used) throw new TypeError("Agent config is currently bound");
+    this.db.prepare("DELETE FROM agent_configs WHERE id = ?").run(id);
+    return true;
+  }
+
+  saveAgentDefaults({ defaultAgentConfigId, personAgentConfigId, assistantAgentConfigId }) {
+    const defaultId = this.agentConfigReference(defaultAgentConfigId || personAgentConfigId || assistantAgentConfigId);
+    if (!defaultId) throw new TypeError("Default Agent config is required");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("UPDATE agent_configs SET default_for_person = CASE WHEN id = ? THEN 1 ELSE 0 END, default_for_assistant = CASE WHEN id = ? THEN 1 ELSE 0 END, updated_at = ?").run(defaultId, defaultId, isoNow());
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return this.agentDefaults();
+  }
+
+  agentDefaults() {
+    const defaultAgentConfigId = this.db.prepare("SELECT id FROM agent_configs WHERE default_for_person = 1 ORDER BY created_at, id LIMIT 1").get()?.id || "";
+    return { defaultAgentConfigId };
+  }
+
+  agentConfigReference(value) {
+    const id = cleanText(value, "", 80);
+    if (id && !this.getAgentConfig(id)) throw new TypeError("Agent config not found");
+    return id || null;
   }
 
   getAgentBinding(scopeType, scopeId, { includeSecrets = false } = {}) {
@@ -231,10 +380,11 @@ export class Store {
   }
 
   saveAgentBinding(scopeType, scopeId, input) {
-    if (!["platform", "workspace", "person"].includes(scopeType)) throw new TypeError("Invalid Agent binding scope");
+    if (!["platform", "workspace", "person", "assistant"].includes(scopeType)) throw new TypeError("Invalid Agent binding scope");
     if (scopeType === "platform" && scopeId !== "default") throw new TypeError("Invalid platform scope");
     if (scopeType === "workspace" && !this.getWorkspace(scopeId)) throw new TypeError("Workspace not found");
     if (scopeType === "person" && !this.getPerson(scopeId)) throw new TypeError("Person not found");
+    if (scopeType === "assistant" && !this.getWorkspaceChannel(scopeId)) throw new TypeError("Channel not found");
     const existing = this.getAgentBinding(scopeType, scopeId, { includeSecrets: true });
     const key = input.agentApiKey === undefined || input.agentApiKey === "••••••••" ? existing?.agentApiKey || "" : cleanText(input.agentApiKey, "", 2000);
     const value = {
@@ -264,15 +414,78 @@ export class Store {
     const workspace = this.getWorkspace(deployment.workspaceId);
     const person = this.getPerson(deployment.personId);
     const channel = this.getWorkspaceChannel(deployment.workspaceChannelId);
+    const allDeployments = this.listDeployments(deployment.workspaceId);
+    const deployments = allDeployments
+      .filter((item) => item.workspaceChannelId === channel.id)
+      .map((item) => ({ item, person: this.getPerson(item.personId) }))
+      .filter(({ item, person: deployedPerson }) => !published || (item.enabled && deployedPerson?.enabled))
+      .map(({ item, person: deployedPerson }) => ({
+        ...item,
+        config: { ...(published ? item.publishedConfig : deployedPerson?.profile || {}) },
+        channelOverrides: published ? item.publishedConfig : item.config,
+        person: deployedPerson ? {
+          id: deployedPerson.id,
+          name: deployedPerson.name,
+          title: deployedPerson.title,
+          avatarUrl: deployedPerson.avatarUrl
+        } : null
+      }));
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       mode: published ? "published" : "draft",
       channelType: channel.provider,
       workspace,
       person,
       channel: { ...channel, config: published ? channel.publishedConfig : channel.config },
-      deployment: { ...deployment, config: published ? deployment.publishedConfig : deployment.config },
-      endpoints: channelEndpoints(deployment.accountId, channel.provider)
+      deployment: {
+        ...deployment,
+        config: { ...(published ? deployment.publishedConfig : person.profile || {}) },
+        channelOverrides: published ? deployment.publishedConfig : deployment.config
+      },
+      deployments,
+      endpoints: channelEndpoints(deployment.accountId, channel.provider, deployment.publicSlug, {
+        deploymentId: deployment.id,
+        assistantAccountId: channel.assistantAccountId,
+        preview: !published
+      })
+    };
+  }
+
+  workspaceChannelPreview(id) {
+    const channel = this.getWorkspaceChannel(id);
+    if (!channel) return null;
+    const selectedDeployment = this.listDeployments(channel.workspaceId)
+      .find((item) => item.workspaceChannelId === channel.id && item.enabled)
+      || this.listDeployments(channel.workspaceId).find((item) => item.workspaceChannelId === channel.id);
+    if (selectedDeployment) return this.channelPreview(selectedDeployment.id);
+    const workspace = this.getWorkspace(channel.workspaceId);
+    const person = { id: "channel-preview-person", workspaceId: workspace.id, name: "张三", title: "智能员工", avatarUrl: "", enabled: true, persona: {}, profile: { companyName: workspace.name } };
+    const deployment = {
+      id: `channel-preview-${channel.id}`,
+      workspaceId: workspace.id,
+      workspaceChannelId: channel.id,
+      personId: person.id,
+      personName: person.name,
+      personTitle: person.title,
+      avatarUrl: "",
+      accountId: channel.assistantAccountId,
+      publicSlug: "",
+      enabled: true,
+      sortOrder: 0,
+      config: person.profile,
+      person
+    };
+    return {
+      schemaVersion: 3,
+      mode: "draft",
+      previewOnly: true,
+      channelType: channel.provider,
+      workspace,
+      person,
+      channel,
+      deployment,
+      deployments: [deployment],
+      endpoints: {}
     };
   }
 
@@ -283,8 +496,10 @@ export class Store {
     if (!payload?.workspace.enabled || !payload.person.enabled || !payload.channel.enabled || payload.channel.publishedVersion < 1) return null;
     delete payload.workspace.companyContext;
     delete payload.person.persona;
+    delete payload.person.profile;
     delete payload.person.configurationAccountId;
     delete payload.channel.webhookSecret;
+    delete payload.channel.assistantAccountId;
     return payload;
   }
 
@@ -294,31 +509,184 @@ export class Store {
   }
 
   dashboard(accountId) {
+    const account = this.db.prepare("SELECT id, person_id FROM channel_accounts WHERE id = ?").get(accountId);
+    const accountRows = account?.person_id
+      ? this.db.prepare("SELECT id, provider, name, enabled FROM channel_accounts WHERE person_id = ? ORDER BY provider, id").all(account.person_id)
+      : this.db.prepare("SELECT id, provider, name, enabled FROM channel_accounts WHERE id = ?").all(accountId);
+    const accountIds = accountRows.map((item) => item.id);
+    if (!accountIds.length) return emptyDashboard();
+
+    const slots = accountIds.map(() => "?").join(", ");
+    const todayStart = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', 'localtime', 'start of day', 'utc')";
+    const weekStart = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-6 days', 'localtime', 'start of day', 'utc')";
+    const hasCollectedData = `EXISTS (
+      SELECT 1 FROM json_each(CASE WHEN json_valid(fs.collected_data_json) THEN fs.collected_data_json ELSE '{}' END) field
+      WHERE trim(CAST(field.value AS TEXT)) <> ''
+    )`;
+
     const totals = this.db.prepare(`
       SELECT
         COUNT(*) AS conversations,
+        SUM(CASE WHEN created_at >= ${todayStart} THEN 1 ELSE 0 END) AS visitors_today,
         SUM(CASE WHEN mode = 'human' THEN 1 ELSE 0 END) AS human_count,
         SUM(CASE WHEN unread_count > 0 THEN 1 ELSE 0 END) AS unread_count
-      FROM conversations WHERE account_id = ?
-    `).get(accountId);
-    const messagesToday = this.db.prepare(`
-      SELECT COUNT(*) AS count FROM messages m
-      JOIN conversations c ON c.id = m.conversation_id
-      WHERE c.account_id = ? AND m.created_at >= date('now')
-    `).get(accountId)?.count || 0;
-    const openAlerts = this.db.prepare(`
-      SELECT COUNT(*) AS count FROM attention_alerts a
-      JOIN conversations c ON c.id = a.conversation_id
-      WHERE c.account_id = ? AND a.status = 'open'
-    `).get(accountId)?.count || 0;
-    const states = this.db.prepare("SELECT state, COUNT(*) AS count FROM conversations WHERE account_id = ? GROUP BY state ORDER BY count DESC").all(accountId);
+      FROM conversations WHERE account_id IN (${slots})
+    `).get(...accountIds);
+    const messages = this.db.prepare(`
+      SELECT
+        SUM(CASE WHEN m.created_at >= ${todayStart} AND m.direction = 'inbound' THEN 1 ELSE 0 END) AS inbound_today,
+        SUM(CASE WHEN m.created_at >= ${todayStart} AND m.direction = 'outbound' AND m.sender_type = 'agent' THEN 1 ELSE 0 END) AS agent_today,
+        SUM(CASE WHEN m.created_at >= ${todayStart} AND m.direction = 'outbound' AND m.sender_type = 'human' THEN 1 ELSE 0 END) AS human_today
+      FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.account_id IN (${slots})
+    `).get(...accountIds);
+    const alerts = this.db.prepare(`
+      SELECT COUNT(*) AS count FROM attention_alerts alert
+      JOIN conversations c ON c.id = alert.conversation_id
+      WHERE c.account_id IN (${slots}) AND alert.status = 'open'
+    `).get(...accountIds);
+    const leads = this.db.prepare(`
+      SELECT COUNT(*) AS count FROM flow_sessions fs
+      WHERE fs.account_id IN (${slots}) AND ${hasCollectedData}
+    `).get(...accountIds);
+    const leadsToday = this.db.prepare(`
+      SELECT COUNT(DISTINCT event.conversation_id) AS count FROM flow_state_events event
+      WHERE event.account_id IN (${slots}) AND event.created_at >= ${todayStart}
+        AND EXISTS (
+          SELECT 1 FROM json_each(CASE WHEN json_valid(event.collected_data_patch_json) THEN event.collected_data_patch_json ELSE '{}' END) field
+          WHERE trim(CAST(field.value AS TEXT)) <> ''
+        )
+    `).get(...accountIds);
+    const agent = this.db.prepare(`
+      SELECT
+        COUNT(*) AS requests,
+        SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN status = 'fallback' THEN 1 ELSE 0 END) AS fallback,
+        AVG(CASE WHEN status = 'succeeded' THEN duration_ms END) AS avg_duration_ms
+      FROM agent_usage_logs
+      WHERE account_id IN (${slots}) AND created_at >= ${weekStart}
+    `).get(...accountIds);
+    const handoffsToday = this.db.prepare(`
+      SELECT COUNT(*) AS count FROM handoff_events handoff
+      JOIN conversations c ON c.id = handoff.conversation_id
+      WHERE c.account_id IN (${slots}) AND handoff.to_mode = 'human' AND handoff.created_at >= ${todayStart}
+    `).get(...accountIds)?.count || 0;
+    const states = this.db.prepare(`SELECT state, COUNT(*) AS count FROM conversations WHERE account_id IN (${slots}) GROUP BY state ORDER BY count DESC`).all(...accountIds);
+
+    const channelRows = this.db.prepare(`
+      SELECT account.id, account.provider, account.name, account.enabled,
+        (SELECT COUNT(*) FROM conversations c WHERE c.account_id = account.id) AS conversations,
+        (SELECT COUNT(*) FROM conversations c WHERE c.account_id = account.id AND c.created_at >= ${todayStart}) AS visitors_today,
+        (SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.account_id = account.id AND m.direction = 'inbound' AND m.created_at >= ${todayStart}) AS messages_today,
+        (SELECT COUNT(*) FROM flow_sessions fs WHERE fs.account_id = account.id AND ${hasCollectedData}) AS leads,
+        (SELECT COUNT(*) FROM attention_alerts alert JOIN conversations c ON c.id = alert.conversation_id WHERE c.account_id = account.id AND alert.status = 'open') AS open_alerts,
+        (SELECT COUNT(*) FROM conversations c WHERE c.account_id = account.id AND c.mode = 'human') AS human_count
+      FROM channel_accounts account WHERE account.id IN (${slots}) ORDER BY account.provider, account.id
+    `).all(...accountIds);
+    const channelAgentRows = this.db.prepare(`
+      SELECT account_id,
+        COUNT(*) AS requests,
+        SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
+        AVG(CASE WHEN status = 'succeeded' THEN duration_ms END) AS avg_duration_ms
+      FROM agent_usage_logs WHERE account_id IN (${slots}) AND created_at >= ${weekStart} GROUP BY account_id
+    `).all(...accountIds);
+    const channelAgentById = new Map(channelAgentRows.map((item) => [item.account_id, item]));
+
+    const trendRows = this.db.prepare(`
+      WITH RECURSIVE days(day) AS (
+        SELECT date('now', 'localtime', '-6 days')
+        UNION ALL SELECT date(day, '+1 day') FROM days WHERE day < date('now', 'localtime')
+      )
+      SELECT days.day,
+        (SELECT COUNT(*) FROM conversations c WHERE c.account_id IN (${slots}) AND date(c.created_at, 'localtime') = days.day) AS visitors,
+        (SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.account_id IN (${slots}) AND m.direction = 'inbound' AND date(m.created_at, 'localtime') = days.day) AS messages,
+        (SELECT COUNT(DISTINCT event.conversation_id) FROM flow_state_events event WHERE event.account_id IN (${slots}) AND date(event.created_at, 'localtime') = days.day AND EXISTS (
+          SELECT 1 FROM json_each(CASE WHEN json_valid(event.collected_data_patch_json) THEN event.collected_data_patch_json ELSE '{}' END) field
+          WHERE trim(CAST(field.value AS TEXT)) <> ''
+        )) AS leads
+      FROM days ORDER BY days.day
+    `).all(...accountIds, ...accountIds, ...accountIds);
+    const recentAlerts = this.db.prepare(`
+      SELECT alert.*, c.display_name, c.account_id, account.provider
+      FROM attention_alerts alert
+      JOIN conversations c ON c.id = alert.conversation_id
+      JOIN channel_accounts account ON account.id = c.account_id
+      WHERE c.account_id IN (${slots}) AND alert.status = 'open'
+      ORDER BY alert.created_at DESC LIMIT 6
+    `).all(...accountIds);
+
+    const agentRequests = Number(agent?.requests || 0);
+    const agentSucceeded = Number(agent?.succeeded || 0);
+    const agentFailed = Number(agent?.failed || 0);
+    const rateBase = agentSucceeded + agentFailed;
+    const channels = channelRows.map((item) => {
+      const usage = channelAgentById.get(item.id);
+      const succeeded = Number(usage?.succeeded || 0);
+      const requests = Number(usage?.requests || 0);
+      return {
+        accountId: item.id,
+        provider: item.provider,
+        name: item.name,
+        enabled: Boolean(item.enabled),
+        conversations: Number(item.conversations || 0),
+        visitorsToday: Number(item.visitors_today || 0),
+        messagesToday: Number(item.messages_today || 0),
+        leads: Number(item.leads || 0),
+        openAlerts: Number(item.open_alerts || 0),
+        humanCount: Number(item.human_count || 0),
+        agentRequests: requests,
+        agentSuccessRate: requests ? Math.round(succeeded / requests * 1000) / 10 : null,
+        avgDurationMs: Math.round(Number(usage?.avg_duration_ms || 0))
+      };
+    });
+
     return {
       conversations: Number(totals?.conversations || 0),
       humanCount: Number(totals?.human_count || 0),
       unreadCount: Number(totals?.unread_count || 0),
-      messagesToday: Number(messagesToday),
-      openAlerts: Number(openAlerts),
-      states
+      messagesToday: Number(messages?.inbound_today || 0) + Number(messages?.agent_today || 0) + Number(messages?.human_today || 0),
+      openAlerts: Number(alerts?.count || 0),
+      scope: { type: account?.person_id ? "employee" : "account", personId: account?.person_id || null, accountIds },
+      today: {
+        visitors: Number(totals?.visitors_today || 0),
+        inboundMessages: Number(messages?.inbound_today || 0),
+        agentReplies: Number(messages?.agent_today || 0),
+        humanReplies: Number(messages?.human_today || 0),
+        leads: Number(leadsToday?.count || 0),
+        handoffs: Number(handoffsToday)
+      },
+      totals: {
+        conversations: Number(totals?.conversations || 0),
+        leads: Number(leads?.count || 0),
+        activeHuman: Number(totals?.human_count || 0),
+        unreadConversations: Number(totals?.unread_count || 0),
+        openAlerts: Number(alerts?.count || 0)
+      },
+      agent: {
+        periodDays: 7,
+        requests: agentRequests,
+        succeeded: agentSucceeded,
+        failed: agentFailed,
+        fallback: Number(agent?.fallback || 0),
+        successRate: rateBase ? Math.round(agentSucceeded / rateBase * 1000) / 10 : null,
+        avgDurationMs: Math.round(Number(agent?.avg_duration_ms || 0))
+      },
+      states: states.map((item) => ({ state: item.state, count: Number(item.count || 0) })),
+      channels,
+      trend: trendRows.map((item) => ({ day: item.day, visitors: Number(item.visitors || 0), messages: Number(item.messages || 0), leads: Number(item.leads || 0) })),
+      alerts: recentAlerts.map((item) => ({
+        id: Number(item.id),
+        conversationId: Number(item.conversation_id),
+        accountId: item.account_id,
+        provider: item.provider,
+        messageId: item.message_id ? Number(item.message_id) : null,
+        title: item.title,
+        detail: item.detail,
+        status: item.status,
+        displayName: item.display_name,
+        createdAt: item.created_at
+      }))
     };
   }
 
@@ -480,6 +848,26 @@ export class Store {
 
   markRead(id) {
     this.db.prepare("UPDATE conversations SET unread_count = 0, updated_at = ? WHERE id = ?").run(isoNow(), id);
+  }
+
+  resetConversation(id) {
+    const conversation = this.getConversation(id);
+    if (!conversation) return false;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM channel_outbox WHERE account_id = ? AND external_conversation_id = ?").run(conversation.accountId, conversation.externalConversationId);
+      this.db.prepare("DELETE FROM conversations WHERE id = ?").run(id);
+      this.audit(conversation.accountId, null, "conversation", "conversation.reset", {
+        previousConversationId: id,
+        externalConversationId: conversation.externalConversationId,
+        displayName: conversation.displayName
+      });
+      this.db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   getStateMachine(accountId) {
@@ -690,10 +1078,29 @@ export class Store {
   }
 }
 
+function emptyDashboard() {
+  return {
+    conversations: 0,
+    humanCount: 0,
+    unreadCount: 0,
+    messagesToday: 0,
+    openAlerts: 0,
+    scope: { type: "account", personId: null, accountIds: [] },
+    today: { visitors: 0, inboundMessages: 0, agentReplies: 0, humanReplies: 0, leads: 0, handoffs: 0 },
+    totals: { conversations: 0, leads: 0, activeHuman: 0, unreadConversations: 0, openAlerts: 0 },
+    agent: { periodDays: 7, requests: 0, succeeded: 0, failed: 0, fallback: 0, successRate: null, avgDurationMs: 0 },
+    states: [],
+    channels: [],
+    trend: [],
+    alerts: []
+  };
+}
+
 function accountView(row, includeSecrets = false, db = null) {
   const binding = db ? resolveBinding(db, row, includeSecrets) : null;
   const workspace = db && row.workspace_id ? db.prepare("SELECT * FROM workspaces WHERE id = ?").get(row.workspace_id) : null;
   const person = db && row.person_id ? db.prepare("SELECT * FROM people WHERE id = ?").get(row.person_id) : null;
+  const workspaceChannel = db && row.workspace_channel_id ? db.prepare("SELECT * FROM workspace_channels WHERE id = ?").get(row.workspace_channel_id) : null;
   const result = {
     id: row.id,
     provider: row.provider,
@@ -711,7 +1118,8 @@ function accountView(row, includeSecrets = false, db = null) {
     workspaceId: row.workspace_id || null,
     workspace: workspace ? { id: workspace.id, slug: workspace.slug, name: workspace.name, accent: workspace.accent, logoUrl: workspace.logo_url, companyContext: json(workspace.company_context_json) } : null,
     personId: row.person_id || null,
-    person: person ? { id: person.id, name: person.name, title: person.title, avatarUrl: person.avatar_url, persona: json(person.persona_json) } : null,
+    person: person ? { id: person.id, name: person.name, title: person.title, avatarUrl: person.avatar_url, persona: json(person.persona_json), profile: json(person.profile_json) } : null,
+    assistantProfile: !person && workspaceChannel ? json(workspaceChannel.draft_config_json) : null,
     workspaceChannelId: row.workspace_channel_id || null,
     deploymentId: row.deployment_id || null,
     createdAt: row.created_at,
@@ -731,6 +1139,34 @@ function workspaceView(row) {
     companyContext: json(row.company_context_json),
     personCount: Number(row.person_count || 0),
     channelCount: Number(row.channel_count || 0),
+    miniappStatus: row.miniapp_status || "unconfigured",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function workspaceMiniappView(row, includeSecrets = false) {
+  return {
+    workspaceId: row.workspace_id,
+    mode: row.mode,
+    name: row.name,
+    appId: row.app_id,
+    appSecretConfigured: Boolean(row.encrypted_app_secret),
+    appSecret: includeSecrets && row.encrypted_app_secret ? "••••••••" : "",
+    encryptedAppSecret: includeSecrets ? row.encrypted_app_secret : undefined,
+    originalId: row.original_id || "",
+    status: row.status,
+    verifiedAt: row.verified_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function wechatVisitorView(row) {
+  return {
+    nickName: row.nickname || "",
+    avatarUrl: row.avatar_url || "",
+    profileComplete: Boolean(row.nickname),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -745,6 +1181,8 @@ function personView(row) {
     avatarUrl: row.avatar_url,
     enabled: Boolean(row.enabled),
     persona: json(row.persona_json),
+    profile: json(row.profile_json),
+    agentConfigId: row.agent_config_id || "",
     configurationAccountId: row.config_account_id || null,
     deploymentCount: Number(row.deployment_count || 0),
     createdAt: row.created_at,
@@ -761,6 +1199,8 @@ function channelView(row, includeSecrets = false) {
     enabled: Boolean(row.enabled),
     webhookSecretConfigured: Boolean(row.webhook_secret),
     webhookSecret: includeSecrets ? row.webhook_secret : row.webhook_secret ? "••••••••" : "",
+    assistantAccountId: row.assistant_account_id || null,
+    assistantAgentConfigId: row.assistant_agent_config_id || "",
     config: json(row.draft_config_json),
     publishedConfig: json(row.published_config_json),
     publishedVersion: Number(row.published_version || 0),
@@ -813,9 +1253,28 @@ function bindingView(row, includeSecrets = false) {
   };
 }
 
+function agentConfigView(row, includeSecrets = false) {
+  return {
+    id: row.id,
+    name: row.name,
+    agentApiUrl: row.agent_api_url,
+    agentApiKeyConfigured: Boolean(row.agent_api_key),
+    agentApiKey: includeSecrets ? row.agent_api_key : row.agent_api_key ? "••••••••" : "",
+    agentId: row.agent_id,
+    concurrencyLimit: Number(row.concurrency_limit || 0),
+    billingLabel: row.billing_label,
+    isDefault: Boolean(row.default_for_person),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 function resolveBinding(db, accountRow, includeSecrets) {
+  const catalog = resolveCatalogBinding(db, accountRow, includeSecrets);
+  if (catalog?.agentApiUrl && catalog?.agentApiKeyConfigured) return catalog;
   const candidates = [
     accountRow.person_id ? ["person", accountRow.person_id] : null,
+    !accountRow.person_id && accountRow.workspace_channel_id ? ["assistant", accountRow.workspace_channel_id] : null,
     accountRow.workspace_id ? ["workspace", accountRow.workspace_id] : null,
     ["platform", "default"]
   ].filter(Boolean);
@@ -842,8 +1301,42 @@ function resolveBinding(db, accountRow, includeSecrets) {
   return null;
 }
 
-function channelEndpoints(accountId, provider) {
+function resolveCatalogBinding(db, accountRow, includeSecrets) {
+  let row = null;
+  let inheritedFrom = "";
+  if (accountRow.person_id) {
+    row = db.prepare(`SELECT config.* FROM people person JOIN agent_configs config ON config.id = person.agent_config_id WHERE person.id = ?`).get(accountRow.person_id);
+    inheritedFrom = row ? "person" : "platform-default";
+    if (!row) row = db.prepare("SELECT * FROM agent_configs WHERE default_for_person = 1 LIMIT 1").get();
+  } else if (accountRow.workspace_channel_id) {
+    row = db.prepare(`SELECT config.* FROM workspace_channels channel JOIN agent_configs config ON config.id = channel.assistant_agent_config_id WHERE channel.id = ?`).get(accountRow.workspace_channel_id);
+    inheritedFrom = row ? "assistant" : "platform-default";
+    if (!row) row = db.prepare("SELECT * FROM agent_configs WHERE default_for_person = 1 LIMIT 1").get();
+  }
+  return row ? { ...agentConfigView(row, includeSecrets), scopeType: "agent-config", scopeId: row.id, enabled: true, inheritedFrom } : null;
+}
+
+function channelEndpoints(accountId, provider, publicSlug, { deploymentId = "", assistantAccountId = "", preview = false } = {}) {
+  if (preview) {
+    return {
+      publicPage: `/channels/${publicSlug}`,
+      publicMessages: `/api/admin/deployments/${deploymentId}/preview/messages`,
+      publicMedia: `/api/admin/deployments/${deploymentId}/preview/media`,
+      publicOutbox: `/api/admin/deployments/${deploymentId}/preview/conversations/{conversationId}/outbox?after=0`,
+      assistantMessages: assistantAccountId ? `/api/admin/deployments/${deploymentId}/preview/assistant/messages` : "",
+      assistantOutbox: assistantAccountId ? `/api/admin/deployments/${deploymentId}/preview/assistant/conversations/{conversationId}/outbox?after=0` : "",
+      inbound: `/api/channels/${provider}/${accountId}/events`,
+      outbox: `/api/channels/${provider}/${accountId}/conversations/{conversationId}/outbox?after=0`,
+      receipts: `/api/channels/${provider}/${accountId}/receipts`
+    };
+  }
   return {
+    publicPage: `/channels/${publicSlug}`,
+    publicMessages: `/api/public/channels/${publicSlug}/messages`,
+    publicMedia: `/api/public/channels/${publicSlug}/media`,
+    publicOutbox: `/api/public/channels/${publicSlug}/conversations/{conversationId}/outbox?after=0`,
+    assistantMessages: assistantAccountId ? `/api/public/channels/${publicSlug}/assistant/messages` : "",
+    assistantOutbox: assistantAccountId ? `/api/public/channels/${publicSlug}/assistant/conversations/{conversationId}/outbox?after=0` : "",
     inbound: `/api/channels/${provider}/${accountId}/events`,
     outbox: `/api/channels/${provider}/${accountId}/conversations/{conversationId}/outbox?after=0`,
     receipts: `/api/channels/${provider}/${accountId}/receipts`
@@ -931,6 +1424,14 @@ function identifier(value) {
 
 function color(value) {
   return /^#[0-9a-f]{6}$/i.test(value || "") ? value : "#2a30d8";
+}
+
+function isHttpUrl(value) {
+  try {
+    return ["http:", "https:"].includes(new URL(String(value)).protocol);
+  } catch {
+    return false;
+  }
 }
 
 function objectValue(value) {

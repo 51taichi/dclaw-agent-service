@@ -25,18 +25,26 @@ export class AgentGateway {
     }
 
     const idempotencyKey = `agent:${account.id}:${inboundMessage.id}`;
+    const endpoint = resolveAgentEndpoint(account.agentApiUrl, account.agentId);
     const baseMessage = buildAgentMessage({ account, conversation, inboundMessage, history, flowContext, tagContext });
     const request = {
       external_user_id: `${account.provider}:${account.id}:${conversation.externalUserId}`,
       external_session_id: `${account.provider}:${account.id}:${conversation.externalConversationId}`,
       message: baseMessage,
-      stream: true
+      stream: true,
+      metadata: {
+        source: "dclaw-agent-service",
+        channel: account.provider,
+        account_id: account.id,
+        deployment_id: account.deploymentId || null,
+        agent_id: account.agentId || null
+      }
     };
     let validationError = null;
     let previousRaw = "";
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       request.message = attempt === 1 ? baseMessage : buildRepairMessage(baseMessage, previousRaw, validationError);
-      const response = await this.fetch(account.agentApiUrl, {
+      const response = await this.fetch(endpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${account.agentApiKey}`,
@@ -67,7 +75,7 @@ export class AgentGateway {
 
   async polishActivation({ account, conversation, content }) {
     if (!account.agentApiUrl || !account.agentApiKey) return content;
-    const response = await this.fetch(account.agentApiUrl, {
+    const response = await this.fetch(resolveAgentEndpoint(account.agentApiUrl, account.agentId), {
       method: "POST",
       headers: { Authorization: `Bearer ${account.agentApiKey}`, "Content-Type": "application/json", Accept: "text/event-stream, application/json" },
       body: JSON.stringify({
@@ -83,6 +91,33 @@ export class AgentGateway {
     const polished = String(raw || "").trim();
     return polished || content;
   }
+}
+
+export function resolveAgentEndpoint(apiUrl, agentId = "") {
+  let endpoint;
+  try {
+    endpoint = new URL(String(apiUrl || "").trim());
+  } catch {
+    throw new TypeError("Agent OpenAPI URL must be a valid HTTP or HTTPS URL");
+  }
+  if (!["http:", "https:"].includes(endpoint.protocol)) {
+    throw new TypeError("Agent OpenAPI URL must use HTTP or HTTPS");
+  }
+
+  const path = endpoint.pathname.replace(/\/+$/, "") || "/";
+  const isDclawMessageEndpoint = /\/api\/open\/v1\/targets\/[^/]+\/messages$/i.test(path);
+  const isDclawBase = path === "/" || /\/api\/open\/v1$/i.test(path);
+  if (!isDclawMessageEndpoint && isDclawBase) {
+    const publicId = String(agentId || "").trim();
+    if (!publicId) throw new TypeError("Agent Public ID is required when using a DClaw Base URL");
+    const prefix = path === "/" ? "/api/open/v1" : path;
+    endpoint.pathname = `${prefix}/targets/${encodeURIComponent(publicId)}/messages`;
+    endpoint.search = "";
+    endpoint.hash = "";
+  } else {
+    endpoint.pathname = path;
+  }
+  return endpoint.toString();
 }
 
 function buildRepairMessage(baseMessage, previousRaw, error) {
@@ -118,7 +153,14 @@ function buildAgentMessage({ account, conversation, inboundMessage, history, flo
         id: account.person.id,
         name: account.person.name,
         title: account.person.title,
-        persona: account.person.persona || {}
+        persona: account.person.persona || {},
+        profile: account.person.profile || {}
+      } : null,
+      companyAssistant: account.assistantProfile ? {
+        name: account.assistantProfile.assistantName || "公司助手",
+        brand: account.assistantProfile.assistantBrandText || "",
+        greeting: account.assistantProfile.assistantGreeting || "",
+        configuredTopics: account.assistantProfile.assistantTopics || []
       } : null,
       deploymentId: account.deploymentId || null,
       agentBindingScope: account.agentBinding?.inheritedFrom || account.agentBinding?.scopeType || "unconfigured"
@@ -155,10 +197,10 @@ function buildAgentMessage({ account, conversation, inboundMessage, history, flo
   if (tagContext) payload.tagRules = tagContext;
   return [
     `你收到的是 ${account.provider} 渠道经 DClaw Agent Service 转发的标准 JSON 业务包。请只输出 JSON 对象，不要使用 Markdown 代码块。`,
-    "tenantContext 由服务端生成。必须遵循其中的公司边界和人物人设，只能以当前人物身份回答；不得把其他工作区、人物或渠道的数据混入回复。",
+    "tenantContext 由服务端生成。必须遵循其中的公司边界与身份配置：person 存在时以当前人物身份回答；companyAssistant 存在时以公司公共助手身份回答。不得把其他工作区、人物或渠道的数据混入回复。",
     "必须严格遵守 responseContract。输入含 flow 时必须输出 flowDecision，currentNodeId 必须是 flow.currentNode.id；未完成时 nextNodeId 保持当前节点，完成时只能进入 allowedNextNodeId。collectedDataPatch 只能填写当前节点配置的字段。",
     "输入含 tagRules 时必须逐一输出 tagEvaluation；客户证据必须引用 tagEvidenceCandidates 中的 id，evidenceText 必须逐字一致。",
-    "attachments 使用 type、url、name、title 字段。attentionAlert 仅在确实需要人工关注时设置 required=true，否则必须设置 required=false。",
+    "attachments 使用 type、url、name、title 字段；富链接卡片使用 type=card，并可增加 subtitle、pictureUrl。需要客户选择时使用 type=single-choice 或 multi-choice，并提供 id、title、options（每项含 label、value、description）和 submitLabel；选择结果只在客户点击提交后返回。attentionAlert 仅在确实需要人工关注时设置 required=true，否则必须设置 required=false。",
     JSON.stringify(payload)
   ].join("\n");
 }
@@ -170,33 +212,45 @@ async function readSse(response) {
   let deltaText = "";
   let completedText = "";
   let finalText = "";
+  const consumeLine = (line) => {
+    if (!line.startsWith("data:")) return;
+    const data = line.slice(5).trim();
+    if (!data || data === "[DONE]") return;
+    try {
+      const parsed = JSON.parse(data);
+      const streamError = parsed?.error || (["failed", "cancelled"].includes(parsed?.status) ? parsed : null);
+      if (streamError) {
+        const message = typeof streamError === "string"
+          ? streamError
+          : streamError.message || streamError.detail || streamError.code || JSON.stringify(streamError);
+        throw new Error(`Agent stream failed: ${message}`);
+      }
+      if (parsed?.object === "content" && typeof parsed.text === "string") {
+        if (parsed.delta === true) deltaText += parsed.text;
+        else if (parsed.status === "completed") completedText = parsed.text;
+        return;
+      }
+      if (parsed?.object === "response" && parsed.status === "completed") {
+        const outputText = extractOutputText(parsed.output);
+        if (outputText) finalText = outputText;
+        return;
+      }
+      deltaText += extractText(parsed);
+    } catch (error) {
+      if (error?.message?.startsWith("Agent stream failed:")) throw error;
+      deltaText += data;
+    }
+  };
   while (true) {
     const { done, value } = await reader.read();
     buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || "";
-    for (const line of lines) {
-      if (!line.startsWith("data:")) continue;
-      const data = line.slice(5).trim();
-      if (!data || data === "[DONE]") continue;
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed?.object === "content" && typeof parsed.text === "string") {
-          if (parsed.delta === true) deltaText += parsed.text;
-          else if (parsed.status === "completed") completedText = parsed.text;
-          continue;
-        }
-        if (parsed?.object === "response" && parsed.status === "completed") {
-          const outputText = extractOutputText(parsed.output);
-          if (outputText) finalText = outputText;
-          continue;
-        }
-        deltaText += extractText(parsed);
-      } catch {
-        deltaText += data;
-      }
+    for (const line of lines) consumeLine(line);
+    if (done) {
+      if (buffer) consumeLine(buffer);
+      break;
     }
-    if (done) break;
   }
   return String(finalText || completedText || deltaText).trim();
 }
@@ -260,17 +314,41 @@ function normalizeAttachments(value) {
   return items
     .filter((item) => item && typeof item === "object")
     .map((item) => {
+      const type = String(item.type || item.fileType || item.kind || "link").trim().toLowerCase();
+      if (type === "single-choice" || type === "multi-choice") {
+        const options = (Array.isArray(item.options) ? item.options : []).slice(0, 12).map((option) => {
+          const source = typeof option === "string" ? { label: option, value: option } : option || {};
+          const label = String(source.label || source.title || source.value || "").trim().slice(0, 120);
+          return {
+            label,
+            value: String(source.value || label).trim().slice(0, 120),
+            description: String(source.description || source.subtitle || "").trim().slice(0, 240)
+          };
+        }).filter((option) => option.label);
+        return {
+          type,
+          id: String(item.id || item.name || "choice").trim().slice(0, 120),
+          title: String(item.title || item.name || "请选择").trim().slice(0, 160),
+          subtitle: String(item.subtitle || item.description || "").trim().slice(0, 240),
+          options,
+          submitLabel: String(item.submitLabel || "提交回答").trim().slice(0, 40)
+        };
+      }
       const attachment = {
-        type: String(item.type || item.fileType || item.kind || "link").trim().toLowerCase(),
+        type,
         url: String(item.url || item.fileUrl || item.href || "").trim()
       };
       const name = String(item.name || item.objectName || item.filename || item.fileName || "").trim();
       const title = String(item.title || item.label || "").trim();
+      const subtitle = String(item.subtitle || item.description || "").trim();
+      const pictureUrl = String(item.pictureUrl || item.picture_url || item.imageUrl || "").trim();
       if (name) attachment.name = name;
       if (title) attachment.title = title;
+      if (subtitle) attachment.subtitle = subtitle;
+      if (/^https?:\/\//i.test(pictureUrl)) attachment.pictureUrl = pictureUrl;
       return attachment;
     })
-    .filter((item) => /^https?:\/\//i.test(item.url));
+    .filter((item) => item.type === "single-choice" || item.type === "multi-choice" ? item.options.length : /^https?:\/\//i.test(item.url));
 }
 
 function normalizeSources(value) {

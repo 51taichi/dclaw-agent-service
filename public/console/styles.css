@@ -67,8 +67,9 @@ body {
 }
 
 .brand-logo {
-  width: clamp(220px, 25vw, 340px);
-  height: auto;
+  width: auto;
+  height: 44px;
+  max-width: min(40vw, 190px);
   max-height: 44px;
   object-fit: contain;
   object-position: left center;
@@ -512,6 +513,8 @@ html.has-bot-context .current-bot-actions #lockBotButton:hover {
   min-height: 160px;
   overflow: auto;
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 10px;
   padding-right: 2px;
   padding-top: 2px;
@@ -519,8 +522,8 @@ html.has-bot-context .current-bot-actions #lockBotButton:hover {
 
 .bot-card {
   display: grid;
-  gap: 4px;
-  padding: 7px 8px 8px;
+  gap: 14px;
+  padding: 9px 8px 10px;
   border: 1px solid var(--line);
   border-left-width: 3px;
   border-radius: 8px;
@@ -586,8 +589,9 @@ html.has-bot-context .current-bot-actions #lockBotButton:hover {
 }
 
 .bot-main {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -602,6 +606,7 @@ html.has-bot-context .current-bot-actions #lockBotButton:hover {
   position: relative;
   min-width: 0;
   min-height: 42px;
+  padding-right: 58px;
   display: grid;
   align-items: center;
 }
@@ -7126,9 +7131,9 @@ td .muted {
   }
 
   .brand-logo {
-    width: 100%;
-    max-width: 280px;
-    max-height: 42px;
+    width: auto;
+    height: 42px;
+    max-width: min(58vw, 180px);
     transform: none;
   }
 

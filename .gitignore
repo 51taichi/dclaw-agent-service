@@ -1,7 +1,6 @@
 node_modules/
 .env
-data/*.sqlite
-data/*.sqlite-*
+data/
 coverage/
 .DS_Store
 *.log

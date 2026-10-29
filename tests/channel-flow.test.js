@@ -85,6 +85,32 @@ test("human handoff prevents agent invocation and automatic delivery", async (t)
   assert.equal(sent.data.senderType, "human");
 });
 
+test("console manual attachments are delivered and conversation reset clears its channel state", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound() });
+  const conversations = await jsonRequest(app.baseUrl, "/api/accounts/website-default/conversations");
+  const id = conversations.data.items[0].id;
+  const sent = await jsonRequest(app.baseUrl, `/api/conversations/${id}/messages`, {
+    method: "POST",
+    body: {
+      content: "",
+      attachments: [{ type: "image", url: `${app.baseUrl}/media/manual.png`, name: "manual.png", mimeType: "image/png" }]
+    }
+  });
+  assert.equal(sent.response.status, 201);
+  assert.equal(sent.data.messageType, "rich");
+  assert.deepEqual(sent.data.metadata.attachments.map((item) => item.name), ["manual.png"]);
+
+  const reset = await jsonRequest(app.baseUrl, `/api/conversations/${id}/reset`, { method: "POST" });
+  assert.equal(reset.response.status, 204);
+  const after = await jsonRequest(app.baseUrl, "/api/accounts/website-default/conversations");
+  assert.equal(after.data.items.length, 0);
+  const outbox = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/conversations/session-1/outbox?after=0");
+  assert.equal(outbox.data.items.length, 0);
+});
+
 test("Agent Gateway receives channel-neutral identity and applies validated decisions", async (t) => {
   let captured;
   const agentFetch = async (_url, options) => {
@@ -92,16 +118,16 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
     const context = JSON.parse(captured.body.message.split("\n").at(-1));
     const evidence = { evidenceMessageId: String(context.currentMessage.id), evidenceText: context.currentMessage.text };
     return new Response(JSON.stringify({
-      reply: "可以，我来为您安排产品顾问。",
+      reply: "可以，我来为您安排产品人员。",
       flowDecision: { nodeCompleted: true, nextNodeId: "invite_next_step", collectedDataPatch: { "客户需求": "了解产品", "联系方式": "待确认" }, reason: "需求明确" },
       tagEvaluation: [
         { groupId: "intent_level", tagId: "potential", matched: true, reason: "客户主动咨询", ...evidence },
-        { groupId: "intent_level", tagId: "high_intent", matched: true, reason: "客户要求安排顾问", ...evidence },
+        { groupId: "intent_level", tagId: "high_intent", matched: true, reason: "客户要求安排人员", ...evidence },
         { groupId: "service_attention", tagId: "needs_follow_up", matched: false, reason: "无需延期跟进" },
         { groupId: "service_attention", tagId: "needs_human", matched: false, reason: "未明确要求人工" }
       ],
-      tagDecision: { add: [{ groupId: "intent_level", tagId: "high_intent", reason: "客户要求安排顾问", ...evidence }], remove: [] },
-      attentionAlert: { title: "安排产品顾问", detail: "客户希望进一步了解产品" },
+      tagDecision: { add: [{ groupId: "intent_level", tagId: "high_intent", reason: "客户要求安排人员", ...evidence }], remove: [] },
+      attentionAlert: { title: "安排产品人员", detail: "客户希望进一步了解产品" },
       handoff: true
     }), { status: 200, headers: { "content-type": "application/json" } });
   };
@@ -114,7 +140,7 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
   });
   const machine = await jsonRequest(app.baseUrl, "/api/flow-machines/website-default");
   await jsonRequest(app.baseUrl, "/api/flow-machines/website-default", { method: "PUT", body: { enabled: true, config: machine.data.machine.config } });
-  const received = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound({ text: "请安排产品顾问联系我" }) });
+  const received = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound({ text: "请安排产品人员联系我" }) });
   assert.equal(received.data.items[0].handledBy, "agent");
   assert.equal(captured.body.external_user_id, "website:website-default:visitor-1");
   assert.equal(captured.body.external_session_id, "website:website-default:session-1");
@@ -125,7 +151,7 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
   assert.equal(conversations.data.items[0].mode, "human");
   assert.deepEqual(conversations.data.items[0].tags.map((tag) => tag.name), ["20261015", "高意向"]);
   const alerts = await jsonRequest(app.baseUrl, "/api/accounts/website-default/alerts");
-  assert.deepEqual(new Set(alerts.data.items.map((item) => item.title)), new Set(["标签提醒：高意向", "安排产品顾问"]));
+  assert.deepEqual(new Set(alerts.data.items.map((item) => item.title)), new Set(["标签提醒：高意向", "安排产品人员"]));
 });
 
 test("Agent attachments reach the channel outbox and required=false does not create an alert", async (t) => {
@@ -135,7 +161,10 @@ test("Agent attachments reach the channel outbox and required=false does not cre
     const current = payload.flow.currentNode.id;
     return new Response(JSON.stringify({
       reply: "请扫码添加课程老师",
-      attachments: [{ type: "image", url: "https://example.test/teacher.png", name: "课程老师二维码.png" }],
+      attachments: [
+        { type: "image", url: "https://example.test/teacher.png", name: "课程老师二维码.png" },
+        { type: "single-choice", id: "contact-time", title: "选择联系时间", options: [{ label: "今天下午", value: "today-pm", description: "14:00-18:00" }, { label: "明天上午", value: "tomorrow-am" }], submitLabel: "提交回答" }
+      ],
       sources: [{ type: "flow_node", name: current, reason: "节点配置" }],
       flowDecision: { currentNodeId: current, nodeCompleted: false, nextNodeId: current, collectedDataPatch: {}, confidence: 0.9, reason: "等待客户后续" },
       tagEvaluation: [],
@@ -158,7 +187,20 @@ test("Agent attachments reach the channel outbox and required=false does not cre
   assert.equal(received.data.items[0].handledBy, "agent");
   const outbox = await jsonRequest(app.baseUrl, "/api/channels/miniapp/miniapp-default/conversations/session-1/outbox?after=0");
   assert.equal(outbox.data.items[0].messageType, "rich");
-  assert.deepEqual(outbox.data.items[0].attachments, [{ type: "image", url: "https://example.test/teacher.png", name: "课程老师二维码.png" }]);
+  assert.deepEqual(outbox.data.items[0].attachments, [
+    { type: "image", url: "https://example.test/teacher.png", name: "课程老师二维码.png" },
+    {
+      type: "single-choice",
+      id: "contact-time",
+      title: "选择联系时间",
+      subtitle: "",
+      options: [
+        { label: "今天下午", value: "today-pm", description: "14:00-18:00" },
+        { label: "明天上午", value: "tomorrow-am", description: "" }
+      ],
+      submitLabel: "提交回答"
+    }
+  ]);
   const alerts = await jsonRequest(app.baseUrl, "/api/accounts/miniapp-default/alerts");
   assert.equal(alerts.data.items.length, 0);
 });

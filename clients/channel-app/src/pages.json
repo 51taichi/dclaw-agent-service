@@ -1,0 +1,18 @@
+{
+  "pages": [
+    {
+      "path": "pages/card/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "智能名片",
+        "disableScroll": true
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "DClaw Agent",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F3F5F8"
+  }
+}
