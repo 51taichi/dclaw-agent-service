@@ -105,6 +105,31 @@ test("workspace miniapp credentials are encrypted and never returned to the admi
   assert.equal(credentialChanged.data.verifiedAt, null);
 });
 
+test("public miniapp home resolves its workspace by AppID and lists only published cards", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  await request(app.baseUrl, "/api/admin/workspaces/dingmai/miniapp", { method: "PUT", body: {
+    mode: "dedicated",
+    name: "顶脉智能名片",
+    appId: "wx48fa13a3cc0dcf72",
+    appSecret: "server-only-secret"
+  } });
+  const unavailable = await request(app.baseUrl, "/api/public/miniapps/wx48fa13a3cc0dcf72");
+  assert.equal(unavailable.response.status, 404);
+
+  await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp/publish", { method: "POST" });
+  const home = await request(app.baseUrl, "/api/public/miniapps/wx48fa13a3cc0dcf72");
+  assert.equal(home.response.status, 200);
+  assert.equal(home.data.workspace.id, "dingmai");
+  assert.equal(home.data.workspace.name, "顶脉教育集团");
+  assert.equal(home.data.cards.length, 1);
+  assert.equal(home.data.cards[0].person.name, "向小顶");
+  assert.equal(home.data.cards[0].publicSlug, "wuhe-assistant");
+  assert.equal("companyContext" in home.data.workspace, false);
+  assert.equal("persona" in home.data.cards[0].person, false);
+});
+
 test("employee cockpit aggregates business results across website and miniapp channels", async (t) => {
   const app = await fixture();
   t.after(() => app.close());

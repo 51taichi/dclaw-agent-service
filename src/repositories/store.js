@@ -513,6 +513,47 @@ export class Store {
     return payload;
   }
 
+  publicMiniappHome(appId) {
+    const miniapp = this.db.prepare("SELECT workspace_id, name, app_id FROM workspace_miniapps WHERE app_id = ?").get(String(appId || "").trim());
+    if (!miniapp) return null;
+    const workspace = this.getWorkspace(miniapp.workspace_id);
+    if (!workspace?.enabled) return null;
+    const channel = this.listWorkspaceChannels(workspace.id).find((item) => item.provider === "miniapp" && item.enabled && item.publishedVersion > 0);
+    if (!channel) return null;
+    const cards = this.listDeployments(workspace.id)
+      .filter((item) => item.workspaceChannelId === channel.id && item.enabled && item.publishedVersion > 0)
+      .map((item) => this.publicChannel(item.publicSlug))
+      .filter(Boolean)
+      .map((payload) => ({
+        id: payload.deployment.id,
+        publicSlug: payload.deployment.publicSlug,
+        publishedAt: payload.deployment.publishedAt,
+        person: {
+          id: payload.person.id,
+          name: payload.person.name,
+          title: payload.person.title,
+          avatarUrl: payload.person.avatarUrl
+        },
+        profile: {
+          companyName: payload.deployment.config.companyName || workspace.name,
+          coverUrl: payload.deployment.config.coverUrl || "",
+          biography: payload.deployment.config.biography || ""
+        }
+      }));
+    return {
+      schemaVersion: 1,
+      workspace: {
+        id: workspace.id,
+        slug: workspace.slug,
+        name: workspace.name,
+        accent: workspace.accent,
+        logoUrl: workspace.logoUrl
+      },
+      miniapp: { name: miniapp.name || workspace.name },
+      cards
+    };
+  }
+
   recordAgentUsage({ bindingId = null, accountId, workspaceId = null, personId = null, conversationId = null, status, durationMs = 0, requestId = "", error = "" }) {
     this.db.prepare(`INSERT INTO agent_usage_logs (binding_id, account_id, workspace_id, person_id, conversation_id, status, duration_ms, request_id, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(bindingId, accountId, workspaceId, personId, conversationId, cleanText(status, "unknown", 40), Math.max(0, safeInteger(durationMs)), cleanText(requestId, "", 200), cleanText(error, "", 2000));

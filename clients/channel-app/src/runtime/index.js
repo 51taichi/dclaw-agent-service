@@ -17,6 +17,17 @@ export function resolveAssetUrl(value) {
   return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
+export function currentMiniappAppId() {
+  const configured = String(import.meta.env.VITE_MINIAPP_APP_ID || "").trim();
+  if (PLATFORM !== "mp-weixin") return configured;
+  try {
+    const accountInfo = typeof wx === "undefined" ? null : wx.getAccountInfoSync?.();
+    return String(accountInfo?.miniProgram?.appId || configured).trim();
+  } catch {
+    return configured;
+  }
+}
+
 export function prepareImageAsset(value) {
   const resolved = resolveAssetUrl(value);
   if (PLATFORM !== "mp-weixin" || !/^https?:/i.test(resolved)) return Promise.resolve(resolved);

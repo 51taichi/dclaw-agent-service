@@ -1,6 +1,13 @@
 {
   "pages": [
     {
+      "path": "pages/home/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "团队名片"
+      }
+    },
+    {
       "path": "pages/card/index",
       "style": {
         "navigationStyle": "custom",

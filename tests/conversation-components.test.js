@@ -53,6 +53,18 @@ test("wechat business cards use login plus official nickname and avatar controls
   assert.match(clientSource, />暂不授权<\/button>/);
 });
 
+test("miniapp opens on a workspace roster and navigates to independently shareable cards", () => {
+  const pages = readFileSync(new URL("../clients/channel-app/src/pages.json", import.meta.url), "utf8");
+  const homeSource = readFileSync(new URL("../clients/channel-app/src/pages/home/index.vue", import.meta.url), "utf8");
+  const cardSource = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
+  assert.ok(pages.indexOf('"pages/home/index"') < pages.indexOf('"pages/card/index"'));
+  assert.match(homeSource, /currentMiniappAppId\(\)/);
+  assert.match(homeSource, /\/api\/public\/miniapps\/\$\{encodeURIComponent\(appId\.value\)\}/);
+  assert.match(homeSource, /uni\.navigateTo\(\{ url: `\/pages\/card\/index\?slug=/);
+  assert.match(cardSource, /uni\.reLaunch\(\{ url: "\/pages\/home\/index" \}\)/);
+  assert.doesNotMatch(cardSource, /query\.slug \|\| "wuhe-assistant"/);
+});
+
 test("agent responses render as plain answer cards and message defaults to customer", () => {
   const answer = renderConversationComponent("assistant-response", { content: "这是 Agent 的直接回复。" });
   const message = renderConversationComponent("message", { content: "这是客户消息。" });

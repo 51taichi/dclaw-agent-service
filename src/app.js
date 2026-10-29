@@ -64,6 +64,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     if (avatarUrl && !/^https?:\/\//i.test(avatarUrl) && !avatarUrl.startsWith("/media/")) throw new TypeError("微信头像地址无效");
     res.json({ profile: workspaceMiniapps.saveProfile(req.header("authorization"), req.body || {}) });
   });
+  app.get("/api/public/miniapps/:appId", (req, res) => respondFound(res, store.publicMiniappHome(req.params.appId)));
 
   app.get("/api/admin/channel-types", (_req, res) => res.json({ items: listChannelTypes() }));
   app.get("/api/admin/workspaces", (_req, res) => res.json({ items: store.listWorkspaces() }));

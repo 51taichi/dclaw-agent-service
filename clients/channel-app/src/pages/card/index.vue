@@ -7,7 +7,7 @@
       <view class="face front-face" :class="{ hidden: face !== 'front' }">
         <view class="hero" :class="{ compact: !heroExpanded }" :style="heroStyle">
           <view class="miniapp-chrome">
-            <button class="back-button">‹</button>
+            <button class="back-button" aria-label="返回名片首页" @tap="goBack">‹</button>
             <!-- #ifdef H5 -->
             <text class="preview-menu">•••　◉</text>
             <!-- #endif -->
@@ -142,7 +142,7 @@ const DEFAULTS = {
   poster: "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg"
 };
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
-const options = reactive({ slug: "wuhe-assistant", deployment: "" });
+const options = reactive({ slug: "", deployment: "" });
 const data = ref(null);
 const loading = ref(true);
 const error = ref("");
@@ -225,8 +225,12 @@ const assistant = computed(() => {
 });
 
 onLoad((query = {}) => {
-  options.slug = query.slug || "wuhe-assistant";
+  options.slug = query.slug || "";
   options.deployment = query.deployment || "";
+  if (!options.slug && !options.deployment) {
+    uni.reLaunch({ url: "/pages/home/index" });
+    return;
+  }
   // #ifdef MP-WEIXIN
   wechatLoginVisible.value = !wechatNickname.value && uni.getStorageSync(WECHAT_LOGIN_SKIPPED_KEY) !== true;
   // #endif
@@ -240,6 +244,11 @@ onShareAppMessage(() => ({ title: `${profile.value.name} · ${companyName.value}
 function asset(value) { return preparedAssets[value] || resolveAssetUrl(value); }
 function message(type, payload = {}) { return { id: createId(), type, ...payload }; }
 function conversationDisplayName(company) { return wechatNickname.value || (company ? "公司名片访客" : "名片访客"); }
+function goBack() {
+  const pages = typeof getCurrentPages === "function" ? getCurrentPages() : [];
+  if (pages.length > 1) uni.navigateBack();
+  else uni.reLaunch({ url: "/pages/home/index" });
+}
 
 function persistWechatProfile(nickName, avatarUrl = "") {
   const normalizedName = String(nickName || "").trim().slice(0, 32);
