@@ -86,7 +86,7 @@
                 </view>
                 <text class="scene-brand">{{ assistant.brand }}</text>
                 <view class="speech"><text>{{ assistant.greeting }}</text></view>
-                <view class="topic-cloud"><button v-for="topic in assistant.topics" :key="topic" class="topic-button" @tap="sendCompanyText(topic)">{{ topic }} ›</button></view>
+                <view class="topic-cloud"><button v-for="topic in assistant.topics" :key="topic" class="topic-button" @tap="sendCompanyText(topic)"><text class="topic-label">{{ topic }}</text><text class="topic-arrow">›</text></button></view>
               </view>
             </view>
 
@@ -701,8 +701,11 @@ function setTextInputMode() {
 .back-face.has-video .assistant-scene { background: linear-gradient(180deg,rgba(222,244,255,.08),rgba(223,243,255,.04)); }
 .scene-overlay { position: absolute; inset: 0; z-index: 2; }
 .scene-brand { position: absolute; top: calc(var(--status-bar-height) + 26rpx); left: 50%; color: #fff; font-size: 24rpx; font-weight: 800; transform: translateX(-50%); }
-.speech { position: absolute; top: 180rpx; left: 50%; width: 70%; padding: 18rpx 24rpx; border-radius: 26rpx; background: rgba(255,255,255,.88); color: #28344b; font-size: 23rpx; text-align: center; transform: translateX(-50%); }
-.topic-button { position: absolute; width: auto; min-height: 52rpx; padding: 6rpx 16rpx; border-radius: 26rpx; background: rgba(255,255,255,.86); color: #315176; font-size: 20rpx; line-height: 38rpx; }
+.speech { position: absolute; top: 180rpx; left: 24rpx; display: inline-flex; width: auto; max-width: 54%; padding: 14rpx 20rpx; border: 1rpx solid rgba(92,135,194,.2); border-radius: 24rpx 24rpx 6rpx 24rpx; background: rgba(255,255,255,.9); box-shadow: 0 12rpx 32rpx rgba(24,55,102,.14); color: #28344b; font-size: 22rpx; line-height: 1.45; text-align: left; box-sizing: border-box; }
+.speech::after { position: absolute; right: -10rpx; bottom: 12rpx; width: 18rpx; height: 18rpx; border-top: 1rpx solid rgba(92,135,194,.18); border-right: 1rpx solid rgba(92,135,194,.18); background: rgba(255,255,255,.9); content: ""; transform: rotate(45deg); }
+.topic-button { position: absolute; display: inline-flex; align-items: center; gap: 8rpx; width: auto; max-width: 48%; min-height: 52rpx; margin: 0; padding: 6rpx 8rpx 6rpx 18rpx; border: 1rpx solid rgba(96,136,190,.2); border-radius: 26rpx; background: rgba(255,255,255,.9); box-shadow: 0 10rpx 26rpx rgba(46,86,139,.12); color: #315176; font-size: 20rpx; line-height: 38rpx; box-sizing: border-box; white-space: nowrap; }
+.topic-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-arrow { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 30rpx; height: 30rpx; border-radius: 50%; background: #6ca5eb; color: #fff; font-size: 24rpx; font-weight: 500; line-height: 30rpx; }
 .topic-button:nth-child(1) { top: 290rpx; left: 20rpx; }.topic-button:nth-child(2) { top: 320rpx; right: 26rpx; }.topic-button:nth-child(3) { bottom: 142rpx; left: 24rpx; }.topic-button:nth-child(4) { right: 34rpx; bottom: 72rpx; }
 .shortcut-area { position: relative; z-index: 2; display: grid; grid-template-rows: auto minmax(0,1fr); min-height: 0; padding: 24rpx 24rpx 0; background: linear-gradient(180deg, rgba(235,248,255,.2), rgba(239,249,255,.78)); box-sizing: border-box; }
 .shortcut-prompt { display: block; margin-bottom: 10rpx; color: #fff; font-size: 21rpx; font-weight: 700; text-shadow: 0 2rpx 8rpx rgba(15,31,72,.86); }
