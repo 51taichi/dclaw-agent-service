@@ -414,6 +414,9 @@ export class Store {
     const workspace = this.getWorkspace(deployment.workspaceId);
     const person = this.getPerson(deployment.personId);
     const channel = this.getWorkspaceChannel(deployment.workspaceChannelId);
+    const cardChannel = channel.provider === "website"
+      ? this.listWorkspaceChannels(deployment.workspaceId).find((item) => item.provider === "miniapp")
+      : null;
     const allDeployments = this.listDeployments(deployment.workspaceId);
     const deployments = allDeployments
       .filter((item) => item.workspaceChannelId === channel.id)
@@ -437,6 +440,13 @@ export class Store {
       workspace,
       person,
       channel: { ...channel, config: published ? channel.publishedConfig : channel.config },
+      ...(cardChannel ? {
+        cardPresentation: {
+          channelId: cardChannel.id,
+          provider: cardChannel.provider,
+          config: published ? cardChannel.publishedConfig : cardChannel.config
+        }
+      } : {}),
       deployment: {
         ...deployment,
         config: { ...(published ? deployment.publishedConfig : person.profile || {}) },

@@ -118,7 +118,7 @@ function avatar(value, name, className = "avatar") {
 function cardPreview(data) {
   const current = identity(data);
   const config = current.config;
-  const channel = data.channel.config || {};
+  const channel = data.cardPresentation?.config || data.channel.config || {};
   const resources = Array.isArray(config.resources) ? config.resources : [];
   const questions = Array.isArray(config.suggestedQuestions) ? config.suggestedQuestions : [];
   const companyName = config.companyName || data.workspace.name;

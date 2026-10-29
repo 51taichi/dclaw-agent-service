@@ -126,6 +126,7 @@ test("person and company conversations use the same component renderer", () => {
 test("website roster opens the shared card renderer instead of a separate chat UI", () => {
   const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
   assert.match(previewSource, /parameters\.get\("surface"\) === "card"/);
+  assert.match(previewSource, /data\.cardPresentation\?\.config \|\| data\.channel\.config/);
   assert.match(previewSource, /<iframe data-widget-card-frame/);
   assert.match(previewSource, /frame\.src = `\/channels\/\$\{encodeURIComponent\(deployment\.publicSlug \|\| "channel-preview"\)\}/);
   assert.match(previewSource, /parameters\.set\("channel", data\.channel\.id\)/);

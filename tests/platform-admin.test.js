@@ -364,7 +364,10 @@ test("channel draft is private until publish and preview is schema-versioned", a
 
   const websiteDraft = await request(app.baseUrl, "/api/admin/deployments/wuhe-website-assistant/preview");
   assert.equal(websiteDraft.data.channelType, "website");
-  assert.equal("cardPresentation" in websiteDraft.data, false);
+  assert.equal(websiteDraft.data.cardPresentation.provider, "miniapp");
+  assert.equal(websiteDraft.data.cardPresentation.channelId, "wuhe-miniapp");
+  assert.equal(websiteDraft.data.cardPresentation.config.assistantName, "D仔");
+  assert.equal(websiteDraft.data.cardPresentation.config.assistantSceneVideoUrl, "/console/assets/ddeer-office-greeting-rig-v3.mp4");
   assert.equal("cardConfig" in websiteDraft.data.deployment, false);
   assert.equal(websiteDraft.data.deployment.config.coverUrl, "/console/assets/moosee-work-serious-scene.png");
   assert.equal(websiteDraft.data.deployments[0].config.companyName, "顶脉教育集团");
