@@ -189,6 +189,12 @@ button { cursor: pointer; }
 @keyframes record-pulse { 50% { opacity: .35; transform: scale(.78); } }
 
 .website-canvas { position: relative; min-height: 100vh; padding: 18px; background: #e9edf3; overflow: hidden; }
+html.embed-surface, html.embed-surface body { width: 100%; height: 100%; min-height: 0; overflow: hidden; background: transparent; }
+html.embed-surface #previewRoot { width: 100%; height: 100%; background: transparent; }
+.embed-mode.website-canvas { width: 100%; height: 100%; min-height: 0; padding: 0; background: transparent; overflow: hidden; }
+.embed-mode .widget-launcher { top: 50%; left: 50%; white-space: nowrap; }
+.embed-mode .widget-panel, .embed-mode .widget-panel.card-open { right: 0; bottom: 0; left: 0; width: 100%; height: 100%; max-width: none; max-height: none; border: 0; border-radius: 9px; }
+.embed-mode.dock-left .widget-panel { right: 0; left: 0; }
 .demo-site { min-height: calc(100vh - 36px); padding: 20px; border: 1px solid #d9e0ea; border-radius: 7px; background: #fff; overflow: hidden; }
 .demo-nav { display: flex; align-items: center; justify-content: space-between; color: #647085; font-size: 11px; }
 .demo-nav strong { color: #15213a; font-size: 16px; }
@@ -199,6 +205,7 @@ button { cursor: pointer; }
 .demo-hero button, .demo-hero > a { display: inline-flex; align-items: center; width: fit-content; margin-top: 12px; padding: 9px 15px; border: 1px solid rgba(255,255,255,.65); border-radius: 5px; background: rgba(255,255,255,.1); color: var(--hero-button-label-color, #fff); font: inherit; text-decoration: none; }
 .demo-hero button:disabled { cursor: not-allowed; opacity: .66; }
 .widget-panel { position: absolute; right: 18px; bottom: 92px; display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(380px, calc(100% - 36px)); height: 500px; border: 1px solid #cfd6e4; border-radius: 8px; background: #fff; box-shadow: 0 18px 44px rgba(18,29,52,.24); overflow: hidden; }
+.widget-panel[hidden] { display: none; }
 .widget-panel.card-open { bottom: 18px; grid-template-rows: minmax(0, 1fr); width: min(420px, calc(100% - 36px)); height: min(760px, calc(100vh - 36px)); }
 .dock-left .widget-panel { right: auto; left: 18px; }
 .widget-panel header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 72px; padding: 12px 14px; background: #111b2e; color: #fff; }

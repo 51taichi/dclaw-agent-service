@@ -286,7 +286,15 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
 
   app.use("/media", express.static(publicMediaDir, { fallthrough: false, immutable: true, maxAge: "1y" }));
-  app.get("/channels/:publicSlug", (_req, res) => res.sendFile(path.resolve(sourceDir, "../public/channel-preview/index.html")));
+  app.get("/channels/:publicSlug", (req, res) => {
+    if (req.query.surface === "embed") {
+      const payload = store.publicChannel(req.params.publicSlug);
+      if (!payload) return res.status(404).json({ error: "Channel not found" });
+      const ancestors = embedFrameAncestors(payload.channel.config?.allowedDomains);
+      res.set("Content-Security-Policy", `frame-ancestors ${ancestors.join(" ")}`);
+    }
+    res.sendFile(path.resolve(sourceDir, "../public/channel-preview/index.html"));
+  });
   app.use("/", express.static(path.resolve(sourceDir, "../public"), { extensions: ["html"] }));
   app.get("/", (_req, res) => res.redirect("/console/"));
   app.use((req, res) => res.status(404).json({ error: "Not found", requestId: req.requestId }));
@@ -296,6 +304,21 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
 
   return { app, db, store, registry, services: { gateway, delivery, messages, activation, transcriber, credentialVault, workspaceMiniapps } };
+}
+
+function embedFrameAncestors(value) {
+  const entries = String(value || "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
+  if (!entries.length) return ["*"];
+  const origins = new Set(["'self'"]);
+  for (const entry of entries) {
+    try {
+      const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(entry) ? entry : `https://${entry}`;
+      const url = new URL(candidate);
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash) continue;
+      origins.add(url.origin);
+    } catch {}
+  }
+  return origins.size > 1 ? [...origins] : ["'none'"];
 }
 
 async function receivePageMessage({ req, res, store, messages, transcriber, publicMediaDir, accountId, provider, surface, displayName }) {

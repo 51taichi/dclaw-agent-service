@@ -31,6 +31,72 @@ async function request(baseUrl, pathname, options = {}) {
   return { response, data: response.status === 204 ? null : await response.json() };
 }
 
+test("website embed loader and deployment UI provide one-copy installation", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  const loader = await fetch(`${app.baseUrl}/embed/dclaw-agent.js`);
+  assert.equal(loader.status, 200);
+  assert.match(loader.headers.get("content-type"), /javascript/);
+  const loaderSource = await loader.text();
+  assert.match(loaderSource, /data-channel/);
+  assert.match(loaderSource, /document\.createElement\("iframe"\)/);
+  assert.match(loaderSource, /surface=embed/);
+  assert.match(loaderSource, /dclaw:embed-state/);
+  assert.match(loaderSource, /event\.origin !== serviceOrigin/);
+
+  const adminHtml = await (await fetch(`${app.baseUrl}/admin/`)).text();
+  const adminSource = await (await fetch(`${app.baseUrl}/admin/app.js`)).text();
+  assert.match(adminHtml, /data-deploy-provider="website"/);
+  assert.match(adminSource, /部署官网客服/);
+  assert.match(adminSource, /复制代码/);
+  assert.match(adminSource, /data-channel="\$\{channel\.id\}"/);
+  assert.match(adminSource, /if \(provider === "website"\) openWebsiteDeployDialog\(\)/);
+});
+
+test("published website embed applies normalized frame ancestor policy", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  const channels = await request(app.baseUrl, "/api/admin/workspaces/dingmai/channels");
+  const website = channels.data.items.find((item) => item.provider === "website");
+  assert.ok(website);
+  await request(app.baseUrl, `/api/admin/channels/${website.id}`, {
+    method: "PUT",
+    body: { config: { ...website.config, allowedDomains: "d-claw.deepmega.cn, https://www.d-claw.deepmega.cn\nnot a domain/path" } }
+  });
+  await request(app.baseUrl, `/api/admin/channels/${website.id}/publish`, { method: "POST" });
+  const deployments = await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments");
+  const deployment = deployments.data.items.find((item) => item.workspaceChannelId === website.id && item.enabled);
+  assert.ok(deployment);
+
+  const embedded = await fetch(`${app.baseUrl}/channels/${deployment.publicSlug}?surface=embed`);
+  assert.equal(embedded.status, 200);
+  const policy = embedded.headers.get("content-security-policy");
+  assert.match(policy, /frame-ancestors 'self'/);
+  assert.match(policy, /https:\/\/d-claw\.deepmega\.cn/);
+  assert.match(policy, /https:\/\/www\.d-claw\.deepmega\.cn/);
+  assert.doesNotMatch(policy, /path/);
+
+  const stableChannelEmbed = await fetch(`${app.baseUrl}/channels/${website.id}?surface=embed`);
+  assert.equal(stableChannelEmbed.status, 200);
+  assert.equal(stableChannelEmbed.headers.get("content-security-policy"), policy);
+});
+
+test("website embed remains open to any parent when allowed domains are empty", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  const channels = await request(app.baseUrl, "/api/admin/workspaces/dingmai/channels");
+  const website = channels.data.items.find((item) => item.provider === "website");
+  await request(app.baseUrl, `/api/admin/channels/${website.id}`, { method: "PUT", body: { config: { ...website.config, allowedDomains: "" } } });
+  await request(app.baseUrl, `/api/admin/channels/${website.id}/publish`, { method: "POST" });
+  const deployments = await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments");
+  const deployment = deployments.data.items.find((item) => item.workspaceChannelId === website.id && item.enabled);
+  const embedded = await fetch(`${app.baseUrl}/channels/${deployment.publicSlug}?surface=embed`);
+  assert.equal(embedded.headers.get("content-security-policy"), "frame-ancestors *");
+});
+
 test("seed migrates the two real channels into one workspace and removes local demo", async (t) => {
   const app = await fixture();
   t.after(() => app.close());

@@ -89,11 +89,13 @@ async function load() {
     ? data.deployments
     : [{ ...data.deployment, person: data.person }];
   const cardSurface = parameters.get("surface") === "card";
+  const embedSurface = parameters.get("surface") === "embed";
+  document.documentElement.classList.toggle("embed-surface", embedSurface);
   const viewData = data;
-  root.innerHTML = data.channelType === "miniapp" || cardSurface ? cardPreview(viewData) : websitePreview(data);
+  root.innerHTML = data.channelType === "miniapp" || cardSurface ? cardPreview(viewData) : websitePreview(data, { embedSurface });
   document.title = `${data.deployment.personName || data.person?.name || data.workspace.name} · ${data.channel.name}`;
   if (data.channelType === "miniapp" || cardSurface) bindCardPreview(viewData);
-  else bindWebsitePreview(data);
+  else bindWebsitePreview(data, { embedSurface, publicSlug });
 }
 
 function identity(data, deployment = data.deployment) {
@@ -843,7 +845,7 @@ function bindCardPreview(data) {
   syncViewport();
 }
 
-function websitePreview(data) {
+function websitePreview(data, { embedSurface = false } = {}) {
   const channel = data.channel.config || {};
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
   const agents = data.deployments.map((deployment) => identity(data, deployment));
@@ -857,12 +859,12 @@ function websitePreview(data) {
   const heroAction = heroButtonUrl
     ? `<a href="${escapeHtml(heroButtonUrl)}" target="_blank" rel="noopener">${escapeHtml(heroButtonLabel)}</a>`
     : `<button type="button" disabled title="尚未配置跳转地址">${escapeHtml(heroButtonLabel)}</button>`;
-  return `<section class="website-canvas ${launcherX < 0.5 ? "dock-left" : "dock-right"}" style="--launcher-x:${launcherX * 100}%;--launcher-y:${launcherY * 100}%;--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--company-name-color:${safeColor(channel.companyNameColor, "#ffffff")};--company-description-color:${safeColor(channel.companyDescriptionColor, "#ffffff")};--hero-button-label-color:${safeColor(channel.heroButtonLabelColor, "#ffffff")};--launcher-label-color:${safeColor(channel.launcherLabelColor, "#ffffff")};--roster-title-color:${safeColor(channel.rosterTitleColor, "#ffffff")}">
-    <div class="demo-site">
+  return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""} ${launcherX < 0.5 ? "dock-left" : "dock-right"}" style="--launcher-x:${launcherX * 100}%;--launcher-y:${launcherY * 100}%;--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--company-name-color:${safeColor(channel.companyNameColor, "#ffffff")};--company-description-color:${safeColor(channel.companyDescriptionColor, "#ffffff")};--hero-button-label-color:${safeColor(channel.heroButtonLabelColor, "#ffffff")};--launcher-label-color:${safeColor(channel.launcherLabelColor, "#ffffff")};--roster-title-color:${safeColor(channel.rosterTitleColor, "#ffffff")}">
+    ${embedSurface ? "" : `<div class="demo-site">
       <div class="demo-nav"><strong>${escapeHtml(companyName)}</strong><span>产品　服务　案例　关于我们</span></div>
       <div class="demo-hero"><span>智能服务中心</span><h1>${escapeHtml(companyName)}<br/>在线服务中心</h1><p>${escapeHtml(companyDescription)}</p>${heroAction}</div>
-    </div>
-    <aside class="widget-panel" data-widget-panel>
+    </div>`}
+    <aside class="widget-panel" data-widget-panel ${embedSurface ? "hidden" : ""}>
       <header class="roster-header" data-widget-header><div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择成员")}</strong><small>${agents.length} 位成员在线</small></span></div><button data-widget-close title="关闭">×</button></header>
       <div class="agent-roster" data-agent-roster>
         ${agents.length ? agents.map((agent) => `<button class="agent-option" data-agent-select="${escapeHtml(agent.id)}">${avatar(agent.avatar, agent.name, "roster-avatar")}<span><strong>${escapeHtml(agent.name)}</strong><small>${escapeHtml(agent.title)}</small></span><i>联系</i></button>`).join("") : `<div class="empty-roster">暂未配置可用成员</div>`}
@@ -873,7 +875,7 @@ function websitePreview(data) {
   </section>`;
 }
 
-function bindWebsitePreview(data) {
+function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}) {
   const panel = root.querySelector("[data-widget-panel]");
   const header = root.querySelector("[data-widget-header]");
   const roster = root.querySelector("[data-agent-roster]");
@@ -884,16 +886,40 @@ function bindWebsitePreview(data) {
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
   let currentDeploymentId = "";
 
+  function notifyParent(state) {
+    if (!embedSurface || window.parent === window) return;
+    const bounds = launcher.getBoundingClientRect();
+    window.parent.postMessage({
+      type: "dclaw:embed-state",
+      channel: publicSlug,
+      state,
+      launcher: {
+        x: Math.max(0.04, Math.min(0.96, Number(channel.launcherPositionX ?? (channel.position === "left" ? 0.08 : 0.92)) || 0.92)),
+        y: Math.max(0.06, Math.min(0.94, Number(channel.launcherPositionY ?? 0.88) || 0.88)),
+        width: Math.ceil(bounds.width || 190),
+        height: Math.ceil(bounds.height || 72)
+      }
+    }, "*");
+  }
+
+  function closeWidget() {
+    panel.hidden = true;
+    launcher.hidden = false;
+    notifyParent("closed");
+  }
+
   function showRoster() {
     currentDeploymentId = "";
+    panel.hidden = false;
     panel.classList.remove("card-open");
-    launcher.hidden = false;
+    launcher.hidden = embedSurface;
     header.hidden = false;
     roster.hidden = false;
     card.hidden = true;
     frame.removeAttribute("src");
     header.innerHTML = `<div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择成员")}</strong><small>${data.deployments.length} 位成员在线</small></span></div><button data-widget-close title="关闭">×</button>`;
-    header.querySelector("[data-widget-close]").addEventListener("click", () => { panel.hidden = true; });
+    header.querySelector("[data-widget-close]").addEventListener("click", closeWidget);
+    notifyParent("open");
   }
 
   function showCard(deploymentId) {
@@ -914,14 +940,19 @@ function bindWebsitePreview(data) {
     header.hidden = true;
     roster.hidden = true;
     card.hidden = false;
+    notifyParent("card");
   }
 
-  launcher.addEventListener("click", () => { panel.hidden = !panel.hidden; if (!panel.hidden && !currentDeploymentId) showRoster(); });
+  launcher.addEventListener("click", () => {
+    if (panel.hidden) showRoster();
+    else closeWidget();
+  });
   root.querySelectorAll("[data-agent-select]").forEach((button) => button.addEventListener("click", () => showCard(button.dataset.agentSelect)));
-  root.querySelector("[data-widget-close]").addEventListener("click", () => { panel.hidden = true; });
+  root.querySelector("[data-widget-close]").addEventListener("click", closeWidget);
   window.addEventListener("message", (event) => {
     if (event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === "dclaw:website-card-back") showRoster();
   });
+  if (embedSurface) requestAnimationFrame(() => notifyParent("closed"));
 }
 
 load().catch((error) => { root.innerHTML = `<div class="preview-error">${escapeHtml(error.message)}</div>`; });

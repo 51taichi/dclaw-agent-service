@@ -372,6 +372,24 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .inherit-pill { padding: 4px 7px; border-radius: 5px; background: #edf0f6; color: #59647b; font-size: 11px; font-weight: 800; }
 .inherit-pill.active { background: #e8f7ef; color: #147a4f; }
 .admin-toast { position: fixed; right: 22px; bottom: 22px; z-index: 50; max-width: 360px; padding: 11px 15px; border-radius: 6px; background: #1f2940; color: #fff; box-shadow: 0 12px 30px rgba(20, 28, 48, .22); }
+.deploy-dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(17, 25, 43, .48); backdrop-filter: blur(5px); }
+.deploy-dialog { width: min(610px, 100%); overflow: hidden; border: 1px solid rgba(255,255,255,.7); border-radius: 8px; background: #fff; box-shadow: 0 26px 70px rgba(19, 31, 58, .3); }
+.deploy-dialog > header { display: flex; align-items: center; justify-content: space-between; min-height: 66px; padding: 0 20px; border-bottom: 1px solid #e4e8f0; }
+.deploy-dialog > header > span { display: inline-flex; align-items: center; gap: 10px; color: #202842; }
+.deploy-dialog > header svg { width: 19px; height: 19px; color: #3157dd; }
+.deploy-dialog > header strong { font-size: 17px; }
+.deploy-dialog > header button { width: 34px; height: 34px; border: 0; background: transparent; color: #6f7990; font-size: 25px; }
+.deploy-steps { display: flex; align-items: center; gap: 12px; padding: 18px 20px 4px; color: #4d5870; font-size: 12px; font-weight: 800; }
+.deploy-steps span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.deploy-steps i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #e9edff; color: #3157dd; font-style: normal; }
+.deploy-steps b { width: 28px; height: 1px; background: #d7dce7; }
+.deploy-code { display: grid; gap: 8px; padding: 16px 20px 20px; }
+.deploy-code > span { color: #58637a; font-size: 11px; font-weight: 850; }
+.deploy-code textarea { width: 100%; min-height: 94px; resize: none; padding: 13px 14px; border: 1px solid #d8deea; border-radius: 6px; outline: 0; background: #f6f8fb; color: #202842; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.deploy-code textarea:focus { border-color: #7890e8; box-shadow: 0 0 0 3px rgba(49,87,221,.1); }
+.deploy-dialog > footer { display: flex; justify-content: flex-end; gap: 9px; padding: 14px 20px; border-top: 1px solid #e4e8f0; background: #fafbfc; }
+.deploy-dialog > footer a, .deploy-dialog > footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 0 14px; text-decoration: none; }
+.deploy-dialog > footer svg { width: 15px; height: 15px; }
 
 @media (max-width: 1240px) {
   .channel-grid, .people-grid { grid-template-columns: 230px minmax(0, 1fr); }

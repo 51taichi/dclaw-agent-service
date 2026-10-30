@@ -460,6 +460,58 @@ function previewUrlFor(provider) {
   return `/channels/channel-preview?channel=${encodeURIComponent(channel.id)}&preview=draft&t=${Date.now()}-${++previewRevision}`;
 }
 
+function websiteDeployment() {
+  const channel = channelFor("website");
+  return channel?.publishedVersion > 0 && state.deployments.find((item) => item.workspaceChannelId === channel.id && item.enabled && item.publicSlug);
+}
+
+function websiteEmbedCode() {
+  const channel = channelFor("website");
+  const deployment = websiteDeployment();
+  if (!channel || !deployment) return "";
+  return `<script async src="${location.origin}/embed/dclaw-agent.js" data-channel="${channel.id}"><\/script>`;
+}
+
+function closeWebsiteDeployDialog() {
+  document.querySelector("#websiteDeployDialog")?.remove();
+}
+
+function openWebsiteDeployDialog() {
+  closeWebsiteDeployDialog();
+  const deployment = websiteDeployment();
+  if (!deployment) return toast("请先发布官网配置并开通至少一位智能员工");
+  const channel = channelFor("website");
+  const code = websiteEmbedCode();
+  const previewUrl = `${location.origin}/channels/${encodeURIComponent(channel.id)}`;
+  const dialog = document.createElement("div");
+  dialog.id = "websiteDeployDialog";
+  dialog.className = "deploy-dialog-backdrop";
+  dialog.innerHTML = `<section class="deploy-dialog" role="dialog" aria-modal="true" aria-labelledby="websiteDeployTitle">
+    <header><span><svg><use href="#i-link"/></svg><strong id="websiteDeployTitle">部署官网客服</strong></span><button type="button" data-deploy-close aria-label="关闭">×</button></header>
+    <div class="deploy-steps"><span><i>1</i>复制代码</span><b></b><span><i>2</i>粘贴到官网 &lt;/body&gt; 前</span></div>
+    <label class="deploy-code"><span>接入代码</span><textarea readonly rows="4">${escapeHtml(code)}</textarea></label>
+    <footer><a class="secondary" href="${escapeHtml(previewUrl)}" target="_blank" rel="noopener"><svg><use href="#i-eye"/></svg>查看页面</a><button class="primary" type="button" data-copy-embed><svg><use href="#i-copy"/></svg>复制代码</button></footer>
+  </section>`;
+  document.body.append(dialog);
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog || event.target.closest("[data-deploy-close]")) closeWebsiteDeployDialog();
+    if (event.target.closest("[data-copy-embed]")) copyWebsiteEmbedCode().catch(handleError);
+  });
+}
+
+async function copyWebsiteEmbedCode() {
+  const code = websiteEmbedCode();
+  if (!code) throw new Error("暂无可部署的官网客服");
+  if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(code);
+  else {
+    const input = document.querySelector("#websiteDeployDialog textarea");
+    input.focus();
+    input.select();
+    if (!document.execCommand("copy")) throw new Error("复制失败，请手动选择代码");
+  }
+  toast("接入代码已复制");
+}
+
 function defaultAgent() {
   return state.agentConfigs.find((item) => item.id === state.agentDefaults.defaultAgentConfigId) || null;
 }
@@ -608,6 +660,7 @@ async function publishProviderConfig(provider) {
   await api(`/api/admin/channels/${encodeURIComponent(channel.id)}/publish`, { method: "POST" });
   await loadWorkspaceContext();
   toast("当前配置已保存并发布");
+  if (provider === "website") openWebsiteDeployDialog();
 }
 
 async function verifyMiniappCredential() {
@@ -783,6 +836,7 @@ function bindEvents() {
   els.workspaceForm.addEventListener("submit", (event) => saveWorkspace(event).catch(handleError));
   els.personForm.addEventListener("submit", (event) => savePerson(event).catch(handleError));
   document.querySelectorAll("[data-publish-provider]").forEach((button) => button.addEventListener("click", () => publishProviderConfig(button.dataset.publishProvider).catch(handleError)));
+  document.querySelectorAll("[data-deploy-provider='website']").forEach((button) => button.addEventListener("click", openWebsiteDeployDialog));
   document.querySelectorAll("[data-preview-provider]").forEach((button) => button.addEventListener("click", () => {
     const url = previewUrlFor(button.dataset.previewProvider);
     if (url) window.open(url, "_blank", "noopener");

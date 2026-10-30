@@ -500,7 +500,16 @@ export class Store {
   }
 
   publicChannel(publicSlug) {
-    const deployment = this.db.prepare("SELECT id FROM channel_deployments WHERE public_slug = ? AND enabled = 1").get(publicSlug);
+    const deployment = this.db.prepare("SELECT id FROM channel_deployments WHERE public_slug = ? AND enabled = 1").get(publicSlug)
+      || this.db.prepare(`
+        SELECT d.id
+        FROM workspace_channels c
+        JOIN channel_deployments d ON d.workspace_channel_id = c.id
+        WHERE c.id = ? AND c.provider = 'website' AND c.enabled = 1 AND c.published_version > 0
+          AND d.enabled = 1 AND d.published_version > 0
+        ORDER BY d.sort_order, d.created_at
+        LIMIT 1
+      `).get(publicSlug);
     if (!deployment) return null;
     const payload = this.channelPreview(deployment.id, { published: true });
     if (!payload?.workspace.enabled || !payload.person.enabled || !payload.channel.enabled || payload.channel.publishedVersion < 1) return null;
