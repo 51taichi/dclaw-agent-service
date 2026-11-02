@@ -247,11 +247,15 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .map-widget-panel.has-custom-skin header, .map-widget-panel.has-custom-skin .map-roster-people { position: relative; z-index: 1; }
 .map-widget-panel.has-custom-skin header { display: none; }
 .map-widget-panel.has-custom-skin .map-roster-people { grid-auto-rows: 44px; align-content: start; gap: 4px; padding: 5px; background: transparent; }
-.map-widget-panel.has-custom-skin .map-roster-person { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 5px; height: 44px; min-height: 44px; padding: 5px; background: rgba(255,255,255,.9); }
+.map-widget-panel.has-custom-skin[data-skin-tone="dark"] { --map-skin-item-bg: rgba(255,255,255,.08); --map-skin-item-border: rgba(178,215,255,.22); --map-skin-item-text: #f8fbff; --map-skin-item-muted: #b8c7da; --map-skin-avatar-bg: rgba(255,255,255,.14); }
+.map-widget-panel.has-custom-skin[data-skin-tone="light"] { --map-skin-item-bg: rgba(9,27,52,.06); --map-skin-item-border: rgba(9,35,66,.14); --map-skin-item-text: #15233a; --map-skin-item-muted: #5f6f85; --map-skin-avatar-bg: rgba(9,35,66,.08); }
+.map-widget-panel.has-custom-skin .map-roster-person { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 5px; height: 44px; min-height: 44px; padding: 5px; border-color: var(--map-skin-item-border); background: var(--map-skin-item-bg); box-shadow: inset 0 1px rgba(255,255,255,.14); -webkit-backdrop-filter: blur(6px) saturate(1.08); backdrop-filter: blur(6px) saturate(1.08); }
 .map-widget-panel.has-custom-skin .map-roster-person > img, .map-widget-panel.has-custom-skin .map-roster-person > i { width: 30px; height: 30px; }
 .map-widget-panel.has-custom-skin .map-roster-person > span { display: grid; grid-template-rows: 15px 13px; align-content: center; height: 30px; }
-.map-widget-panel.has-custom-skin .map-roster-person strong { font-size: 10px; line-height: 15px; }
-.map-widget-panel.has-custom-skin .map-roster-person small { margin-top: 0; line-height: 13px; }
+.map-widget-panel.has-custom-skin .map-roster-person > img, .map-widget-panel.has-custom-skin .map-roster-person > i { background: var(--map-skin-avatar-bg); color: var(--map-skin-item-text); }
+.map-widget-panel.has-custom-skin .map-roster-person strong { color: var(--map-skin-item-text); font-size: 10px; line-height: 15px; }
+.map-widget-panel.has-custom-skin .map-roster-person small { margin-top: 0; color: var(--map-skin-item-muted); line-height: 13px; }
+.map-widget-panel.has-custom-skin[data-skin-tone="dark"] .map-roster-person > b { background: color-mix(in srgb, var(--map-action-color, #176b54) 18%, transparent); color: color-mix(in srgb, var(--map-action-color, #176b54) 42%, #dffff3); }
 .miniapp-field-map { width: min(100%, 390px); height: 876px; margin: 0 auto; border-radius: 16px; background: #edf3f8; box-shadow: 0 12px 32px rgba(22,32,54,.15); }
 .map-face-toolbar { position: relative; z-index: 10; display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: 6px; height: 58px; padding: 7px; border-bottom: 1px solid #d7dee9; background: #f8fafc; }
 .map-face-toolbar > button { display: grid; align-content: center; gap: 2px; min-width: 0; padding: 4px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #647087; box-shadow: none; }

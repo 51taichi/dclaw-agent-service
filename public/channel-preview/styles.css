@@ -226,13 +226,18 @@ html.embed-surface #previewRoot { width: 100%; height: 100%; background: transpa
 .widget-panel.has-custom-skin:not(.card-open) header, .widget-panel.has-custom-skin:not(.card-open) .agent-roster { position: relative; z-index: 1; }
 .widget-panel.has-custom-skin:not(.card-open) header { display: none; }
 .widget-panel.has-custom-skin:not(.card-open) .agent-roster { display: grid; grid-auto-rows: 44px; align-content: start; gap: 4px; padding: 5px; background: transparent; }
-.widget-panel.has-custom-skin:not(.card-open) .agent-option { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 5px; height: 44px; min-height: 44px; margin: 0; padding: 5px; border-radius: 6px; background: rgba(255,255,255,.9); }
+.widget-panel.has-custom-skin:not(.card-open)[data-skin-tone="dark"] { --skin-item-bg: rgba(255,255,255,.08); --skin-item-hover: rgba(255,255,255,.14); --skin-item-border: rgba(178,215,255,.22); --skin-item-text: #f8fbff; --skin-item-muted: #b8c7da; --skin-avatar-bg: rgba(255,255,255,.14); --skin-item-shadow: inset 0 1px rgba(255,255,255,.14); }
+.widget-panel.has-custom-skin:not(.card-open)[data-skin-tone="light"] { --skin-item-bg: rgba(9,27,52,.06); --skin-item-hover: rgba(9,27,52,.11); --skin-item-border: rgba(9,35,66,.14); --skin-item-text: #15233a; --skin-item-muted: #5f6f85; --skin-avatar-bg: rgba(9,35,66,.08); --skin-item-shadow: inset 0 1px rgba(255,255,255,.3); }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 5px; height: 44px; min-height: 44px; margin: 0; padding: 5px; border-color: var(--skin-item-border); border-radius: 6px; background: var(--skin-item-bg); color: var(--skin-item-text); box-shadow: var(--skin-item-shadow); -webkit-backdrop-filter: blur(6px) saturate(1.08); backdrop-filter: blur(6px) saturate(1.08); }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option:hover { border-color: var(--skin-item-border); background: var(--skin-item-hover); box-shadow: 0 4px 12px rgba(3,12,28,.12), var(--skin-item-shadow); }
 .widget-panel.has-custom-skin:not(.card-open) .agent-option > span { display: grid; grid-template-rows: 15px 13px; align-content: center; height: 30px; }
 .widget-panel.has-custom-skin:not(.card-open) .agent-option strong { font-size: 11px; line-height: 15px; }
-.widget-panel.has-custom-skin:not(.card-open) .agent-option small { margin-top: 0; font-size: 8px; line-height: 13px; }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option small { margin-top: 0; color: var(--skin-item-muted); font-size: 8px; line-height: 13px; }
 .widget-panel.has-custom-skin:not(.card-open) .agent-option > i { display: inline-flex; align-items: center; gap: 3px; padding: 3px 4px; font-size: 8px; white-space: nowrap; }
+.widget-panel.has-custom-skin:not(.card-open)[data-skin-tone="dark"] .agent-option > i { background: color-mix(in srgb, var(--employee-action-color, #176b54) 18%, transparent); color: color-mix(in srgb, var(--employee-action-color, #176b54) 42%, #dffff3); }
+.widget-panel.has-custom-skin:not(.card-open)[data-skin-tone="light"] .agent-option > i { background: color-mix(in srgb, var(--employee-action-color, #176b54) 10%, transparent); }
 .widget-panel.has-custom-skin:not(.card-open) .agent-option > i > b { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 14%, transparent); }
-.widget-panel.has-custom-skin:not(.card-open) .roster-avatar { width: 30px; height: 30px; }
+.widget-panel.has-custom-skin:not(.card-open) .roster-avatar { width: 30px; height: 30px; background: var(--skin-avatar-bg); color: var(--skin-item-text); }
 .widget-panel.has-custom-skin:not(.card-open) .empty-roster { min-height: 44px; background: rgba(255,255,255,.84); }
 .embed-mode .widget-panel.has-custom-skin:not(.card-open) { right: 0; bottom: 0; left: auto; width: 138px; }
 .widget-card-view { grid-area: 1 / 1 / -1 / -1; min-width: 0; min-height: 0; background: #f4f5f7; }

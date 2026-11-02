@@ -85,6 +85,13 @@ test("website custom frame keeps a fixed transparent skin while the employee lis
   assert.match(previewStyles, /width:\s*138px;[^}]*height:\s*calc\(83px \+ var\(--visible-agents, 1\) \* 48px\)/);
   assert.match(previewStyles, /grid-auto-rows:\s*44px;[^}]*padding:\s*5px/);
   assert.match(previewStyles, /agent-option > span[^}]*height:\s*30px/);
+  assert.match(previewSource, /function detectSkinTone\(imageUrl\)/);
+  assert.match(previewSource, /for \(let y = 23; y < 38; y \+= 1\)/);
+  assert.match(previewSource, /data-skin-tone="dark"/);
+  assert.match(previewStyles, /data-skin-tone="dark"[^}]*--skin-item-bg:\s*rgba\(255,255,255,\.08\)/);
+  assert.match(previewStyles, /data-skin-tone="light"[^}]*--skin-item-bg:\s*rgba\(9,27,52,\.06\)/);
+  assert.doesNotMatch(previewStyles, /has-custom-skin:not\(\.card-open\) \.agent-option[^}]*background:\s*rgba\(255,255,255,\.9\)/);
+  assert.match(adminSource, /function detectMapSkinTone\(imageUrl\)/);
   assert.doesNotMatch(previewStyles, /has-custom-skin:not\(\.card-open\)[^{]*\{[^}]*transform:\s*scale/);
   assert.match(previewStyles, /header\s*\{\s*display:\s*none/);
   assert.match(previewStyles, /\.widget-drag-handle\s*\{/);

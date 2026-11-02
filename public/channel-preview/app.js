@@ -34,6 +34,47 @@ const icons = {
 const icon = (name) => `<svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24">${icons[name]}</svg>`;
 const randomId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+const skinToneCache = new Map();
+
+function detectSkinTone(imageUrl) {
+  if (!imageUrl) return Promise.resolve("dark");
+  if (skinToneCache.has(imageUrl)) return skinToneCache.get(imageUrl);
+  const detection = new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    try {
+      if (new URL(imageUrl, location.href).origin !== location.origin) image.crossOrigin = "anonymous";
+    } catch {}
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 40;
+        canvas.height = 40;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        let luminance = 0;
+        let weight = 0;
+        for (let y = 23; y < 38; y += 1) {
+          for (let x = 4; x < 36; x += 1) {
+            const index = (y * canvas.width + x) * 4;
+            const alpha = pixels[index + 3] / 255;
+            if (alpha < 0.2) continue;
+            luminance += ((pixels[index] * 0.2126 + pixels[index + 1] * 0.7152 + pixels[index + 2] * 0.0722) / 255) * alpha;
+            weight += alpha;
+          }
+        }
+        resolve(weight && luminance / weight >= 0.5 ? "light" : "dark");
+      } catch {
+        resolve("dark");
+      }
+    };
+    image.onerror = () => resolve("dark");
+    image.src = imageUrl;
+  });
+  skinToneCache.set(imageUrl, detection);
+  return detection;
+}
 
 function persistentId(key) {
   try {
@@ -860,7 +901,7 @@ function websitePreview(data, { embedSurface = false } = {}) {
   const employeeStatusLabel = !channel.employeeActionLabel || channel.employeeActionLabel === "咨询" ? "在线" : channel.employeeActionLabel;
   return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""}" style="--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--panel-header:#ffffff;--panel-background:#f5f7fa;--panel-border:${safeColor(channel.panelBorderColor, "#d7deea")};--roster-title-color:#17233d;--roster-subtitle-color:#748097;--employee-action-color:${safeColor(channel.employeeActionColor, "#176b54")};--panel-skin:url(&quot;${escapeHtml(panelSkin)}&quot;);--visible-agents:${visibleAgents}">
     ${embedSurface ? "" : `<div class="demo-site" aria-label="官网背景图预览"></div>`}
-    <aside class="widget-panel ${panelSkin ? "has-custom-skin" : ""}" data-widget-panel data-shape="${escapeHtml(panelShape)}" data-avatar-shape="${escapeHtml(avatarShape)}">
+    <aside class="widget-panel ${panelSkin ? "has-custom-skin" : ""}" data-widget-panel ${panelSkin ? 'data-skin-tone="dark"' : ""} data-shape="${escapeHtml(panelShape)}" data-avatar-shape="${escapeHtml(avatarShape)}">
       ${panelSkin ? `<span class="widget-drag-handle" data-widget-drag-handle title="拖动客服框"></span>` : ""}
       <header class="roster-header" data-widget-header><div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择服务人员")}</strong><small>${escapeHtml(channel.rosterSubtitle || "在线为您服务")}</small></span></div><em>${agents.length} 位在线</em></header>
       <div class="agent-roster" data-agent-roster>
@@ -880,6 +921,7 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
   const dragHandle = root.querySelector("[data-widget-drag-handle]");
   const channel = data.channel.config || {};
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
+  if (channel.panelSkinImageUrl) detectSkinTone(channel.panelSkinImageUrl).then((tone) => { if (panel.isConnected) panel.dataset.skinTone = tone; });
   let currentDeploymentId = "";
   let localRosterPosition = null;
 

@@ -6,10 +6,64 @@ const state = {
   agentConfig: null, creatingAgentConfig: false, configProvider: "website", focusedConfigField: "", miniappMapFace: "back"
 };
 let previewRevision = 0;
+let mapSkinToneRevision = 0;
 
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.getAttribute("id"), node]));
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
 const safeMapColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
+const mapSkinToneCache = new Map();
+
+function detectMapSkinTone(imageUrl) {
+  if (!imageUrl) return Promise.resolve("dark");
+  if (mapSkinToneCache.has(imageUrl)) return mapSkinToneCache.get(imageUrl);
+  const detection = new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    try {
+      if (new URL(imageUrl, location.href).origin !== location.origin) image.crossOrigin = "anonymous";
+    } catch {}
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 40;
+        canvas.height = 40;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        let luminance = 0;
+        let weight = 0;
+        for (let y = 23; y < 38; y += 1) {
+          for (let x = 4; x < 36; x += 1) {
+            const index = (y * canvas.width + x) * 4;
+            const alpha = pixels[index + 3] / 255;
+            if (alpha < 0.2) continue;
+            luminance += ((pixels[index] * 0.2126 + pixels[index + 1] * 0.7152 + pixels[index + 2] * 0.0722) / 255) * alpha;
+            weight += alpha;
+          }
+        }
+        resolve(weight && luminance / weight >= 0.5 ? "light" : "dark");
+      } catch {
+        resolve("dark");
+      }
+    };
+    image.onerror = () => resolve("dark");
+    image.src = imageUrl;
+  });
+  mapSkinToneCache.set(imageUrl, detection);
+  return detection;
+}
+
+function syncMapSkinTone(imageUrl) {
+  const revision = ++mapSkinToneRevision;
+  if (!imageUrl) {
+    delete els.websiteRosterMap.dataset.skinTone;
+    return;
+  }
+  els.websiteRosterMap.dataset.skinTone = "dark";
+  detectMapSkinTone(imageUrl).then((tone) => {
+    if (revision === mapSkinToneRevision) els.websiteRosterMap.dataset.skinTone = tone;
+  });
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...options.headers }, body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body });
@@ -449,6 +503,7 @@ function syncFieldMapValues(provider) {
     const panelSkin = values.panelSkinImageUrl || "";
     els.websiteRosterMap.classList.toggle("has-custom-skin", Boolean(panelSkin));
     els.websiteRosterMap.style.setProperty("--map-panel-skin", panelSkin ? `url("${String(panelSkin).replace(/["\\]/g, "")}")` : "none");
+    syncMapSkinTone(panelSkin);
     els.websiteRosterMap.style.setProperty("--map-visible-agents", String(Math.max(1, Math.min(samplePeople.length, 3))));
     els.websiteRosterMap.dataset.shape = values.panelShape || "轻圆角";
     els.websiteRosterMap.dataset.avatarShape = values.employeeAvatarShape || "圆形";
