@@ -83,6 +83,14 @@ async function load() {
   data.deployments = Array.isArray(data.deployments) && data.deployments.length
     ? data.deployments
     : [{ ...data.deployment, person: data.person }];
+  const previewPerson = parameters.get("previewPerson");
+  if (data.previewOnly && previewPerson) {
+    const selectedPreview = data.deployments.find((deployment) => deployment.id === previewPerson);
+    if (selectedPreview) {
+      data.deployment = selectedPreview;
+      data.person = selectedPreview.person;
+    }
+  }
   const cardSurface = parameters.get("surface") === "card";
   const embedSurface = parameters.get("surface") === "embed";
   document.documentElement.classList.toggle("embed-surface", embedSurface);
@@ -847,13 +855,16 @@ function websitePreview(data, { embedSurface = false } = {}) {
   const homepageImage = channel.homepageImageUrl || "/console/assets/moosee-work-serious-scene.png";
   const panelShape = ["轻圆角", "圆角", "直角"].includes(channel.panelShape) ? channel.panelShape : "轻圆角";
   const avatarShape = channel.employeeAvatarShape === "圆角方形" ? "圆角方形" : "圆形";
-  const legacyTitleColor = channel.panelHeaderColor == null && /^#fff(?:fff)?$/i.test(channel.rosterTitleColor || "") ? "#17233d" : channel.rosterTitleColor;
-  return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""}" style="--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--panel-header:${safeColor(channel.panelHeaderColor, "#ffffff")};--panel-background:${safeColor(channel.panelBackgroundColor, "#f5f7fa")};--panel-border:${safeColor(channel.panelBorderColor, "#d7deea")};--roster-title-color:${safeColor(legacyTitleColor, "#17233d")};--roster-subtitle-color:${safeColor(channel.rosterSubtitleColor, "#748097")};--employee-action-color:${safeColor(channel.employeeActionColor, "#176b54")}">
+  const panelSkin = channel.panelSkinImageUrl || "";
+  const visibleAgents = Math.max(1, Math.min(agents.length, 3));
+  const employeeStatusLabel = !channel.employeeActionLabel || channel.employeeActionLabel === "咨询" ? "在线" : channel.employeeActionLabel;
+  return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""}" style="--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--panel-header:#ffffff;--panel-background:#f5f7fa;--panel-border:${safeColor(channel.panelBorderColor, "#d7deea")};--roster-title-color:#17233d;--roster-subtitle-color:#748097;--employee-action-color:${safeColor(channel.employeeActionColor, "#176b54")};--panel-skin:url(&quot;${escapeHtml(panelSkin)}&quot;);--visible-agents:${visibleAgents}">
     ${embedSurface ? "" : `<div class="demo-site" aria-label="官网背景图预览"></div>`}
-    <aside class="widget-panel" data-widget-panel data-shape="${escapeHtml(panelShape)}" data-avatar-shape="${escapeHtml(avatarShape)}">
+    <aside class="widget-panel ${panelSkin ? "has-custom-skin" : ""}" data-widget-panel data-shape="${escapeHtml(panelShape)}" data-avatar-shape="${escapeHtml(avatarShape)}">
+      ${panelSkin ? `<span class="widget-drag-handle" data-widget-drag-handle title="拖动客服框"></span>` : ""}
       <header class="roster-header" data-widget-header><div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择服务人员")}</strong><small>${escapeHtml(channel.rosterSubtitle || "在线为您服务")}</small></span></div><em>${agents.length} 位在线</em></header>
       <div class="agent-roster" data-agent-roster>
-        ${agents.length ? agents.map((agent) => `<button class="agent-option" data-agent-select="${escapeHtml(agent.id)}">${avatar(agent.avatar, agent.name, "roster-avatar")}<span><strong>${escapeHtml(agent.name)}</strong><small>${escapeHtml(agent.title)}</small></span><i>${escapeHtml(channel.employeeActionLabel || "咨询")}</i></button>`).join("") : `<div class="empty-roster">暂未配置可用员工</div>`}
+        ${agents.length ? agents.map((agent) => `<button class="agent-option" data-agent-select="${escapeHtml(agent.id)}">${avatar(agent.avatar, agent.name, "roster-avatar")}<span><strong title="${escapeHtml(agent.name)}">${escapeHtml(agent.name)}</strong><small title="${escapeHtml(agent.title)}">${escapeHtml(agent.title)}</small></span><i><b></b>${escapeHtml(employeeStatusLabel)}</i></button>`).join("") : `<div class="empty-roster">暂未配置可用员工</div>`}
       </div>
       <div class="widget-card-view" data-widget-card hidden><iframe data-widget-card-frame title="智能员工名片"></iframe></div>
     </aside>
@@ -866,23 +877,39 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
   const roster = root.querySelector("[data-agent-roster]");
   const card = root.querySelector("[data-widget-card]");
   const frame = root.querySelector("[data-widget-card-frame]");
+  const dragHandle = root.querySelector("[data-widget-drag-handle]");
   const channel = data.channel.config || {};
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
   let currentDeploymentId = "";
+  let localRosterPosition = null;
 
   function notifyParent(state) {
     if (!embedSurface || window.parent === window) return;
     window.parent.postMessage({
       type: "dclaw:embed-state",
       channel: publicSlug,
-      state
+      state,
+      draggable: panel.classList.contains("has-custom-skin"),
+      width: state === "open" ? Math.ceil(panel.getBoundingClientRect().width) : undefined,
+      height: state === "open" ? Math.ceil(panel.getBoundingClientRect().height) : undefined
     }, "*");
+  }
+
+  function notifyDrag(phase, deltaX, deltaY) {
+    if (!embedSurface || window.parent === window) return;
+    window.parent.postMessage({ type: "dclaw:embed-drag", channel: publicSlug, phase, deltaX, deltaY }, "*");
   }
 
   function showRoster() {
     currentDeploymentId = "";
     panel.hidden = false;
     panel.classList.remove("card-open");
+    if (!embedSurface && localRosterPosition) {
+      panel.style.left = `${localRosterPosition.left}px`;
+      panel.style.top = `${localRosterPosition.top}px`;
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+    }
     header.hidden = false;
     roster.hidden = false;
     card.hidden = true;
@@ -899,12 +926,19 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
     if (data.previewOnly) {
       parameters.set("channel", data.channel.id);
       parameters.set("preview", "draft");
+      parameters.set("previewPerson", deployment.id);
     } else if (data.mode !== "published") {
       parameters.set("deployment", deployment.id);
       parameters.set("preview", "draft");
     }
     frame.src = `/channels/${encodeURIComponent(deployment.publicSlug || "channel-preview")}?${parameters}`;
     panel.classList.add("card-open");
+    if (!embedSurface) {
+      panel.style.left = "";
+      panel.style.top = "";
+      panel.style.right = "";
+      panel.style.bottom = "";
+    }
     header.hidden = true;
     roster.hidden = true;
     card.hidden = false;
@@ -912,6 +946,41 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
   }
 
   root.querySelectorAll("[data-agent-select]").forEach((button) => button.addEventListener("click", () => showCard(button.dataset.agentSelect)));
+  if (dragHandle) {
+    let drag = null;
+    dragHandle.addEventListener("pointerdown", (event) => {
+      if (panel.classList.contains("card-open")) return;
+      event.preventDefault();
+      dragHandle.setPointerCapture(event.pointerId);
+      const panelRect = panel.getBoundingClientRect();
+      const parentRect = panel.offsetParent.getBoundingClientRect();
+      drag = { pointerId: event.pointerId, screenX: event.screenX, screenY: event.screenY, clientX: event.clientX, clientY: event.clientY, left: panelRect.left - parentRect.left, top: panelRect.top - parentRect.top, parentWidth: parentRect.width, parentHeight: parentRect.height, width: panelRect.width, height: panelRect.height };
+      panel.classList.add("is-dragging");
+      notifyDrag("start", 0, 0);
+    });
+    dragHandle.addEventListener("pointermove", (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const deltaX = embedSurface ? event.screenX - drag.screenX : event.clientX - drag.clientX;
+      const deltaY = embedSurface ? event.screenY - drag.screenY : event.clientY - drag.clientY;
+      if (embedSurface) notifyDrag("move", deltaX, deltaY);
+      else {
+        const margin = 24;
+        panel.style.left = `${Math.min(drag.parentWidth - drag.width - margin, Math.max(margin, drag.left + deltaX))}px`;
+        panel.style.top = `${Math.min(drag.parentHeight - drag.height - margin, Math.max(margin, drag.top + deltaY))}px`;
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        localRosterPosition = { left: Number.parseFloat(panel.style.left), top: Number.parseFloat(panel.style.top) };
+      }
+    });
+    const finishDrag = (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (embedSurface) notifyDrag("end", event.screenX - drag.screenX, event.screenY - drag.screenY);
+      panel.classList.remove("is-dragging");
+      drag = null;
+    };
+    dragHandle.addEventListener("pointerup", finishDrag);
+    dragHandle.addEventListener("pointercancel", finishDrag);
+  }
   window.addEventListener("message", (event) => {
     if (event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === "dclaw:website-card-back") showRoster();
   });

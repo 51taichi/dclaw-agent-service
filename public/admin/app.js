@@ -176,7 +176,7 @@ function renderPersonChannels() {
 }
 
 const WEBSITE_BACKGROUND_KEYS = new Set(["homepageImageUrl"]);
-const WEBSITE_CONFIG_KEYS = new Set(["mascotImageUrl", "rosterTitle", "rosterTitleColor", "rosterSubtitle", "rosterSubtitleColor", "employeeActionLabel", "employeeActionColor", "panelHeaderColor", "panelBackgroundColor", "panelBorderColor", "panelShape", "employeeAvatarShape", "allowedDomains"]);
+const WEBSITE_CONFIG_KEYS = new Set(["panelSkinImageUrl", "employeeActionLabel", "employeeActionColor", "employeeAvatarShape", "panelBorderColor", "panelShape", "allowedDomains"]);
 
 function channelFor(provider) {
   return state.channels.find((item) => item.provider === provider) || null;
@@ -217,9 +217,7 @@ function renderProviderForm(provider) {
   if (provider === "miniapp") renderMiniappCredentialForm(form);
   form.elements.enabled.checked = channel?.enabled !== false;
   const values = { ...(channel?.config || {}) };
-  if (provider === "website" && values.panelHeaderColor == null && /^#fff(?:fff)?$/i.test(values.rosterTitleColor || "")) {
-    values.rosterTitleColor = "#17233d";
-  }
+  if (provider === "website" && (!values.employeeActionLabel || values.employeeActionLabel === "咨询")) values.employeeActionLabel = "在线";
   const fields = configFieldsFor(provider);
   if (provider === "website") {
     renderDynamicFields(els.websiteBackgroundFields, fields.filter((field) => WEBSITE_BACKGROUND_KEYS.has(field.key)), values);
@@ -284,7 +282,7 @@ function renderDynamicFields(container, fields, values) {
     if (field.type === "optional-boolean") return `<label class="${fieldClass}" ${target}>${label}<select data-config-key="${field.key}" data-config-type="optional-boolean"><option value="" ${value === "" || value == null ? "selected" : ""}>继承渠道设置</option><option value="true" ${value === true || value === "true" ? "selected" : ""}>启用</option><option value="false" ${value === false || value === "false" ? "selected" : ""}>停用</option></select></label>`;
     if (field.type === "select") return `<label class="${fieldClass}" ${target}>${label}<select data-config-key="${field.key}" data-config-type="select">${field.options.map((option) => `<option value="${escapeHtml(option)}" ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`;
     if (field.type === "video" || field.type === "image") {
-      return mediaFieldMarkup({ key: field.key, label: field.label, kind: field.type, value: value || "" });
+      return mediaFieldMarkup({ key: field.key, label: field.label, kind: field.type, value: value || "", imageSpec: field.imageSpec, fullWidth: field.fullWidth });
     }
     const multiline = ["textarea", "list", "resources"].includes(field.type);
     const shown = field.type === "list" ? (Array.isArray(value) ? value.join("\n") : "") : field.type === "resources" ? (Array.isArray(value) ? value.map((item) => `${item.name || "资料"}|${item.url || ""}`).join("\n") : "") : value || "";
@@ -299,7 +297,7 @@ function renderDynamicFields(container, fields, values) {
   }).join("");
 }
 
-function mediaFieldMarkup({ key, label, kind, value = "", fixedName = "" }) {
+function mediaFieldMarkup({ key, label, kind, value = "", fixedName = "", imageSpec = null, fullWidth = false }) {
   const rule = ADMIN_MEDIA_RULES[kind];
   const target = fixedName
     ? `name="${escapeHtml(fixedName)}" data-fixed-media-value="${escapeHtml(fixedName)}"`
@@ -307,13 +305,16 @@ function mediaFieldMarkup({ key, label, kind, value = "", fixedName = "" }) {
   const uploadTarget = fixedName
     ? `data-fixed-media-upload="${escapeHtml(fixedName)}"`
     : `data-media-upload="${escapeHtml(key)}"`;
-  return `<div class="media-config-field" data-media-field data-media-kind="${kind}" ${fixedName ? "" : `data-template-target="${escapeHtml(key)}"`}>
+  const specAttributes = imageSpec ? `data-image-width="${imageSpec.width}" data-image-height="${imageSpec.height}" data-image-transparent="${imageSpec.transparent ? "true" : "false"}"` : "";
+  const accept = imageSpec?.transparent ? "image/png,image/webp,.png,.webp" : rule.accept;
+  const specMarkup = imageSpec ? `<small class="media-spec-note">规格 ${imageSpec.width}×${imageSpec.height}px · 1–${imageSpec.maxVisibleItems || 3} 人动态高度，更多员工内部滚动</small>` : "";
+  return `<div class="media-config-field ${imageSpec ? "has-image-spec" : ""} ${fullWidth ? "wide" : ""}" data-media-field data-media-kind="${kind}" ${specAttributes} ${fixedName ? "" : `data-template-target="${escapeHtml(key)}"`}>
     ${fieldLabelMarkup(label, "i-image")}
     <input type="hidden" ${target} value="${escapeHtml(value)}"/>
     <div class="media-upload-content">
       <div class="media-asset-preview" data-media-preview>${mediaPreviewMarkup(kind, value)}</div>
-      <div class="media-asset-copy"><strong data-media-state>${value ? "已上传" : "未上传"}</strong><small>${value ? escapeHtml(assetName(value)) : ""}</small></div>
-      <label class="asset-file-button"><input type="file" ${uploadTarget} data-media-kind="${kind}" accept="${rule.accept}" hidden/><span>${value ? `更换${rule.label}` : `上传${rule.label}`}</span></label>
+      <div class="media-asset-copy"><strong data-media-state>${value ? "已上传" : "未上传"}</strong><small>${value ? escapeHtml(assetName(value)) : ""}</small>${specMarkup}</div>
+      <label class="asset-file-button"><input type="file" ${uploadTarget} data-media-kind="${kind}" accept="${accept}" hidden/><span>${value ? `更换${rule.label}` : `上传${rule.label}`}</span></label>
       <button class="media-clear-button" type="button" data-media-clear ${value ? "" : "hidden"}>移除</button>
     </div>
   </div>`;
@@ -334,6 +335,38 @@ function assetName(value) {
   const clean = String(value || "").split(/[?#]/, 1)[0];
   const name = clean.split("/").filter(Boolean).at(-1) || "已上传文件";
   try { return decodeURIComponent(name); } catch { return name; }
+}
+
+async function validateMediaSpec(file, wrapper) {
+  const width = Number(wrapper.dataset.imageWidth || 0);
+  const height = Number(wrapper.dataset.imageHeight || 0);
+  if (!width || !height) return;
+  if (wrapper.dataset.imageTransparent === "true" && !["image/png", "image/webp"].includes(file.type)) throw new Error("定制客服框仅支持透明 PNG 或 WebP 图片");
+  const dimensions = await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      let hasTransparency = true;
+      if (wrapper.dataset.imageTransparent === "true") {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        hasTransparency = false;
+        for (let index = 3; index < pixels.length; index += 4) {
+          if (pixels[index] < 255) { hasTransparency = true; break; }
+        }
+      }
+      URL.revokeObjectURL(url);
+      resolve({ width: image.naturalWidth, height: image.naturalHeight, hasTransparency });
+    };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("无法读取图片尺寸")); };
+    image.src = url;
+  });
+  if (dimensions.width !== width || dimensions.height !== height) throw new Error(`定制客服框必须为 ${width}×${height}px，当前为 ${dimensions.width}×${dimensions.height}px`);
+  if (!dimensions.hasTransparency) throw new Error("定制客服框必须包含透明区域，不能使用不透明底图");
 }
 
 function updateMediaField(wrapper, value) {
@@ -405,18 +438,21 @@ function syncFieldMapValues(provider) {
     const people = state.people.filter((person) => person.enabled !== false);
     const samplePeople = people.length ? people : [
       { name: "张三", title: "客户经理", avatarUrl: "" },
-      { name: "李四", title: "产品经理", avatarUrl: "" },
-      { name: "王五", title: "技术支持", avatarUrl: "" }
+      { name: "李四", title: "产品经理", avatarUrl: "" }
     ];
-    const actionLabel = values.employeeActionLabel || "咨询";
+    const actionLabel = values.employeeActionLabel || "在线";
     els.mapRosterCount.textContent = `${people.length || samplePeople.length} 位在线`;
-    els.websiteRosterMap.style.setProperty("--map-panel-header", safeMapColor(values.panelHeaderColor, "#ffffff"));
-    els.websiteRosterMap.style.setProperty("--map-panel-background", safeMapColor(values.panelBackgroundColor, "#f5f7fa"));
+    els.websiteRosterMap.style.setProperty("--map-panel-header", "#ffffff");
+    els.websiteRosterMap.style.setProperty("--map-panel-background", "#f5f7fa");
     els.websiteRosterMap.style.setProperty("--map-panel-border", safeMapColor(values.panelBorderColor, "#d7deea"));
     els.websiteRosterMap.style.setProperty("--map-action-color", safeMapColor(values.employeeActionColor, "#176b54"));
+    const panelSkin = values.panelSkinImageUrl || "";
+    els.websiteRosterMap.classList.toggle("has-custom-skin", Boolean(panelSkin));
+    els.websiteRosterMap.style.setProperty("--map-panel-skin", panelSkin ? `url("${String(panelSkin).replace(/["\\]/g, "")}")` : "none");
+    els.websiteRosterMap.style.setProperty("--map-visible-agents", String(Math.max(1, Math.min(samplePeople.length, 3))));
     els.websiteRosterMap.dataset.shape = values.panelShape || "轻圆角";
     els.websiteRosterMap.dataset.avatarShape = values.employeeAvatarShape || "圆形";
-    els.mapRosterPeople.innerHTML = samplePeople.map((person) => `<div class="map-roster-person">${person.avatarUrl ? `<img data-template-slot="employeeAvatarShape" src="${escapeHtml(person.avatarUrl)}" alt=""/>` : `<i data-template-slot="employeeAvatarShape">${escapeHtml((person.name || "人").slice(0, 1))}</i>`}<span><strong>${escapeHtml(person.name || "张三")}</strong><small>${escapeHtml(person.title || "智能员工")}</small></span><b data-template-slot="employeeActionLabel" data-color-slot="employeeActionColor">${escapeHtml(actionLabel)}</b></div>`).join("");
+    els.mapRosterPeople.innerHTML = samplePeople.map((person) => `<div class="map-roster-person">${person.avatarUrl ? `<img data-template-slot="employeeAvatarShape" src="${escapeHtml(person.avatarUrl)}" alt=""/>` : `<i data-template-slot="employeeAvatarShape">${escapeHtml((person.name || "人").slice(0, 1))}</i>`}<span><strong>${escapeHtml(person.name || "张三")}</strong><small>${escapeHtml(person.title || "智能员工")}</small></span><b data-template-slot="employeeActionLabel" data-color-slot="employeeActionColor"><i></i>${escapeHtml(actionLabel)}</b></div>`).join("");
     return;
   }
   const topics = Array.isArray(values.assistantTopics) ? values.assistantTopics : [];
@@ -632,6 +668,10 @@ async function persistProviderConfig(provider, form) {
       ...readDynamicFields(container)
     }
   };
+  if (provider === "website") {
+    delete body.config.panelHeaderColor;
+    delete body.config.panelBackgroundColor;
+  }
   if (provider === "miniapp") {
     await persistMiniappCredential(form);
   }
@@ -826,7 +866,7 @@ function bindEvents() {
     if (!input?.files?.[0]) return;
     const wrapper = input.closest(".media-config-field");
     wrapper.classList.add("is-uploading");
-    uploadAdminAsset(input.files[0], input.dataset.mediaKind).then((asset) => {
+    validateMediaSpec(input.files[0], wrapper).then(() => uploadAdminAsset(input.files[0], input.dataset.mediaKind)).then((asset) => {
       updateMediaField(wrapper, asset.url);
       toast(`${asset.type === "video" ? "视频" : "图片"}已上传，保存配置后生效`);
     }).catch(handleError).finally(() => {

@@ -113,9 +113,9 @@ test("seed migrates the two real channels into one workspace and removes local d
   const channelTypes = await request(app.baseUrl, "/api/admin/channel-types");
   const websiteFields = channelTypes.data.items.find((item) => item.provider === "website").channelFields;
   assert.ok(websiteFields.some((field) => field.key === "homepageImageUrl" && field.type === "image"));
-  assert.ok(websiteFields.some((field) => field.key === "mascotImageUrl" && field.type === "image"));
-  assert.ok(websiteFields.some((field) => field.key === "rosterTitle" && field.colorKey === "rosterTitleColor"));
+  assert.equal(websiteFields.some((field) => ["mascotImageUrl", "rosterTitle", "rosterSubtitle"].includes(field.key)), false);
   assert.ok(websiteFields.some((field) => field.key === "panelBorderColor" && field.type === "color"));
+  assert.equal(websiteFields.some((field) => ["panelHeaderColor", "panelBackgroundColor"].includes(field.key)), false);
   assert.ok(websiteFields.some((field) => field.key === "panelShape" && field.options.includes("直角")));
   assert.ok(websiteFields.some((field) => field.key === "employeeAvatarShape" && field.options.includes("圆角方形")));
   assert.equal(websiteFields.some((field) => ["companyName", "companyDescription", "heroButtonUrl", "launcherLabel", "launcherPositionX", "launcherPositionY"].includes(field.key)), false);
@@ -123,6 +123,19 @@ test("seed migrates the two real channels into one workspace and removes local d
   assert.equal(accounts.data.items.some((item) => item.id === "fake-demo"), false);
   assert.ok(accounts.data.items.filter((item) => item.personId).every((item) => item.person?.name === "向小顶"));
   assert.equal(accounts.data.items.filter((item) => !item.personId).length, 2);
+});
+
+test("website channel preview supplies two sample employees only when no real deployment exists", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  await request(app.baseUrl, "/api/admin/workspaces", { method: "POST", body: { id: "preview-company", slug: "preview-company", name: "预览公司", enabled: true } });
+  await request(app.baseUrl, "/api/admin/workspaces/preview-company/channels", { method: "POST", body: { id: "preview-company-website", provider: "website", name: "官网客服", enabled: true, config: {} } });
+  const preview = await request(app.baseUrl, "/api/admin/channels/preview-company-website/preview");
+
+  assert.equal(preview.response.status, 200);
+  assert.equal(preview.data.previewOnly, true);
+  assert.deepEqual(preview.data.deployments.map((item) => item.person.name), ["张三", "李四"]);
 });
 
 test("workspace miniapp credentials are encrypted and never returned to the admin browser", async (t) => {

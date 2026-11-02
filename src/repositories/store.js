@@ -469,9 +469,12 @@ export class Store {
       || this.listDeployments(channel.workspaceId).find((item) => item.workspaceChannelId === channel.id);
     if (selectedDeployment) return this.channelPreview(selectedDeployment.id);
     const workspace = this.getWorkspace(channel.workspaceId);
-    const person = { id: "channel-preview-person", workspaceId: workspace.id, name: "张三", title: "智能员工", avatarUrl: "", enabled: true, persona: {}, profile: { companyName: workspace.name } };
-    const deployment = {
-      id: `channel-preview-${channel.id}`,
+    const previewPeople = [
+      { id: "channel-preview-person-1", workspaceId: workspace.id, name: "张三", title: "智能员工", avatarUrl: "", enabled: true, persona: {}, profile: { companyName: workspace.name } },
+      ...(channel.provider === "website" ? [{ id: "channel-preview-person-2", workspaceId: workspace.id, name: "李四", title: "客户经理", avatarUrl: "", enabled: true, persona: {}, profile: { companyName: workspace.name } }] : [])
+    ];
+    const deployments = previewPeople.map((person, index) => ({
+      id: `channel-preview-${channel.id}-${index + 1}`,
       workspaceId: workspace.id,
       workspaceChannelId: channel.id,
       personId: person.id,
@@ -481,10 +484,12 @@ export class Store {
       accountId: channel.assistantAccountId,
       publicSlug: "",
       enabled: true,
-      sortOrder: 0,
+      sortOrder: index * 10,
       config: person.profile,
       person
-    };
+    }));
+    const [deployment] = deployments;
+    const person = deployment.person;
     return {
       schemaVersion: 3,
       mode: "draft",
@@ -494,7 +499,7 @@ export class Store {
       person,
       channel,
       deployment,
-      deployments: [deployment],
+      deployments,
       endpoints: {}
     };
   }

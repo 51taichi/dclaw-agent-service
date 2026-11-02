@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { COMPONENT_TYPES, renderConversationComponent } from "../public/components/cards.js";
+import { getChannelType } from "../src/channel-catalog.js";
 
 test("conversation component catalog exposes every supported renderer", () => {
   assert.deepEqual(COMPONENT_TYPES, [
@@ -64,6 +65,34 @@ test("miniapp opens on a workspace roster and navigates to independently shareab
   assert.match(cardSource, /uni\.reLaunch\(\{ url: "\/pages\/home\/index" \}\)/);
   assert.doesNotMatch(cardSource, /query\.slug \|\| "dingmai-assistant"/);
   assert.match(cardSource, /imageUrl: profile\.value\.avatar/);
+});
+
+test("website custom frame keeps a fixed transparent skin while the employee list grows independently", () => {
+  const website = getChannelType("website");
+  const skinField = website.channelFields.find((field) => field.key === "panelSkinImageUrl");
+  const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
+  const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
+  const previewStyles = readFileSync(new URL("../public/channel-preview/styles.css", import.meta.url), "utf8");
+  const embedSource = readFileSync(new URL("../public/embed/dclaw-agent.js", import.meta.url), "utf8");
+
+  assert.deepEqual(skinField.imageSpec, { width: 490, height: 472, transparent: true, topSlice: 262, maxVisibleItems: 3 });
+  assert.match(adminSource, /定制客服框必须为 \$\{width\}×\$\{height\}px/);
+  assert.match(adminSource, /定制客服框必须包含透明区域/);
+  assert.match(previewSource, /Math\.max\(1, Math\.min\(agents\.length, 3\)\)/);
+  assert.match(previewSource, /width: state === "open" \? Math\.ceil\(panel\.getBoundingClientRect\(\)\.width\)/);
+  assert.match(previewSource, /height: state === "open" \? Math\.ceil\(panel\.getBoundingClientRect\(\)\.height\)/);
+  assert.match(previewStyles, /border-image-slice:\s*262 6 6 6 fill/);
+  assert.match(previewStyles, /width:\s*138px;[^}]*height:\s*calc\(83px \+ var\(--visible-agents, 1\) \* 48px\)/);
+  assert.match(previewStyles, /grid-auto-rows:\s*44px;[^}]*padding:\s*5px/);
+  assert.match(previewStyles, /agent-option > span[^}]*height:\s*30px/);
+  assert.doesNotMatch(previewStyles, /has-custom-skin:not\(\.card-open\)[^{]*\{[^}]*transform:\s*scale/);
+  assert.match(previewStyles, /header\s*\{\s*display:\s*none/);
+  assert.match(previewStyles, /\.widget-drag-handle\s*\{/);
+  assert.match(previewSource, /type:\s*"dclaw:embed-drag"/);
+  assert.match(previewSource, /parameters\.set\("previewPerson", deployment\.id\)/);
+  assert.match(embedSource, /rosterWidth = clamp\(Number\(message\.width\)/);
+  assert.match(embedSource, /rosterHeight = clamp\(Number\(message\.height\)/);
+  assert.match(embedSource, /message\.type === "dclaw:embed-drag"/);
 });
 
 test("agent responses render as plain answer cards and message defaults to customer", () => {
@@ -153,7 +182,7 @@ test("website roster opens the shared card renderer instead of a separate chat U
   assert.match(previewSource, /showRoster\(\);/);
   assert.doesNotMatch(previewSource, /data-widget-launcher|function closeWidget\(/);
   assert.match(embedSource, /var state = "open"/);
-  assert.match(embedSource, /state === "card" \? 420 : Math\.min\(276/);
+  assert.match(embedSource, /state === "card" \? 420 : Math\.min\(rosterWidth/);
   assert.doesNotMatch(previewSource, /function showChat\(/);
 });
 

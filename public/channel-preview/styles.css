@@ -218,6 +218,23 @@ html.embed-surface #previewRoot { width: 100%; height: 100%; background: transpa
 .roster-avatar, .widget-avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(234,240,251,.84); color: #204f91; font-size: 11px; font-weight: 900; object-fit: cover; }
 .widget-panel[data-avatar-shape="圆角方形"] .roster-avatar { border-radius: 8px; }
 .empty-roster { display: grid; min-height: 240px; place-items: center; color: #778198; }
+.widget-panel.has-custom-skin:not(.card-open) { right: 32px; bottom: 32px; width: 138px; height: calc(83px + var(--visible-agents, 1) * 48px); padding: 74px 2px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-sizing: border-box; overflow: visible; grid-template-rows: minmax(0, 1fr); }
+.widget-panel.has-custom-skin:not(.card-open)::before { position: absolute; z-index: 0; inset: 0; border: solid transparent; border-width: 74px 2px 3px; border-image-source: var(--panel-skin); border-image-slice: 262 6 6 6 fill; border-image-width: 74px 2px 3px 2px; border-image-repeat: stretch; content: ""; pointer-events: none; }
+.widget-drag-handle { position: absolute; z-index: 3; top: 0; right: 0; left: 0; height: 74px; cursor: grab; touch-action: none; user-select: none; }
+.widget-panel.is-dragging .widget-drag-handle { cursor: grabbing; }
+.widget-panel.card-open .widget-drag-handle { display: none; }
+.widget-panel.has-custom-skin:not(.card-open) header, .widget-panel.has-custom-skin:not(.card-open) .agent-roster { position: relative; z-index: 1; }
+.widget-panel.has-custom-skin:not(.card-open) header { display: none; }
+.widget-panel.has-custom-skin:not(.card-open) .agent-roster { display: grid; grid-auto-rows: 44px; align-content: start; gap: 4px; padding: 5px; background: transparent; }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 5px; height: 44px; min-height: 44px; margin: 0; padding: 5px; border-radius: 6px; background: rgba(255,255,255,.9); }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option > span { display: grid; grid-template-rows: 15px 13px; align-content: center; height: 30px; }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option strong { font-size: 11px; line-height: 15px; }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option small { margin-top: 0; font-size: 8px; line-height: 13px; }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option > i { display: inline-flex; align-items: center; gap: 3px; padding: 3px 4px; font-size: 8px; white-space: nowrap; }
+.widget-panel.has-custom-skin:not(.card-open) .agent-option > i > b { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 14%, transparent); }
+.widget-panel.has-custom-skin:not(.card-open) .roster-avatar { width: 30px; height: 30px; }
+.widget-panel.has-custom-skin:not(.card-open) .empty-roster { min-height: 44px; background: rgba(255,255,255,.84); }
+.embed-mode .widget-panel.has-custom-skin:not(.card-open) { right: 0; bottom: 0; left: auto; width: 138px; }
 .widget-card-view { grid-area: 1 / 1 / -1 / -1; min-width: 0; min-height: 0; background: #f4f5f7; }
 .widget-card-view iframe { display: block; width: 100%; height: 100%; border: 0; background: #f4f5f7; }
 .widget-chat-view { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
