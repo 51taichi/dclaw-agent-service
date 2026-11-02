@@ -3,12 +3,13 @@ const state = {
   miniappConfig: null,
   person: null, creatingWorkspace: false, creatingPerson: false,
   agentConfigs: [], agentDefaults: { defaultAgentConfigId: "" },
-  agentConfig: null, creatingAgentConfig: false, configProvider: "website", focusedConfigField: "", websiteMapOpen: false, miniappMapFace: "back"
+  agentConfig: null, creatingAgentConfig: false, configProvider: "website", focusedConfigField: "", miniappMapFace: "back"
 };
 let previewRevision = 0;
 
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.getAttribute("id"), node]));
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+const safeMapColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
 
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...options.headers }, body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body });
@@ -174,7 +175,8 @@ function renderPersonChannels() {
   }).join("") || '<div class="list-empty compact-empty">还没有配置端口</div>';
 }
 
-const WEBSITE_CONFIG_KEYS = new Set(["companyName", "companyNameColor", "companyDescription", "homepageImageUrl", "heroButtonLabel", "heroButtonUrl", "mascotImageUrl", "launcherLabel", "rosterTitle", "launcherPositionX", "launcherPositionY", "allowedDomains"]);
+const WEBSITE_BACKGROUND_KEYS = new Set(["homepageImageUrl"]);
+const WEBSITE_CONFIG_KEYS = new Set(["mascotImageUrl", "rosterTitle", "rosterTitleColor", "rosterSubtitle", "rosterSubtitleColor", "employeeActionLabel", "employeeActionColor", "panelHeaderColor", "panelBackgroundColor", "panelBorderColor", "panelShape", "employeeAvatarShape", "allowedDomains"]);
 
 function channelFor(provider) {
   return state.channels.find((item) => item.provider === provider) || null;
@@ -186,7 +188,7 @@ function channelTypeFor(provider) {
 
 function configFieldsFor(provider) {
   const fields = channelTypeFor(provider)?.channelFields || [];
-  return provider === "website" ? fields.filter((field) => WEBSITE_CONFIG_KEYS.has(field.key)) : fields;
+  return provider === "website" ? fields.filter((field) => WEBSITE_CONFIG_KEYS.has(field.key) || WEBSITE_BACKGROUND_KEYS.has(field.key)) : fields;
 }
 
 function renderConfiguration() {
@@ -215,13 +217,14 @@ function renderProviderForm(provider) {
   if (provider === "miniapp") renderMiniappCredentialForm(form);
   form.elements.enabled.checked = channel?.enabled !== false;
   const values = { ...(channel?.config || {}) };
-  if (provider === "website") {
-    if (!values.companyName) values.companyName = state.workspace?.name || "";
-    if (!values.companyDescription) values.companyDescription = state.workspace?.companyContext?.description || "";
-    if (values.launcherPositionX == null) values.launcherPositionX = values.position === "left" ? 0.08 : 0.92;
-    if (values.launcherPositionY == null) values.launcherPositionY = 0.88;
+  if (provider === "website" && values.panelHeaderColor == null && /^#fff(?:fff)?$/i.test(values.rosterTitleColor || "")) {
+    values.rosterTitleColor = "#17233d";
   }
-  renderDynamicFields(container, configFieldsFor(provider), values);
+  const fields = configFieldsFor(provider);
+  if (provider === "website") {
+    renderDynamicFields(els.websiteBackgroundFields, fields.filter((field) => WEBSITE_BACKGROUND_KEYS.has(field.key)), values);
+    renderDynamicFields(container, fields.filter((field) => WEBSITE_CONFIG_KEYS.has(field.key)), values);
+  } else renderDynamicFields(container, fields, values);
   const agentOverrideEnabled = Boolean(channel?.assistantAgentConfigId);
   form.elements.assistantAgentOverrideEnabled.checked = agentOverrideEnabled;
   delete form.elements.assistantAgentConfigId.dataset.overrideValue;
@@ -231,6 +234,7 @@ function renderProviderForm(provider) {
   } else {
     form.elements.enabled.disabled = false;
     form.elements.assistantAgentOverrideEnabled.disabled = false;
+    if (provider === "website") els.websiteBackgroundFields.querySelectorAll("button, input, select, textarea").forEach((element) => { element.disabled = false; });
     container.querySelectorAll("button, input, select, textarea").forEach((element) => { element.disabled = false; });
     form.querySelectorAll("button").forEach((button) => { button.disabled = false; });
   }
@@ -359,7 +363,7 @@ function renderFieldMap(provider, key = "") {
   const map = provider === "website" ? els.websiteFieldMap : els.miniappFieldMap;
   document.querySelectorAll("[data-template-slot], [data-color-slot]").forEach((slot) => slot.classList.remove("is-focused"));
   if (key) map.querySelectorAll(`[data-template-slot="${CSS.escape(key)}"], [data-color-slot="${CSS.escape(key)}"]`).forEach((slot) => slot.classList.add("is-focused"));
-  els.fieldMapHint.textContent = key ? "已定位当前字段，修改内容可实时查看" : provider === "website" ? "桌面端模板 · 拖动客服入口可调整位置" : "正面是员工名片，反面是公司助手，可点击切换";
+  els.fieldMapHint.textContent = key ? "已定位当前字段，修改内容可实时查看" : provider === "website" ? "桌面端模板 · 配置内容实时同步" : "正面是员工名片，反面是公司助手，可点击切换";
   syncFieldMapValues(provider);
   if (provider !== "website") {
     if (key) setMiniappMapFace("back");
@@ -372,19 +376,11 @@ function renderFieldMap(provider, key = "") {
     els.miniappFieldMap.querySelector(".map-assistant-fallback").hidden = !showFallback;
     return;
   }
-  if (key === "rosterTitle") state.websiteMapOpen = true;
-  if (["launcherLabel", "launcherPosition"].includes(key)) state.websiteMapOpen = false;
-  els.websiteRosterMap.hidden = !state.websiteMapOpen;
-  const x = Number(els.websiteConfigFields.querySelector('[data-config-key="launcherPositionX"]')?.value || 0.92);
-  const y = Number(els.websiteConfigFields.querySelector('[data-config-key="launcherPositionY"]')?.value || 0.88);
-  els.launcherPositionHandle.style.left = `${Math.max(0.06, Math.min(0.94, x)) * 100}%`;
-  els.launcherPositionHandle.style.top = `${Math.max(0.12, Math.min(0.92, y)) * 100}%`;
-  els.websiteFieldMap.classList.toggle("dock-left", x < 0.5);
 }
 
 function fieldMapValues(provider) {
-  const container = provider === "website" ? els.websiteConfigFields : els.miniappConfigFields;
-  return readDynamicFields(container);
+  if (provider === "website") return { ...readDynamicFields(els.websiteBackgroundFields), ...readDynamicFields(els.websiteConfigFields) };
+  return readDynamicFields(els.miniappConfigFields);
 }
 
 function syncFieldMapValues(provider) {
@@ -407,8 +403,20 @@ function syncFieldMapValues(provider) {
     const homepageImage = values.homepageImageUrl || "/console/assets/moosee-work-serious-scene.png";
     els.websiteFieldMap.querySelector(".map-site-hero").style.setProperty("--map-homepage-image", `url("${String(homepageImage).replace(/["\\]/g, "")}")`);
     const people = state.people.filter((person) => person.enabled !== false);
-    els.mapRosterCount.textContent = `${people.length} 位成员在线`;
-    els.mapRosterPeople.innerHTML = (people.length ? people : [{ name: "张三", title: "智能员工", avatarUrl: "" }]).slice(0, 3).map((person) => `<div class="map-roster-person">${person.avatarUrl ? `<img src="${escapeHtml(person.avatarUrl)}" alt=""/>` : `<i>${escapeHtml((person.name || "人").slice(0, 1))}</i>`}<span><strong>${escapeHtml(person.name || "张三")}</strong><small>${escapeHtml(person.title || "智能员工")}</small></span><b>联系</b></div>`).join("");
+    const samplePeople = people.length ? people : [
+      { name: "张三", title: "客户经理", avatarUrl: "" },
+      { name: "李四", title: "产品经理", avatarUrl: "" },
+      { name: "王五", title: "技术支持", avatarUrl: "" }
+    ];
+    const actionLabel = values.employeeActionLabel || "咨询";
+    els.mapRosterCount.textContent = `${people.length || samplePeople.length} 位在线`;
+    els.websiteRosterMap.style.setProperty("--map-panel-header", safeMapColor(values.panelHeaderColor, "#ffffff"));
+    els.websiteRosterMap.style.setProperty("--map-panel-background", safeMapColor(values.panelBackgroundColor, "#f5f7fa"));
+    els.websiteRosterMap.style.setProperty("--map-panel-border", safeMapColor(values.panelBorderColor, "#d7deea"));
+    els.websiteRosterMap.style.setProperty("--map-action-color", safeMapColor(values.employeeActionColor, "#176b54"));
+    els.websiteRosterMap.dataset.shape = values.panelShape || "轻圆角";
+    els.websiteRosterMap.dataset.avatarShape = values.employeeAvatarShape || "圆形";
+    els.mapRosterPeople.innerHTML = samplePeople.map((person) => `<div class="map-roster-person">${person.avatarUrl ? `<img data-template-slot="employeeAvatarShape" src="${escapeHtml(person.avatarUrl)}" alt=""/>` : `<i data-template-slot="employeeAvatarShape">${escapeHtml((person.name || "人").slice(0, 1))}</i>`}<span><strong>${escapeHtml(person.name || "张三")}</strong><small>${escapeHtml(person.title || "智能员工")}</small></span><b data-template-slot="employeeActionLabel" data-color-slot="employeeActionColor">${escapeHtml(actionLabel)}</b></div>`).join("");
     return;
   }
   const topics = Array.isArray(values.assistantTopics) ? values.assistantTopics : [];
@@ -618,7 +626,11 @@ async function persistProviderConfig(provider, form) {
   const body = {
     enabled: form.elements.enabled.checked,
     assistantAgentConfigId: form.elements.assistantAgentOverrideEnabled.checked ? form.elements.assistantAgentConfigId.value : "",
-    config: { ...(channel.config || {}), ...readDynamicFields(container) }
+    config: {
+      ...(channel.config || {}),
+      ...(provider === "website" ? readDynamicFields(els.websiteBackgroundFields) : {}),
+      ...readDynamicFields(container)
+    }
   };
   if (provider === "miniapp") {
     await persistMiniappCredential(form);
@@ -780,32 +792,34 @@ function bindEvents() {
   });
   ["website", "miniapp"].forEach((provider) => {
     const form = provider === "website" ? els.websiteConfigForm : els.miniappConfigForm;
-    const container = provider === "website" ? els.websiteConfigFields : els.miniappConfigFields;
+    const containers = provider === "website" ? [els.websiteBackgroundFields, els.websiteConfigFields] : [els.miniappConfigFields];
     form.elements.assistantAgentOverrideEnabled.addEventListener("change", (event) => {
       const select = form.elements.assistantAgentConfigId;
       if (!event.currentTarget.checked) select.dataset.overrideValue = select.value;
       renderAgentBindingSelect(form, "assistantAgentConfigId", event.currentTarget.checked, select.dataset.overrideValue || channelFor(provider)?.assistantAgentConfigId || "");
     });
     form.addEventListener("submit", (event) => saveProviderConfig(event, provider).catch(handleError));
-    container.addEventListener("focusin", (event) => {
-      const field = event.target.closest("[data-config-key]");
-      const target = event.target.closest("[data-template-target]") || field?.closest("[data-template-target]");
-      if (!target) return;
-      state.focusedConfigField = field?.dataset.templateFocus || target.dataset.templateTarget;
-      renderFieldMap(provider, state.focusedConfigField);
+    containers.forEach((container) => {
+      container.addEventListener("focusin", (event) => {
+        const field = event.target.closest("[data-config-key]");
+        const target = event.target.closest("[data-template-target]") || field?.closest("[data-template-target]");
+        if (!target) return;
+        state.focusedConfigField = field?.dataset.templateFocus || target.dataset.templateTarget;
+        renderFieldMap(provider, state.focusedConfigField);
+      });
+      container.addEventListener("click", (event) => {
+        const target = event.target.closest("[data-template-target]");
+        if (!target) return;
+        state.focusedConfigField = target.dataset.templateTarget;
+        renderFieldMap(provider, state.focusedConfigField);
+      });
+      const syncConfigInput = (event) => {
+        if (event.target.matches(".inline-color-input")) event.target.closest(".inline-color-control")?.style.setProperty("--inline-color", event.target.value);
+        renderFieldMap(provider, state.focusedConfigField);
+      };
+      container.addEventListener("input", syncConfigInput);
+      container.addEventListener("change", syncConfigInput);
     });
-    container.addEventListener("click", (event) => {
-      const target = event.target.closest("[data-template-target]");
-      if (!target) return;
-      state.focusedConfigField = target.dataset.templateTarget;
-      renderFieldMap(provider, state.focusedConfigField);
-    });
-    const syncConfigInput = (event) => {
-      if (event.target.matches(".inline-color-input")) event.target.closest(".inline-color-control")?.style.setProperty("--inline-color", event.target.value);
-      renderFieldMap(provider, state.focusedConfigField);
-    };
-    container.addEventListener("input", syncConfigInput);
-    container.addEventListener("change", syncConfigInput);
   });
   const handleMediaUpload = (event) => {
     const input = event.target.closest("[data-media-upload], [data-fixed-media-upload]");
@@ -826,10 +840,12 @@ function bindEvents() {
     updateMediaField(button.closest("[data-media-field]"), "");
   };
   els.websiteConfigFields.addEventListener("change", handleMediaUpload);
+  els.websiteBackgroundFields.addEventListener("change", handleMediaUpload);
   els.miniappConfigFields.addEventListener("change", handleMediaUpload);
   els.workspaceForm.addEventListener("change", handleMediaUpload);
   els.personForm.addEventListener("change", handleMediaUpload);
   els.websiteConfigFields.addEventListener("click", handleMediaClear);
+  els.websiteBackgroundFields.addEventListener("click", handleMediaClear);
   els.miniappConfigFields.addEventListener("click", handleMediaClear);
   els.workspaceForm.addEventListener("click", handleMediaClear);
   els.personForm.addEventListener("click", handleMediaClear);
@@ -847,38 +863,6 @@ function bindEvents() {
   els.saveMiniappCredential.addEventListener("click", () => saveMiniappCredential().catch(handleError));
   els.verifyMiniappCredential.addEventListener("click", () => verifyMiniappCredential().catch(handleError));
 
-  let draggingLauncher = false;
-  let launcherMoved = false;
-  let launcherStart = null;
-  const moveLauncher = (event) => {
-    if (!draggingLauncher) return;
-    if (!launcherMoved && launcherStart && Math.hypot(event.clientX - launcherStart.x, event.clientY - launcherStart.y) < 5) return;
-    launcherMoved = true;
-    const rect = els.websiteFieldMap.getBoundingClientRect();
-    const x = Math.max(0.06, Math.min(0.94, (event.clientX - rect.left) / rect.width));
-    const y = Math.max(0.12, Math.min(0.92, (event.clientY - rect.top) / rect.height));
-    els.websiteConfigFields.querySelector('[data-config-key="launcherPositionX"]').value = x.toFixed(3);
-    els.websiteConfigFields.querySelector('[data-config-key="launcherPositionY"]').value = y.toFixed(3);
-    state.focusedConfigField = "launcherPosition";
-    renderFieldMap("website", state.focusedConfigField);
-  };
-  els.launcherPositionHandle.addEventListener("pointerdown", (event) => {
-    draggingLauncher = true;
-    launcherMoved = false;
-    launcherStart = { x: event.clientX, y: event.clientY };
-    els.launcherPositionHandle.setPointerCapture(event.pointerId);
-  });
-  els.launcherPositionHandle.addEventListener("pointermove", moveLauncher);
-  els.launcherPositionHandle.addEventListener("pointerup", () => {
-    draggingLauncher = false;
-    if (!launcherMoved) {
-      state.websiteMapOpen = !state.websiteMapOpen;
-      els.websiteRosterMap.hidden = !state.websiteMapOpen;
-    }
-    launcherStart = null;
-  });
-  els.launcherPositionHandle.addEventListener("pointercancel", () => { draggingLauncher = false; });
-  els.closeWebsiteRosterMap.addEventListener("click", () => { state.websiteMapOpen = false; els.websiteRosterMap.hidden = true; });
 }
 
 function setField(form, name, value) { if (form.elements[name]) form.elements[name].value = value ?? ""; }

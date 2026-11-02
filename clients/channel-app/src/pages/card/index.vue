@@ -37,6 +37,7 @@
           </view>
         </view>
 
+        <text class="ai-page-disclosure front-disclosure" role="note">本服务为AI生成内容，结果仅供参考</text>
         <scroll-view class="conversation-scroll" scroll-y :scroll-into-view="frontScrollTarget">
           <view class="conversation-list">
             <ConversationItem v-for="item in frontMessages" :key="item.id" :item="item" @action="handleAction" @question="sendFrontText" @choice="submitFrontChoice" @lead="submitFrontLead" @open="openResource" />
@@ -102,7 +103,7 @@
           </view>
         </scroll-view>
 
-        <view v-if="voiceEnabled" class="voice-dock"><button class="voice-button" :class="{ active: recording && recordingFace === 'back' }" @touchstart.prevent="startRecording" @touchmove.stop.prevent="moveRecording" @touchend.prevent="finishRecording(false)" @touchcancel.prevent="finishRecording(true)" @mousedown.prevent="startRecording" @mouseup.prevent="finishRecording(false)" @mouseleave="finishRecording(true)"><AppIcon name="mic" tone="white" :size="20" /><text>{{ recording && recordingFace === 'back' ? (recordingCanceled ? '松开取消' : '松开发送，上滑取消') : assistant.voiceLabel }}</text><AppIcon name="keyboard" tone="white" :size="20" /></button><text class="voice-hint">{{ assistant.voiceHint }}</text></view>
+        <view v-if="voiceEnabled" class="voice-dock"><button class="voice-button" :class="{ active: recording && recordingFace === 'back' }" @touchstart.prevent="startRecording" @touchmove.stop.prevent="moveRecording" @touchend.prevent="finishRecording(false)" @touchcancel.prevent="finishRecording(true)" @mousedown.prevent="startRecording" @mouseup.prevent="finishRecording(false)" @mouseleave="finishRecording(true)"><AppIcon name="mic" tone="white" :size="20" /><text>{{ recording && recordingFace === 'back' ? (recordingCanceled ? '松开取消' : '松开发送，上滑取消') : assistant.voiceLabel }}</text><AppIcon name="keyboard" tone="white" :size="20" /></button><text class="voice-hint" role="note">本服务为AI生成内容，结果仅供参考</text></view>
       </view>
 
       <button class="face-switch" :style="faceSwitchStyle" :aria-label="face === 'front' ? `查看${companyName}公司名片` : `返回${profile.name}的名片`" @tap="toggleFace" @touchstart="startFaceDrag" @touchmove.stop.prevent="moveFaceDrag" @touchend="endFaceDrag"><text class="switch-label">{{ face === 'front' ? assistant.name : profile.name }}</text><image class="switch-avatar" :src="face === 'front' ? assistant.avatar : profile.avatar" mode="aspectFill" /><view class="switch-badge"><AppIcon name="rotate" tone="white" :size="11" /></view></button>
@@ -676,6 +677,9 @@ function setTextInputMode() {
 .hero.compact .compact-identity { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .conversation-scroll { flex: 1; min-height: 0; }
 .conversation-list, .company-conversation { display: flex; flex-direction: column; padding: 24rpx 24rpx 36rpx; }
+.conversation-list { padding-top: 18rpx; }
+.ai-page-disclosure { display: block; color: #7b8492; font-size: 20rpx; line-height: 30rpx; text-align: center; }
+.front-disclosure { flex: 0 0 auto; padding: 10rpx 24rpx 8rpx; background: #f5f6f8; box-sizing: border-box; }
 .scroll-anchor { width: 1rpx; height: 1rpx; }
 .composer { position: relative; flex: 0 0 auto; padding: 14rpx 20rpx max(18rpx, env(safe-area-inset-bottom)); background: rgba(244,245,247,.96); }
 .composer-shell { display: grid; grid-template-columns: 70rpx minmax(0,1fr) 70rpx 70rpx; align-items: center; gap: 8rpx; min-height: 104rpx; padding: 10rpx 14rpx; border: 1rpx solid #e3e5e8; border-radius: 44rpx; background: #fff; box-shadow: 0 10rpx 36rpx rgba(24,32,48,.13); box-sizing: border-box; }
@@ -769,6 +773,9 @@ function setTextInputMode() {
   .toggle-chevron.down { transform: translateY(-6px) rotate(45deg); }
   .hero.compact { flex-basis: 138px; padding: 50px 18px 16px; }
   .conversation-list, .company-conversation { padding: 14px 14px 24px; }
+  .conversation-list { padding-top: 10px; }
+  .ai-page-disclosure { font-size: 10px; line-height: 15px; }
+  .front-disclosure { padding: 5px 14px 4px; }
   .composer { padding: 8px 12px 12px; }
   .composer-shell { grid-template-columns: 42px minmax(0,1fr) 42px 42px; gap: 4px; min-height: 58px; padding: 6px 8px; border-width: 1px; border-radius: 22px; box-shadow: 0 5px 18px rgba(24,32,48,.13); }
   .composer-shell.has-text { grid-template-columns: minmax(0,1fr) 42px; }

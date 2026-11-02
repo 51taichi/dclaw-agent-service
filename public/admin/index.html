@@ -115,10 +115,17 @@
               <div class="config-editor-column">
                 <form id="websiteConfigForm" class="admin-form channel-config-form" data-provider-form="website">
                   <div class="config-section-head wide"><h2>官网客服</h2><div class="config-section-actions"><button class="primary" type="button" data-publish-provider="website"><svg><use href="#i-send"/></svg>发布配置</button><button class="secondary" type="button" data-deploy-provider="website"><svg><use href="#i-link"/></svg>部署</button><button class="secondary config-preview-button" type="button" data-preview-provider="website"><svg><use href="#i-eye"/></svg>预览</button><label class="row-switch" title="启用官网客服"><input name="enabled" type="checkbox"/><span></span></label></div></div>
-                  <div id="websiteConfigFields" class="dynamic-fields wide"></div>
-                  <section class="agent-binding-block wide">
-                    <div class="agent-binding-head"><span><svg><use href="#i-bot"/></svg>绑定公司助手 Agent</span><label class="row-switch" title="使用独立 Agent"><input name="assistantAgentOverrideEnabled" type="checkbox"/><span></span></label></div>
-                    <label class="agent-binding-select"><span><svg><use href="#i-link"/></svg>Agent 配置</span><select name="assistantAgentConfigId"></select></label>
+                  <section class="website-config-block wide">
+                    <header><span class="website-config-index">01</span><span><strong>官网背景图</strong><small>仅用于后台模拟客户官网效果</small></span></header>
+                    <div id="websiteBackgroundFields" class="dynamic-fields website-background-fields"></div>
+                  </section>
+                  <section class="website-config-block wide">
+                    <header><span class="website-config-index">02</span><span><strong>客服咨询模块</strong><small>固定小窗，默认展示三位员工</small></span></header>
+                    <div id="websiteConfigFields" class="dynamic-fields website-module-fields"></div>
+                    <section class="agent-binding-block website-agent-binding">
+                      <div class="agent-binding-head"><span><svg><use href="#i-bot"/></svg>绑定公司助手 Agent</span><label class="row-switch" title="使用独立 Agent"><input name="assistantAgentOverrideEnabled" type="checkbox"/><span></span></label></div>
+                      <label class="agent-binding-select"><span><svg><use href="#i-link"/></svg>Agent 配置</span><select name="assistantAgentConfigId"></select></label>
+                    </section>
                   </section>
                   <div class="form-footer wide form-actions-end"><div class="button-row"><button class="secondary" type="submit"><svg><use href="#i-save"/></svg>保存官网配置</button></div></div>
                 </form>
@@ -146,16 +153,12 @@
               <aside id="fieldMapPane" class="field-map-pane">
                 <div class="preview-head"><div><strong>配置效果</strong><small id="fieldMapHint">点击左侧字段查看对应位置</small></div></div>
                 <div id="websiteFieldMap" class="field-map website-field-map" data-field-map="website">
-                  <div class="map-browser-bar" data-template-slot="allowedDomains"><i></i><i></i><i></i><span>允许接入域名</span></div>
-                  <div class="map-site-nav"><strong data-template-slot="companyName" data-color-slot="companyNameColor" data-live-text="companyName">顶脉教育集团</strong><span>产品　服务　案例　关于我们</span></div>
-                  <div class="map-site-hero" data-template-slot="homepageImageUrl">
-                    <div><small>智能服务中心</small><h3 data-color-slot="companyNameColor" data-live-text="companyName" data-live-color="companyNameColor">顶脉教育集团</h3><strong>在线服务中心</strong><p data-template-slot="companyDescription" data-color-slot="companyDescriptionColor" data-live-text="companyDescription" data-live-color="companyDescriptionColor">多位团队成员，随时为访客提供一对一服务。</p><span class="map-site-action"><button type="button" data-template-slot="heroButtonLabel" data-color-slot="heroButtonLabelColor" data-live-text="heroButtonLabel" data-live-color="heroButtonLabelColor">了解更多</button><small data-template-slot="heroButtonUrl"><i>跳转至</i><b data-live-text="heroButtonUrl" data-empty-text="未配置跳转地址">未配置跳转地址</b></small></span></div>
+                  <div class="map-browser-bar" data-template-slot="allowedDomains"><i></i><i></i><i></i><span>官网页面效果</span></div>
+                  <div class="map-site-hero" data-template-slot="homepageImageUrl"></div>
+                  <div id="websiteRosterMap" class="map-widget-panel" data-template-slot="panelShape" data-color-slot="panelBorderColor">
+                    <header data-template-slot="panelHeaderColor"><div><img data-template-slot="mascotImageUrl" data-live-image="mascotImageUrl" alt=""/><span><strong data-template-slot="rosterTitle" data-color-slot="rosterTitleColor" data-live-text="rosterTitle" data-live-color="rosterTitleColor">选择服务人员</strong><small data-template-slot="rosterSubtitle" data-color-slot="rosterSubtitleColor" data-live-text="rosterSubtitle" data-live-color="rosterSubtitleColor">在线为您服务</small></span></div><em id="mapRosterCount">3 位在线</em></header>
+                    <div id="mapRosterPeople" class="map-roster-people" data-template-slot="panelBackgroundColor"></div>
                   </div>
-                  <div id="websiteRosterMap" class="map-widget-panel" hidden>
-                    <header><div><img data-live-image="mascotImageUrl" alt=""/><span><strong data-template-slot="rosterTitle" data-color-slot="rosterTitleColor" data-live-text="rosterTitle" data-live-color="rosterTitleColor">选择成员</strong><small id="mapRosterCount">成员在线</small></span></div><button id="closeWebsiteRosterMap" type="button" title="关闭">×</button></header>
-                    <div id="mapRosterPeople" class="map-roster-people"></div>
-                  </div>
-                  <button id="launcherPositionHandle" class="map-launcher" type="button" data-template-slot="launcherPosition"><img data-template-slot="mascotImageUrl" data-live-image="mascotImageUrl" alt=""/><b data-template-slot="launcherLabel" data-color-slot="launcherLabelColor" data-live-text="launcherLabel" data-live-color="launcherLabelColor">在线咨询</b></button>
                 </div>
                 <div id="miniappFieldMap" class="field-map miniapp-field-map" data-field-map="miniapp" hidden>
                   <div class="map-face-toolbar" aria-label="名片正反面">

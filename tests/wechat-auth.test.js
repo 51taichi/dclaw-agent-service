@@ -26,7 +26,7 @@ async function fixture() {
   });
   context.services.workspaceMiniapps.save("dingmai", {
     mode: "dedicated",
-    name: "伍合测试小程序",
+    name: "顶脉测试小程序",
     appId: "wx-test-app",
     appSecret: "wechat-test-secret"
   });
@@ -57,7 +57,7 @@ test("wechat login persists a confirmed profile by openid and restores it", asyn
   const app = await fixture();
   t.after(() => app.close());
 
-  const login = await jsonRequest(app.baseUrl, "/api/public/wechat/login", { method: "POST", body: { code: "login-code-001", publicSlug: "wuhe-assistant" } });
+  const login = await jsonRequest(app.baseUrl, "/api/public/wechat/login", { method: "POST", body: { code: "login-code-001", publicSlug: "dingmai-assistant" } });
   assert.equal(login.response.status, 200);
   assert.equal(login.data.profile.profileComplete, false);
   assert.ok(login.data.sessionToken);
@@ -73,7 +73,7 @@ test("wechat login persists a confirmed profile by openid and restores it", asyn
   assert.equal(saved.data.profile.nickName, "微信客户小王");
   assert.equal(saved.data.profile.profileComplete, true);
 
-  const restored = await jsonRequest(app.baseUrl, "/api/public/wechat/login", { method: "POST", body: { code: "login-code-002", publicSlug: "wuhe-assistant" } });
+  const restored = await jsonRequest(app.baseUrl, "/api/public/wechat/login", { method: "POST", body: { code: "login-code-002", publicSlug: "dingmai-assistant" } });
   assert.equal(restored.data.profile.nickName, "微信客户小王");
   assert.equal(restored.data.profile.avatarUrl, "http://127.0.0.1/media/avatar.jpg");
 });
@@ -109,21 +109,21 @@ test("wechat identities and session tokens are isolated by workspace and app", a
     appSecret: "acme-test-secret"
   });
 
-  const wuheLogin = await jsonRequest(app.baseUrl, "/api/public/wechat/login", {
+  const dingmaiLogin = await jsonRequest(app.baseUrl, "/api/public/wechat/login", {
     method: "POST",
-    body: { code: "wuhe-login-code", publicSlug: "wuhe-assistant" }
+    body: { code: "dingmai-login-code", publicSlug: "dingmai-assistant" }
   });
   const acmeLogin = await jsonRequest(app.baseUrl, "/api/public/wechat/login", {
     method: "POST",
     body: { code: "acme-login-code", publicSlug: "acme-card" }
   });
-  assert.equal(wuheLogin.response.status, 200);
+  assert.equal(dingmaiLogin.response.status, 200);
   assert.equal(acmeLogin.response.status, 200);
 
   await jsonRequest(app.baseUrl, "/api/public/wechat/profile", {
     method: "PUT",
-    headers: { authorization: `Bearer ${wuheLogin.data.sessionToken}` },
-    body: { nickName: "伍合访客" }
+    headers: { authorization: `Bearer ${dingmaiLogin.data.sessionToken}` },
+    body: { nickName: "顶脉访客" }
   });
   await jsonRequest(app.baseUrl, "/api/public/wechat/profile", {
     method: "PUT",
@@ -131,10 +131,10 @@ test("wechat identities and session tokens are isolated by workspace and app", a
     body: { nickName: "Acme Visitor" }
   });
 
-  assert.equal(app.store.getWechatVisitor("dingmai", "wx-test-app", "openid-visitor-001").nickName, "伍合访客");
+  assert.equal(app.store.getWechatVisitor("dingmai", "wx-test-app", "openid-visitor-001").nickName, "顶脉访客");
   assert.equal(app.store.getWechatVisitor("acme", "wx-acme-app", "openid-visitor-001").nickName, "Acme Visitor");
 
-  const [payload, signature] = wuheLogin.data.sessionToken.split(".");
+  const [payload, signature] = dingmaiLogin.data.sessionToken.split(".");
   const forgedScope = {
     ...JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
     workspaceId: "acme",

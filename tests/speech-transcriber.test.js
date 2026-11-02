@@ -50,9 +50,9 @@ test("draft preview uploads audio and sends its transcription to the Agent pipel
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
-  const previewResponse = await fetch(`${baseUrl}/api/admin/deployments/wuhe-miniapp-assistant/preview`);
+  const previewResponse = await fetch(`${baseUrl}/api/admin/deployments/dingmai-miniapp-assistant/preview`);
   const preview = await previewResponse.json();
-  assert.equal(preview.endpoints.publicMedia, "/api/admin/deployments/wuhe-miniapp-assistant/preview/media");
+  assert.equal(preview.endpoints.publicMedia, "/api/admin/deployments/dingmai-miniapp-assistant/preview/media");
 
   const uploadResponse = await fetch(`${baseUrl}${preview.endpoints.publicMedia}`, {
     method: "POST",

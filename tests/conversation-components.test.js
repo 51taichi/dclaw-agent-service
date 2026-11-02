@@ -62,13 +62,14 @@ test("miniapp opens on a workspace roster and navigates to independently shareab
   assert.match(homeSource, /\/api\/public\/miniapps\/\$\{encodeURIComponent\(appId\.value\)\}/);
   assert.match(homeSource, /uni\.navigateTo\(\{ url: `\/pages\/card\/index\?slug=/);
   assert.match(cardSource, /uni\.reLaunch\(\{ url: "\/pages\/home\/index" \}\)/);
-  assert.doesNotMatch(cardSource, /query\.slug \|\| "wuhe-assistant"/);
+  assert.doesNotMatch(cardSource, /query\.slug \|\| "dingmai-assistant"/);
   assert.match(cardSource, /imageUrl: profile\.value\.avatar/);
 });
 
 test("agent responses render as plain answer cards and message defaults to customer", () => {
   const answer = renderConversationComponent("assistant-response", { content: "这是 Agent 的直接回复。" });
   const message = renderConversationComponent("message", { content: "这是客户消息。" });
+  const miniappCard = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
   assert.match(answer, /dclaw-answer-content/);
   assert.doesNotMatch(answer, /component-kicker|<h2>|<p>/);
   assert.match(message, /customer-message/);
@@ -76,6 +77,11 @@ test("agent responses render as plain answer cards and message defaults to custo
   assert.match(answer, /data-response-action="copy"/);
   assert.match(answer, /aria-label="重新生成回复"/);
   assert.match(answer, /aria-pressed="false"/);
+  assert.equal(miniappCard.match(/本服务为AI生成内容，结果仅供参考/g)?.length, 2);
+  assert.match(miniappCard, /class="ai-page-disclosure front-disclosure" role="note">本服务为AI生成内容，结果仅供参考<\/text>\s*<scroll-view class="conversation-scroll"/);
+  assert.match(miniappCard, /class="voice-hint" role="note">本服务为AI生成内容，结果仅供参考/);
+  assert.match(miniappCard, /grid-template-rows: auto minmax\(0,1fr\)/);
+  assert.doesNotMatch(miniappCard, /company-disclosure/);
 });
 
 test("suggested questions have a clear prompt label", () => {
@@ -138,11 +144,16 @@ test("person and company conversations use the same component renderer", () => {
 
 test("website roster opens the shared card renderer instead of a separate chat UI", () => {
   const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
+  const embedSource = readFileSync(new URL("../public/embed/dclaw-agent.js", import.meta.url), "utf8");
   assert.match(previewSource, /parameters\.get\("surface"\) === "card"/);
   assert.match(previewSource, /data\.cardPresentation\?\.config \|\| data\.channel\.config/);
   assert.match(previewSource, /<iframe data-widget-card-frame/);
   assert.match(previewSource, /frame\.src = `\/channels\/\$\{encodeURIComponent\(deployment\.publicSlug \|\| "channel-preview"\)\}/);
   assert.match(previewSource, /parameters\.set\("channel", data\.channel\.id\)/);
+  assert.match(previewSource, /showRoster\(\);/);
+  assert.doesNotMatch(previewSource, /data-widget-launcher|function closeWidget\(/);
+  assert.match(embedSource, /var state = "open"/);
+  assert.match(embedSource, /state === "card" \? 420 : Math\.min\(276/);
   assert.doesNotMatch(previewSource, /function showChat\(/);
 });
 

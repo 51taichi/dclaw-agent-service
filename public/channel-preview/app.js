@@ -11,11 +11,6 @@ const DEFAULT_ASSISTANT_PRIMARY_ITEMS = ["了解集团服务", "查看课程体�
 const DEFAULT_ASSISTANT_RECOMMENDED_ITEMS = ["热门方案推荐", "企业合作咨询", "预约专属服务"];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
 const safeColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
-const safeLinkUrl = (value) => {
-  const url = String(value || "").trim();
-  if (!url) return "";
-  try { return ["http:", "https:"].includes(new URL(url).protocol) ? url : ""; } catch { return ""; }
-};
 const icons = {
   camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z"/><circle cx="12" cy="13" r="3"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
@@ -849,29 +844,19 @@ function websitePreview(data, { embedSurface = false } = {}) {
   const channel = data.channel.config || {};
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
   const agents = data.deployments.map((deployment) => identity(data, deployment));
-  const launcherX = Math.max(0.04, Math.min(0.96, Number(channel.launcherPositionX ?? (channel.position === "left" ? 0.08 : 0.92)) || 0.92));
-  const launcherY = Math.max(0.08, Math.min(0.94, Number(channel.launcherPositionY ?? 0.88) || 0.88));
-  const companyName = channel.companyName || data.workspace.name;
-  const companyDescription = channel.companyDescription || "多位团队成员，随时为访客提供一对一服务。";
   const homepageImage = channel.homepageImageUrl || "/console/assets/moosee-work-serious-scene.png";
-  const heroButtonLabel = channel.heroButtonLabel || "了解更多";
-  const heroButtonUrl = safeLinkUrl(channel.heroButtonUrl);
-  const heroAction = heroButtonUrl
-    ? `<a href="${escapeHtml(heroButtonUrl)}" target="_blank" rel="noopener">${escapeHtml(heroButtonLabel)}</a>`
-    : `<button type="button" disabled title="尚未配置跳转地址">${escapeHtml(heroButtonLabel)}</button>`;
-  return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""} ${launcherX < 0.5 ? "dock-left" : "dock-right"}" style="--launcher-x:${launcherX * 100}%;--launcher-y:${launcherY * 100}%;--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--company-name-color:${safeColor(channel.companyNameColor, "#ffffff")};--company-description-color:${safeColor(channel.companyDescriptionColor, "#ffffff")};--hero-button-label-color:${safeColor(channel.heroButtonLabelColor, "#ffffff")};--launcher-label-color:${safeColor(channel.launcherLabelColor, "#ffffff")};--roster-title-color:${safeColor(channel.rosterTitleColor, "#ffffff")}">
-    ${embedSurface ? "" : `<div class="demo-site">
-      <div class="demo-nav"><strong>${escapeHtml(companyName)}</strong><span>产品　服务　案例　关于我们</span></div>
-      <div class="demo-hero"><span>智能服务中心</span><h1>${escapeHtml(companyName)}<br/>在线服务中心</h1><p>${escapeHtml(companyDescription)}</p>${heroAction}</div>
-    </div>`}
-    <aside class="widget-panel" data-widget-panel ${embedSurface ? "hidden" : ""}>
-      <header class="roster-header" data-widget-header><div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择成员")}</strong><small>${agents.length} 位成员在线</small></span></div><button data-widget-close title="关闭">×</button></header>
+  const panelShape = ["轻圆角", "圆角", "直角"].includes(channel.panelShape) ? channel.panelShape : "轻圆角";
+  const avatarShape = channel.employeeAvatarShape === "圆角方形" ? "圆角方形" : "圆形";
+  const legacyTitleColor = channel.panelHeaderColor == null && /^#fff(?:fff)?$/i.test(channel.rosterTitleColor || "") ? "#17233d" : channel.rosterTitleColor;
+  return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""}" style="--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--panel-header:${safeColor(channel.panelHeaderColor, "#ffffff")};--panel-background:${safeColor(channel.panelBackgroundColor, "#f5f7fa")};--panel-border:${safeColor(channel.panelBorderColor, "#d7deea")};--roster-title-color:${safeColor(legacyTitleColor, "#17233d")};--roster-subtitle-color:${safeColor(channel.rosterSubtitleColor, "#748097")};--employee-action-color:${safeColor(channel.employeeActionColor, "#176b54")}">
+    ${embedSurface ? "" : `<div class="demo-site" aria-label="官网背景图预览"></div>`}
+    <aside class="widget-panel" data-widget-panel data-shape="${escapeHtml(panelShape)}" data-avatar-shape="${escapeHtml(avatarShape)}">
+      <header class="roster-header" data-widget-header><div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择服务人员")}</strong><small>${escapeHtml(channel.rosterSubtitle || "在线为您服务")}</small></span></div><em>${agents.length} 位在线</em></header>
       <div class="agent-roster" data-agent-roster>
-        ${agents.length ? agents.map((agent) => `<button class="agent-option" data-agent-select="${escapeHtml(agent.id)}">${avatar(agent.avatar, agent.name, "roster-avatar")}<span><strong>${escapeHtml(agent.name)}</strong><small>${escapeHtml(agent.title)}</small></span><i>联系</i></button>`).join("") : `<div class="empty-roster">暂未配置可用成员</div>`}
+        ${agents.length ? agents.map((agent) => `<button class="agent-option" data-agent-select="${escapeHtml(agent.id)}">${avatar(agent.avatar, agent.name, "roster-avatar")}<span><strong>${escapeHtml(agent.name)}</strong><small>${escapeHtml(agent.title)}</small></span><i>${escapeHtml(channel.employeeActionLabel || "咨询")}</i></button>`).join("") : `<div class="empty-roster">暂未配置可用员工</div>`}
       </div>
       <div class="widget-card-view" data-widget-card hidden><iframe data-widget-card-frame title="智能员工名片"></iframe></div>
     </aside>
-    <button class="widget-launcher" data-widget-launcher><img class="launcher-mascot" src="${escapeHtml(mascot)}" alt=""/><span>${escapeHtml(channel.launcherLabel || "在线咨询")}</span></button>
   </section>`;
 }
 
@@ -881,44 +866,28 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
   const roster = root.querySelector("[data-agent-roster]");
   const card = root.querySelector("[data-widget-card]");
   const frame = root.querySelector("[data-widget-card-frame]");
-  const launcher = root.querySelector("[data-widget-launcher]");
   const channel = data.channel.config || {};
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
   let currentDeploymentId = "";
 
   function notifyParent(state) {
     if (!embedSurface || window.parent === window) return;
-    const bounds = launcher.getBoundingClientRect();
     window.parent.postMessage({
       type: "dclaw:embed-state",
       channel: publicSlug,
-      state,
-      launcher: {
-        x: Math.max(0.04, Math.min(0.96, Number(channel.launcherPositionX ?? (channel.position === "left" ? 0.08 : 0.92)) || 0.92)),
-        y: Math.max(0.06, Math.min(0.94, Number(channel.launcherPositionY ?? 0.88) || 0.88)),
-        width: Math.ceil(bounds.width || 190),
-        height: Math.ceil(bounds.height || 72)
-      }
+      state
     }, "*");
-  }
-
-  function closeWidget() {
-    panel.hidden = true;
-    launcher.hidden = false;
-    notifyParent("closed");
   }
 
   function showRoster() {
     currentDeploymentId = "";
     panel.hidden = false;
     panel.classList.remove("card-open");
-    launcher.hidden = embedSurface;
     header.hidden = false;
     roster.hidden = false;
     card.hidden = true;
     frame.removeAttribute("src");
-    header.innerHTML = `<div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择成员")}</strong><small>${data.deployments.length} 位成员在线</small></span></div><button data-widget-close title="关闭">×</button>`;
-    header.querySelector("[data-widget-close]").addEventListener("click", closeWidget);
+    header.innerHTML = `<div><img class="mascot-avatar" src="${escapeHtml(mascot)}" alt=""/><span><strong>${escapeHtml(channel.rosterTitle || "选择服务人员")}</strong><small>${escapeHtml(channel.rosterSubtitle || "在线为您服务")}</small></span></div><em>${data.deployments.length} 位在线</em>`;
     notifyParent("open");
   }
 
@@ -936,23 +905,17 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
     }
     frame.src = `/channels/${encodeURIComponent(deployment.publicSlug || "channel-preview")}?${parameters}`;
     panel.classList.add("card-open");
-    launcher.hidden = true;
     header.hidden = true;
     roster.hidden = true;
     card.hidden = false;
     notifyParent("card");
   }
 
-  launcher.addEventListener("click", () => {
-    if (panel.hidden) showRoster();
-    else closeWidget();
-  });
   root.querySelectorAll("[data-agent-select]").forEach((button) => button.addEventListener("click", () => showCard(button.dataset.agentSelect)));
-  root.querySelector("[data-widget-close]").addEventListener("click", closeWidget);
   window.addEventListener("message", (event) => {
     if (event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === "dclaw:website-card-back") showRoster();
   });
-  if (embedSurface) requestAnimationFrame(() => notifyParent("closed"));
+  showRoster();
 }
 
 load().catch((error) => { root.innerHTML = `<div class="preview-error">${escapeHtml(error.message)}</div>`; });

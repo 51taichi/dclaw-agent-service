@@ -113,10 +113,12 @@ test("seed migrates the two real channels into one workspace and removes local d
   const channelTypes = await request(app.baseUrl, "/api/admin/channel-types");
   const websiteFields = channelTypes.data.items.find((item) => item.provider === "website").channelFields;
   assert.ok(websiteFields.some((field) => field.key === "homepageImageUrl" && field.type === "image"));
-  assert.ok(websiteFields.some((field) => field.key === "companyName" && field.colorKey === "companyNameColor"));
-  assert.ok(websiteFields.some((field) => field.key === "heroButtonUrl" && field.pattern === "https?://.+"));
-  assert.ok(websiteFields.some((field) => field.key === "launcherPositionX" && field.type === "hidden"));
-  assert.ok(websiteFields.some((field) => field.key === "launcherPositionY" && field.type === "hidden"));
+  assert.ok(websiteFields.some((field) => field.key === "mascotImageUrl" && field.type === "image"));
+  assert.ok(websiteFields.some((field) => field.key === "rosterTitle" && field.colorKey === "rosterTitleColor"));
+  assert.ok(websiteFields.some((field) => field.key === "panelBorderColor" && field.type === "color"));
+  assert.ok(websiteFields.some((field) => field.key === "panelShape" && field.options.includes("直角")));
+  assert.ok(websiteFields.some((field) => field.key === "employeeAvatarShape" && field.options.includes("圆角方形")));
+  assert.equal(websiteFields.some((field) => ["companyName", "companyDescription", "heroButtonUrl", "launcherLabel", "launcherPositionX", "launcherPositionY"].includes(field.key)), false);
   assert.equal(websiteFields.some((field) => field.key === "position"), false);
   assert.equal(accounts.data.items.some((item) => item.id === "fake-demo"), false);
   assert.ok(accounts.data.items.filter((item) => item.personId).every((item) => item.person?.name === "向小顶"));
@@ -184,14 +186,14 @@ test("public miniapp home resolves its workspace by AppID and lists only publish
   const unavailable = await request(app.baseUrl, "/api/public/miniapps/wx48fa13a3cc0dcf72");
   assert.equal(unavailable.response.status, 404);
 
-  await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp/publish", { method: "POST" });
+  await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp/publish", { method: "POST" });
   const home = await request(app.baseUrl, "/api/public/miniapps/wx48fa13a3cc0dcf72");
   assert.equal(home.response.status, 200);
   assert.equal(home.data.workspace.id, "dingmai");
   assert.equal(home.data.workspace.name, "顶脉教育集团");
   assert.equal(home.data.cards.length, 1);
   assert.equal(home.data.cards[0].person.name, "向小顶");
-  assert.equal(home.data.cards[0].publicSlug, "wuhe-assistant");
+  assert.equal(home.data.cards[0].publicSlug, "dingmai-assistant");
   assert.equal("companyContext" in home.data.workspace, false);
   assert.equal("persona" in home.data.cards[0].person, false);
 });
@@ -216,8 +218,8 @@ test("employee cockpit aggregates business results across website and miniapp ch
   });
   const website = inbound("website-default", "website", "website");
   const miniapp = inbound("miniapp-default", "miniapp", "miniapp");
-  app.store.recordAgentUsage({ accountId: "website-default", workspaceId: "dingmai", personId: "wuhe-assistant", conversationId: website.conversation.id, status: "succeeded", durationMs: 1200 });
-  app.store.recordAgentUsage({ accountId: "miniapp-default", workspaceId: "dingmai", personId: "wuhe-assistant", conversationId: miniapp.conversation.id, status: "failed", durationMs: 0 });
+  app.store.recordAgentUsage({ accountId: "website-default", workspaceId: "dingmai", personId: "dingmai-assistant", conversationId: website.conversation.id, status: "succeeded", durationMs: 1200 });
+  app.store.recordAgentUsage({ accountId: "miniapp-default", workspaceId: "dingmai", personId: "dingmai-assistant", conversationId: miniapp.conversation.id, status: "failed", durationMs: 0 });
 
   const cockpit = await request(app.baseUrl, "/api/accounts/website-default/dashboard");
   assert.equal(cockpit.response.status, 200);
@@ -236,11 +238,11 @@ test("website homepage button only accepts complete HTTP or HTTPS URLs", async (
   const app = await fixture();
   t.after(() => app.close());
 
-  const invalid = await request(app.baseUrl, "/api/admin/channels/wuhe-website", { method: "PUT", body: { config: { heroButtonUrl: "/about" } } });
+  const invalid = await request(app.baseUrl, "/api/admin/channels/dingmai-website", { method: "PUT", body: { config: { heroButtonUrl: "/about" } } });
   assert.equal(invalid.response.status, 400);
   assert.match(invalid.data.error, /HTTP.*HTTPS/);
 
-  const valid = await request(app.baseUrl, "/api/admin/channels/wuhe-website", { method: "PUT", body: { config: { heroButtonUrl: "https://www.example.com/about" } } });
+  const valid = await request(app.baseUrl, "/api/admin/channels/dingmai-website", { method: "PUT", body: { config: { heroButtonUrl: "https://www.example.com/about" } } });
   assert.equal(valid.response.status, 200);
   assert.equal(valid.data.config.heroButtonUrl, "https://www.example.com/about");
 });
@@ -258,14 +260,14 @@ test("Agent binding resolves person then workspace then platform without copying
   account = app.store.getAccount("miniapp-default", { includeSecrets: true });
   assert.equal(account.agentBinding.inheritedFrom, "workspace");
 
-  let assistantAccount = app.store.getAccount("wuhe-miniapp-company-assistant", { includeSecrets: true });
+  let assistantAccount = app.store.getAccount("dingmai-miniapp-company-assistant", { includeSecrets: true });
   assert.equal(assistantAccount.agentBinding.inheritedFrom, "workspace");
-  await request(app.baseUrl, "/api/admin/agent-bindings/assistant/wuhe-miniapp", { method: "PUT", body: { name: "公司助手", agentApiUrl: "https://assistant.test/chat", agentApiKey: "assistant-key", agentId: "assistant-agent" } });
-  assistantAccount = app.store.getAccount("wuhe-miniapp-company-assistant", { includeSecrets: true });
+  await request(app.baseUrl, "/api/admin/agent-bindings/assistant/dingmai-miniapp", { method: "PUT", body: { name: "公司助手", agentApiUrl: "https://assistant.test/chat", agentApiKey: "assistant-key", agentId: "assistant-agent" } });
+  assistantAccount = app.store.getAccount("dingmai-miniapp-company-assistant", { includeSecrets: true });
   assert.equal(assistantAccount.agentBinding.inheritedFrom, "assistant");
   assert.equal(assistantAccount.agentId, "assistant-agent");
 
-  await request(app.baseUrl, "/api/admin/agent-bindings/person/wuhe-assistant", { method: "PUT", body: { name: "人物", agentApiUrl: "https://person.test/chat", agentApiKey: "person-key", agentId: "person-agent", billingLabel: "person-bill" } });
+  await request(app.baseUrl, "/api/admin/agent-bindings/person/dingmai-assistant", { method: "PUT", body: { name: "人物", agentApiUrl: "https://person.test/chat", agentApiKey: "person-key", agentId: "person-agent", billingLabel: "person-bill" } });
   account = app.store.getAccount("miniapp-default", { includeSecrets: true });
   assert.equal(account.agentBinding.inheritedFrom, "person");
   assert.equal(account.agentId, "person-agent");
@@ -296,29 +298,29 @@ test("Agent catalog supplies one required default with optional channel and pers
   assert.equal(defaults.data.defaults.defaultAgentConfigId, "person-agent");
 
   let personAccount = app.store.getAccount("miniapp-default", { includeSecrets: true });
-  let assistantAccount = app.store.getAccount("wuhe-miniapp-company-assistant", { includeSecrets: true });
+  let assistantAccount = app.store.getAccount("dingmai-miniapp-company-assistant", { includeSecrets: true });
   assert.equal(personAccount.agentBinding.id, "person-agent");
   assert.equal(personAccount.agentBinding.inheritedFrom, "platform-default");
   assert.equal(personAccount.agentApiKey, "person-catalog-key");
   assert.equal(assistantAccount.agentBinding.id, "person-agent");
   assert.equal(assistantAccount.agentBinding.inheritedFrom, "platform-default");
 
-  const person = await request(app.baseUrl, "/api/admin/people/wuhe-assistant", { method: "PUT", body: { agentConfigId: "assistant-agent" } });
-  const channel = await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp", { method: "PUT", body: { assistantAgentConfigId: "person-agent" } });
+  const person = await request(app.baseUrl, "/api/admin/people/dingmai-assistant", { method: "PUT", body: { agentConfigId: "assistant-agent" } });
+  const channel = await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp", { method: "PUT", body: { assistantAgentConfigId: "person-agent" } });
   assert.equal(person.data.agentConfigId, "assistant-agent");
   assert.equal(channel.data.assistantAgentConfigId, "person-agent");
 
   personAccount = app.store.getAccount("miniapp-default", { includeSecrets: true });
-  assistantAccount = app.store.getAccount("wuhe-miniapp-company-assistant", { includeSecrets: true });
+  assistantAccount = app.store.getAccount("dingmai-miniapp-company-assistant", { includeSecrets: true });
   assert.equal(personAccount.agentBinding.id, "assistant-agent");
   assert.equal(personAccount.agentBinding.inheritedFrom, "person");
   assert.equal(assistantAccount.agentBinding.id, "person-agent");
   assert.equal(assistantAccount.agentBinding.inheritedFrom, "assistant");
 
-  await request(app.baseUrl, "/api/admin/people/wuhe-assistant", { method: "PUT", body: { agentConfigId: "" } });
-  await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp", { method: "PUT", body: { assistantAgentConfigId: "" } });
+  await request(app.baseUrl, "/api/admin/people/dingmai-assistant", { method: "PUT", body: { agentConfigId: "" } });
+  await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp", { method: "PUT", body: { assistantAgentConfigId: "" } });
   personAccount = app.store.getAccount("miniapp-default", { includeSecrets: true });
-  assistantAccount = app.store.getAccount("wuhe-miniapp-company-assistant", { includeSecrets: true });
+  assistantAccount = app.store.getAccount("dingmai-miniapp-company-assistant", { includeSecrets: true });
   assert.equal(personAccount.agentBinding.id, "person-agent");
   assert.equal(personAccount.agentBinding.inheritedFrom, "platform-default");
   assert.equal(assistantAccount.agentBinding.id, "person-agent");
@@ -368,9 +370,9 @@ test("published web card reaches the configured DClaw Agent and returns its repl
     agentApiKey: "test-key",
     agentId: "card_agent"
   } });
-  await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp/publish", { method: "POST" });
+  await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp/publish", { method: "POST" });
 
-  const sent = await request(app.baseUrl, "/api/public/channels/wuhe-assistant/messages", { method: "POST", body: {
+  const sent = await request(app.baseUrl, "/api/public/channels/dingmai-assistant/messages", { method: "POST", body: {
     conversationId: "web-card-conversation-001",
     userId: "web-card-visitor-001",
     displayName: "Web 名片访客",
@@ -382,10 +384,10 @@ test("published web card reaches the configured DClaw Agent and returns its repl
   assert.equal(calls[0].url, "https://dclaw.example.test/api/open/v1/targets/card_agent/messages");
   assert.equal(calls[0].headers.Authorization, "Bearer test-key");
   assert.equal(calls[0].requestBody.metadata.source, "dclaw-agent-service");
-  assert.equal(calls[0].requestBody.metadata.deployment_id, "wuhe-miniapp-assistant");
+  assert.equal(calls[0].requestBody.metadata.deployment_id, "dingmai-miniapp-assistant");
   assert.equal(calls[0].context.tenantContext.person.name, "向小顶");
 
-  const outbox = await request(app.baseUrl, "/api/public/channels/wuhe-assistant/conversations/web-card-conversation-001/outbox?after=0");
+  const outbox = await request(app.baseUrl, "/api/public/channels/dingmai-assistant/conversations/web-card-conversation-001/outbox?after=0");
   assert.equal(outbox.response.status, 200);
   assert.equal(outbox.data.items.length, 1);
   assert.equal(outbox.data.items[0].content, "您好，我是向小顶。可以直接告诉我您想了解的业务。");
@@ -395,7 +397,7 @@ test("admin preview conversations use separate person and company-assistant acco
   const app = await fixture();
   t.after(() => app.close());
 
-  const personReply = await request(app.baseUrl, "/api/admin/deployments/wuhe-miniapp-assistant/preview/messages", { method: "POST", body: {
+  const personReply = await request(app.baseUrl, "/api/admin/deployments/dingmai-miniapp-assistant/preview/messages", { method: "POST", body: {
     conversationId: "admin-person-preview-001",
     userId: "admin-preview-user-001",
     message: { id: "admin-person-message-001", type: "text", text: "介绍一下自己" }
@@ -406,7 +408,7 @@ test("admin preview conversations use separate person and company-assistant acco
   assert.equal(app.store.listMessages(personConversation.id)[0].metadata.surface, "admin-preview");
 
   app.store.setConversationMode(personConversation.id, "human", { operator: "test", note: "模拟预览会话被人工接管" });
-  const resumedPersonReply = await request(app.baseUrl, "/api/admin/deployments/wuhe-miniapp-assistant/preview/messages", { method: "POST", body: {
+  const resumedPersonReply = await request(app.baseUrl, "/api/admin/deployments/dingmai-miniapp-assistant/preview/messages", { method: "POST", body: {
     conversationId: "admin-person-preview-001",
     userId: "admin-preview-user-001",
     message: { id: "admin-person-message-002", type: "text", text: "继续测试 Agent" }
@@ -415,14 +417,14 @@ test("admin preview conversations use separate person and company-assistant acco
   assert.equal(resumedPersonReply.data.items[0].handledBy, "agent");
   assert.equal(app.store.getConversation(personConversation.id).mode, "ai");
 
-  const assistantReply = await request(app.baseUrl, "/api/admin/deployments/wuhe-miniapp-assistant/preview/assistant/messages", { method: "POST", body: {
+  const assistantReply = await request(app.baseUrl, "/api/admin/deployments/dingmai-miniapp-assistant/preview/assistant/messages", { method: "POST", body: {
     conversationId: "admin-assistant-preview-001",
     userId: "admin-preview-user-001",
     message: { id: "admin-assistant-message-001", type: "text", text: "介绍公司服务" }
   } });
   assert.equal(assistantReply.response.status, 202);
   const assistantConversation = app.store.getConversation(assistantReply.data.items[0].conversationId);
-  assert.equal(assistantConversation.accountId, "wuhe-miniapp-company-assistant");
+  assert.equal(assistantConversation.accountId, "dingmai-miniapp-company-assistant");
   assert.equal(app.store.listMessages(assistantConversation.id)[0].metadata.surface, "admin-preview-assistant");
 });
 
@@ -430,7 +432,7 @@ test("channel draft is private until publish and preview is schema-versioned", a
   const app = await fixture();
   t.after(() => app.close());
 
-  const draft = await request(app.baseUrl, "/api/admin/deployments/wuhe-miniapp-assistant/preview");
+  const draft = await request(app.baseUrl, "/api/admin/deployments/dingmai-miniapp-assistant/preview");
   assert.equal(draft.data.channelType, "miniapp");
   assert.equal(draft.data.schemaVersion, 2);
   assert.equal(draft.data.person.name, "向小顶");
@@ -466,27 +468,27 @@ test("channel draft is private until publish and preview is schema-versioned", a
   assert.equal(draft.data.deployment.config.qrCodeUrl, "/console/assets/contact-qr-demo.png");
   assert.equal(draft.data.deployment.config.leadForm.enabled, true);
 
-  const websiteDraft = await request(app.baseUrl, "/api/admin/deployments/wuhe-website-assistant/preview");
+  const websiteDraft = await request(app.baseUrl, "/api/admin/deployments/dingmai-website-assistant/preview");
   assert.equal(websiteDraft.data.channelType, "website");
   assert.equal(websiteDraft.data.cardPresentation.provider, "miniapp");
-  assert.equal(websiteDraft.data.cardPresentation.channelId, "wuhe-miniapp");
+  assert.equal(websiteDraft.data.cardPresentation.channelId, "dingmai-miniapp");
   assert.equal(websiteDraft.data.cardPresentation.config.assistantName, "D仔");
   assert.equal(websiteDraft.data.cardPresentation.config.assistantSceneVideoUrl, "/console/assets/ddeer-office-greeting-rig-v3.mp4");
   assert.equal("cardConfig" in websiteDraft.data.deployment, false);
   assert.equal(websiteDraft.data.deployment.config.coverUrl, "/console/assets/moosee-work-serious-scene.png");
   assert.equal(websiteDraft.data.deployments[0].config.companyName, "顶脉教育集团");
 
-  const channelPreview = await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp/preview");
+  const channelPreview = await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp/preview");
   assert.equal(channelPreview.data.previewOnly, undefined);
   assert.equal(channelPreview.data.person.name, "向小顶");
-  assert.equal(channelPreview.data.deployment.id, "wuhe-miniapp-assistant");
-  assert.equal(channelPreview.data.endpoints.publicMessages, "/api/admin/deployments/wuhe-miniapp-assistant/preview/messages");
+  assert.equal(channelPreview.data.deployment.id, "dingmai-miniapp-assistant");
+  assert.equal(channelPreview.data.endpoints.publicMessages, "/api/admin/deployments/dingmai-miniapp-assistant/preview/messages");
 
-  const websiteChannelPreview = await request(app.baseUrl, "/api/admin/channels/wuhe-website/preview");
+  const websiteChannelPreview = await request(app.baseUrl, "/api/admin/channels/dingmai-website/preview");
   assert.equal(websiteChannelPreview.data.previewOnly, undefined);
   assert.equal(websiteChannelPreview.data.person.name, "向小顶");
-  assert.equal(websiteChannelPreview.data.deployment.id, "wuhe-website-assistant");
-  assert.equal(websiteChannelPreview.data.endpoints.publicMessages, "/api/admin/deployments/wuhe-website-assistant/preview/messages");
+  assert.equal(websiteChannelPreview.data.deployment.id, "dingmai-website-assistant");
+  assert.equal(websiteChannelPreview.data.endpoints.publicMessages, "/api/admin/deployments/dingmai-website-assistant/preview/messages");
 
   const uploadedVideo = await fetch(`${app.baseUrl}/api/admin/media`, {
     method: "POST",
@@ -528,9 +530,9 @@ test("channel draft is private until publish and preview is schema-versioned", a
     coverUrl: uploadedImageAsset.asset.url,
     leadFormEnabled: false
   };
-  await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp", { method: "PUT", body: { config: channelConfig } });
-  await request(app.baseUrl, "/api/admin/people/wuhe-assistant", { method: "PUT", body: { profile: personProfile } });
-  const configuredDraft = await request(app.baseUrl, "/api/admin/deployments/wuhe-miniapp-assistant/preview");
+  await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp", { method: "PUT", body: { config: channelConfig } });
+  await request(app.baseUrl, "/api/admin/people/dingmai-assistant", { method: "PUT", body: { profile: personProfile } });
+  const configuredDraft = await request(app.baseUrl, "/api/admin/deployments/dingmai-miniapp-assistant/preview");
   assert.equal(configuredDraft.data.channel.config.assistantName, "顶脉企业助手");
   assert.equal(configuredDraft.data.channel.config.assistantBrandText, "顶脉教育");
   assert.equal(configuredDraft.data.channel.config.assistantMascotImageUrl, uploadedImageAsset.asset.url);
@@ -539,12 +541,12 @@ test("channel draft is private until publish and preview is schema-versioned", a
   assert.equal(configuredDraft.data.deployment.config.coverUrl, uploadedImageAsset.asset.url);
   assert.equal(configuredDraft.data.deployment.config.leadFormEnabled, false);
 
-  const unavailable = await request(app.baseUrl, "/api/public/channels/wuhe-assistant");
+  const unavailable = await request(app.baseUrl, "/api/public/channels/dingmai-assistant");
   assert.equal(unavailable.response.status, 404);
 
-  const published = await request(app.baseUrl, "/api/admin/channels/wuhe-miniapp/publish", { method: "POST" });
+  const published = await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp/publish", { method: "POST" });
   assert.equal(published.data.publishedVersion, 1);
-  const publicView = await request(app.baseUrl, "/api/public/channels/wuhe-assistant");
+  const publicView = await request(app.baseUrl, "/api/public/channels/dingmai-assistant");
   assert.equal(publicView.response.status, 200);
   assert.equal(publicView.data.mode, "published");
   assert.equal(publicView.data.channel.config.assistantName, "顶脉企业助手");
@@ -555,16 +557,16 @@ test("channel draft is private until publish and preview is schema-versioned", a
   assert.equal(publicView.data.channel.config.voiceEnabled, false);
   assert.equal(publicView.data.deployment.config.coverUrl, uploadedImageAsset.asset.url);
   assert.equal(publicView.data.deployment.config.leadFormEnabled, false);
-  assert.equal(publicView.data.endpoints.publicPage, "/channels/wuhe-assistant");
-  assert.equal(publicView.data.endpoints.publicMedia, "/api/public/channels/wuhe-assistant/media");
+  assert.equal(publicView.data.endpoints.publicPage, "/channels/dingmai-assistant");
+  assert.equal(publicView.data.endpoints.publicMedia, "/api/public/channels/dingmai-assistant/media");
   assert.equal("companyContext" in publicView.data.workspace, false);
   assert.equal("persona" in publicView.data.person, false);
   assert.equal("profile" in publicView.data.person, false);
 
-  await request(app.baseUrl, "/api/admin/people/wuhe-assistant", { method: "PUT", body: { profile: { ...personProfile, biography: "尚未发布的新简介" } } });
-  const changedDraft = await request(app.baseUrl, "/api/admin/deployments/wuhe-miniapp-assistant/preview");
+  await request(app.baseUrl, "/api/admin/people/dingmai-assistant", { method: "PUT", body: { profile: { ...personProfile, biography: "尚未发布的新简介" } } });
+  const changedDraft = await request(app.baseUrl, "/api/admin/deployments/dingmai-miniapp-assistant/preview");
   assert.equal(changedDraft.data.deployment.config.biography, "尚未发布的新简介");
-  const unchangedPublic = await request(app.baseUrl, "/api/public/channels/wuhe-assistant");
+  const unchangedPublic = await request(app.baseUrl, "/api/public/channels/dingmai-assistant");
   assert.equal(unchangedPublic.data.deployment.config.biography, undefined);
   const publicPage = await fetch(`${app.baseUrl}${publicView.data.endpoints.publicPage}`);
   assert.equal(publicPage.status, 200);
@@ -589,7 +591,7 @@ test("channel draft is private until publish and preview is schema-versioned", a
   } });
   assert.equal(message.response.status, 202);
   assert.equal(message.data.items[0].handledBy, "agent");
-  const outbox = await request(app.baseUrl, "/api/public/channels/wuhe-assistant/conversations/visitor-session-001/outbox?after=0");
+  const outbox = await request(app.baseUrl, "/api/public/channels/dingmai-assistant/conversations/visitor-session-001/outbox?after=0");
   assert.equal(outbox.response.status, 200);
   assert.equal(outbox.data.items.length, 1);
   assert.match(outbox.data.items[0].content, /消息已收到/);
@@ -615,11 +617,11 @@ test("new people can be deployed to an existing website channel", async (t) => {
 
   const person = await request(app.baseUrl, "/api/admin/workspaces/dingmai/people", { method: "POST", body: { id: "sales-li", name: "李明", title: "商务负责人", persona: { personality: "稳重" } } });
   assert.equal(person.response.status, 201);
-  const deployment = await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments", { method: "POST", body: { id: "wuhe-web-li", workspaceChannelId: "wuhe-website", personId: "sales-li", publicSlug: "wuhe-li", sortOrder: 20, config: { welcomeMessage: "您好，我是李明" } } });
+  const deployment = await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments", { method: "POST", body: { id: "dingmai-web-li", workspaceChannelId: "dingmai-website", personId: "sales-li", publicSlug: "dingmai-li", sortOrder: 20, config: { welcomeMessage: "您好，我是李明" } } });
   assert.equal(deployment.response.status, 201);
   assert.equal(deployment.data.provider, "website");
-  assert.equal(app.store.getAccount("wuhe-web-li").person.name, "李明");
-  const preview = await request(app.baseUrl, "/api/admin/deployments/wuhe-web-li/preview");
+  assert.equal(app.store.getAccount("dingmai-web-li").person.name, "李明");
+  const preview = await request(app.baseUrl, "/api/admin/deployments/dingmai-web-li/preview");
   assert.equal(preview.data.deployments.length, 2);
   assert.deepEqual(preview.data.deployments.map((item) => item.person.name), ["向小顶", "李明"]);
 });

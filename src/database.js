@@ -3,8 +3,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { defaultFlowConfig } from "./flow-machine.js";
 import { normalizeStoredTagSchema } from "./tags.js";
+import { DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_IDENTIFIERS, workspaceIdentifiers } from "./workspace-identifiers.js";
 
 const nowSql = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+
+const DEFAULT_IDENTIFIERS = DEFAULT_WORKSPACE_IDENTIFIERS;
+const LEGACY_DINGMAI_IDENTIFIERS = workspaceIdentifiers("wuhe");
 
 export function openDatabase(filename) {
   fs.mkdirSync(path.dirname(filename), { recursive: true });
@@ -12,6 +16,7 @@ export function openDatabase(filename) {
   db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   migrate(db);
   migrateDingmaiWorkspace(db);
+  migrateDingmaiIdentifiers(db);
   seed(db);
   migrateAgentCatalog(db);
   return db;
@@ -383,11 +388,11 @@ function migrate(db) {
 }
 
 function migrateDingmaiWorkspace(db) {
-  const legacy = db.prepare("SELECT id FROM workspaces WHERE id = ?").get("wuhe");
-  const current = db.prepare("SELECT id FROM workspaces WHERE id = ?").get("dingmai");
-  if (legacy && current) throw new Error("无法迁移顶脉工作区：wuhe 与 dingmai 同时存在");
+  const legacy = db.prepare("SELECT id FROM workspaces WHERE id = ?").get(LEGACY_DINGMAI_IDENTIFIERS.workspaceId);
+  const current = db.prepare("SELECT id FROM workspaces WHERE id = ?").get(DEFAULT_IDENTIFIERS.workspaceId);
+  if (legacy && current) throw new Error(`无法迁移顶脉工作区：${LEGACY_DINGMAI_IDENTIFIERS.workspaceId} 与 ${DEFAULT_IDENTIFIERS.workspaceId} 同时存在`);
   if (!legacy) {
-    if (current) db.prepare("UPDATE workspaces SET slug = ? WHERE id = ?").run("dingmai", "dingmai");
+    if (current) db.prepare("UPDATE workspaces SET slug = ? WHERE id = ?").run(DEFAULT_IDENTIFIERS.workspaceId, DEFAULT_IDENTIFIERS.workspaceId);
     return;
   }
 
@@ -395,12 +400,110 @@ function migrateDingmaiWorkspace(db) {
   try {
     db.prepare(`INSERT INTO workspaces (id, slug, name, enabled, accent, logo_url, company_context_json, created_at, updated_at)
       SELECT ?, ?, name, enabled, accent, logo_url, company_context_json, created_at, updated_at FROM workspaces WHERE id = ?`)
-      .run("dingmai", "dingmai", "wuhe");
+      .run(DEFAULT_IDENTIFIERS.workspaceId, DEFAULT_IDENTIFIERS.workspaceId, LEGACY_DINGMAI_IDENTIFIERS.workspaceId);
     for (const table of ["people", "workspace_channels", "channel_accounts", "agent_usage_logs", "workspace_miniapps", "workspace_wechat_visitors"]) {
-      db.prepare(`UPDATE ${table} SET workspace_id = ? WHERE workspace_id = ?`).run("dingmai", "wuhe");
+      db.prepare(`UPDATE ${table} SET workspace_id = ? WHERE workspace_id = ?`).run(DEFAULT_IDENTIFIERS.workspaceId, LEGACY_DINGMAI_IDENTIFIERS.workspaceId);
     }
-    db.prepare("UPDATE agent_bindings SET scope_id = ? WHERE scope_type = ? AND scope_id = ?").run("dingmai", "workspace", "wuhe");
-    db.prepare("DELETE FROM workspaces WHERE id = ?").run("wuhe");
+    db.prepare("UPDATE agent_bindings SET scope_id = ? WHERE scope_type = ? AND scope_id = ?").run(DEFAULT_IDENTIFIERS.workspaceId, "workspace", LEGACY_DINGMAI_IDENTIFIERS.workspaceId);
+    db.prepare("DELETE FROM workspaces WHERE id = ?").run(LEGACY_DINGMAI_IDENTIFIERS.workspaceId);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function migrateDingmaiIdentifiers(db) {
+  const legacy = LEGACY_DINGMAI_IDENTIFIERS;
+  const current = DEFAULT_IDENTIFIERS;
+  const migrations = [
+    ["people", legacy.personId, current.personId],
+    ["workspace_channels", legacy.websiteChannelId, current.websiteChannelId],
+    ["workspace_channels", legacy.miniappChannelId, current.miniappChannelId],
+    ["channel_deployments", legacy.websiteDeploymentId, current.websiteDeploymentId],
+    ["channel_deployments", legacy.miniappDeploymentId, current.miniappDeploymentId],
+    ["channel_accounts", legacy.websiteAssistantAccountId, current.websiteAssistantAccountId],
+    ["channel_accounts", legacy.miniappAssistantAccountId, current.miniappAssistantAccountId]
+  ];
+  const hasLegacyIdentifiers = migrations.some(([table, id]) => db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(id));
+  const legacyPattern = `%${legacy.workspaceId}%`;
+  const hasLegacyBindings = db.prepare("SELECT 1 FROM agent_bindings WHERE id LIKE ? OR scope_id LIKE ? LIMIT 1").get(legacyPattern, legacyPattern);
+  const hasLegacyAgentConfigs = db.prepare("SELECT 1 FROM agent_configs WHERE id LIKE ? LIMIT 1").get(legacyPattern);
+  if (!hasLegacyIdentifiers && !hasLegacyBindings && !hasLegacyAgentConfigs) return;
+
+  for (const [table, from, to] of migrations) {
+    if (db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(from) && db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(to)) {
+      throw new Error(`无法迁移顶脉标识：${table}.${from} 与 ${table}.${to} 同时存在`);
+    }
+  }
+
+  db.exec("BEGIN IMMEDIATE; PRAGMA defer_foreign_keys = ON;");
+  try {
+    db.prepare("UPDATE channel_deployments SET person_id = ? WHERE person_id = ?").run(current.personId, legacy.personId);
+    db.prepare("UPDATE channel_accounts SET person_id = ? WHERE person_id = ?").run(current.personId, legacy.personId);
+    db.prepare("UPDATE agent_usage_logs SET person_id = ? WHERE person_id = ?").run(current.personId, legacy.personId);
+    db.prepare("UPDATE agent_bindings SET scope_id = ? WHERE scope_type = 'person' AND scope_id = ?").run(current.personId, legacy.personId);
+    db.prepare("UPDATE people SET id = ? WHERE id = ?").run(current.personId, legacy.personId);
+
+    for (const [from, to] of [[legacy.websiteChannelId, current.websiteChannelId], [legacy.miniappChannelId, current.miniappChannelId]]) {
+      db.prepare("UPDATE channel_deployments SET workspace_channel_id = ? WHERE workspace_channel_id = ?").run(to, from);
+      db.prepare("UPDATE channel_accounts SET workspace_channel_id = ? WHERE workspace_channel_id = ?").run(to, from);
+      db.prepare("UPDATE agent_bindings SET scope_id = ? WHERE scope_type = 'assistant' AND scope_id = ?").run(to, from);
+      db.prepare("UPDATE workspace_channels SET id = ? WHERE id = ?").run(to, from);
+    }
+
+    for (const [from, to] of [[legacy.websiteDeploymentId, current.websiteDeploymentId], [legacy.miniappDeploymentId, current.miniappDeploymentId]]) {
+      db.prepare("UPDATE channel_accounts SET deployment_id = ? WHERE deployment_id = ?").run(to, from);
+      db.prepare("UPDATE channel_deployments SET id = ? WHERE id = ?").run(to, from);
+    }
+
+    const migrateAccount = (from, to) => {
+      const accountReferences = [
+        ["conversations", "account_id"], ["deliveries", "account_id"], ["channel_outbox", "account_id"],
+        ["processed_events", "account_id"], ["state_machine_configs", "account_id"], ["flow_sessions", "account_id"],
+        ["flow_state_events", "account_id"], ["tag_schemas", "account_id"], ["conversation_rule_tags", "account_id"],
+        ["tag_events", "account_id"], ["activation_tasks", "account_id"], ["audit_logs", "account_id"],
+        ["agent_usage_logs", "account_id"], ["channel_deployments", "account_id"], ["people", "config_account_id"],
+        ["workspace_channels", "assistant_account_id"]
+      ];
+      for (const [table, column] of accountReferences) db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`).run(to, from);
+      db.prepare("UPDATE channel_accounts SET id = ? WHERE id = ?").run(to, from);
+    };
+    migrateAccount(legacy.websiteAssistantAccountId, current.websiteAssistantAccountId);
+    migrateAccount(legacy.miniappAssistantAccountId, current.miniappAssistantAccountId);
+
+    const migrateGeneratedIds = (table, referenceTable = "", referenceColumn = "") => {
+      const rows = db.prepare(`SELECT id FROM ${table} WHERE id LIKE ?`).all(legacyPattern);
+      for (const row of rows) {
+        const nextId = row.id.replaceAll(legacy.workspaceId, DEFAULT_WORKSPACE_ID);
+        if (db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(nextId)) throw new Error(`无法迁移顶脉标识：${table}.${nextId} 已存在`);
+        if (referenceTable) db.prepare(`UPDATE ${referenceTable} SET ${referenceColumn} = ? WHERE ${referenceColumn} = ?`).run(nextId, row.id);
+        db.prepare(`UPDATE ${table} SET id = ? WHERE id = ?`).run(nextId, row.id);
+      }
+    };
+    migrateGeneratedIds("agent_bindings", "agent_usage_logs", "binding_id");
+    for (const row of db.prepare("SELECT id FROM agent_configs WHERE id LIKE ?").all(legacyPattern)) {
+      const nextId = row.id.replaceAll(legacy.workspaceId, DEFAULT_WORKSPACE_ID);
+      if (db.prepare("SELECT 1 FROM agent_configs WHERE id = ?").get(nextId)) throw new Error(`无法迁移顶脉 Agent 标识：${nextId} 已存在`);
+      db.prepare("UPDATE people SET agent_config_id = ? WHERE agent_config_id = ?").run(nextId, row.id);
+      db.prepare("UPDATE workspace_channels SET assistant_agent_config_id = ? WHERE assistant_agent_config_id = ?").run(nextId, row.id);
+      db.prepare("UPDATE agent_configs SET id = ? WHERE id = ?").run(nextId, row.id);
+    }
+
+    const publicSlugs = [[legacy.websitePublicSlug, current.websitePublicSlug], [legacy.miniappPublicSlug, current.miniappPublicSlug]];
+    for (const [from, to] of publicSlugs) {
+      const conflict = db.prepare("SELECT id FROM channel_deployments WHERE public_slug = ? AND public_slug <> ?").get(to, from);
+      if (conflict) throw new Error(`无法迁移顶脉公开标识：${to} 已被 ${conflict.id} 使用`);
+      db.prepare("UPDATE channel_deployments SET public_slug = ? WHERE public_slug = ?").run(to, from);
+    }
+
+    db.prepare("UPDATE workspace_channels SET name = '顶脉官网客服' WHERE id = ?").run(current.websiteChannelId);
+    db.prepare("UPDATE workspace_channels SET name = '顶脉智能名片' WHERE id = ?").run(current.miniappChannelId);
+    db.prepare("UPDATE channel_accounts SET name = '顶脉官网公司助手' WHERE id = ?").run(current.websiteAssistantAccountId);
+    db.prepare("UPDATE channel_accounts SET name = '顶脉名片公司助手' WHERE id = ?").run(current.miniappAssistantAccountId);
+
+    const violations = db.prepare("PRAGMA foreign_key_check").all();
+    if (violations.length) throw new Error(`顶脉标识迁移后外键校验失败：${JSON.stringify(violations)}`);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -475,9 +578,9 @@ function seed(db) {
   for (const id of ["website-default", "miniapp-default"]) insertSchema.run(id, JSON.stringify(defaultSchema));
 
   db.prepare(`INSERT OR IGNORE INTO workspaces (id, slug, name, accent, company_context_json) VALUES (?, ?, ?, ?, ?)`)
-    .run("dingmai", "dingmai", "顶脉教育集团", "#2a30d8", JSON.stringify({ industry: "教育服务", description: "顶脉教育集团智能服务工作区" }));
+    .run(DEFAULT_IDENTIFIERS.workspaceId, DEFAULT_IDENTIFIERS.workspaceId, "顶脉教育集团", "#2a30d8", JSON.stringify({ industry: "教育服务", description: "顶脉教育集团智能服务工作区" }));
   db.prepare(`INSERT OR IGNORE INTO people (id, workspace_id, name, title, avatar_url, persona_json) VALUES (?, ?, ?, ?, ?, ?)`)
-    .run("wuhe-assistant", "dingmai", "向小顶", "总裁", "/console/assets/bot-avatar.png", JSON.stringify({
+    .run(DEFAULT_IDENTIFIERS.personId, DEFAULT_IDENTIFIERS.workspaceId, "向小顶", "总裁", "/console/assets/bot-avatar.png", JSON.stringify({
       personality: "专业、耐心、表达清晰",
       speakingStyle: "先理解客户需求，再给出明确建议",
       responsibilities: "介绍顶脉教育集团及相关服务，收集客户需求并推进后续沟通",
@@ -485,18 +588,18 @@ function seed(db) {
     }));
 
   const insertChannel = db.prepare(`INSERT OR IGNORE INTO workspace_channels (id, workspace_id, provider, name, draft_config_json) VALUES (?, ?, ?, ?, ?)`);
-  insertChannel.run("wuhe-website", "dingmai", "website", "伍合官网客服", JSON.stringify({ position: "right", mascotImageUrl: "/console/assets/ddeer.png", launcherLabel: "在线咨询", rosterTitle: "选择成员" }));
-  insertChannel.run("wuhe-miniapp", "dingmai", "miniapp", "伍合智能名片", JSON.stringify(defaultMiniappAssistantConfig));
-  const websiteChannelConfig = db.prepare(`SELECT draft_config_json, published_config_json FROM workspace_channels WHERE id = 'wuhe-website'`).get();
+  insertChannel.run(DEFAULT_IDENTIFIERS.websiteChannelId, DEFAULT_IDENTIFIERS.workspaceId, "website", "顶脉官网客服", JSON.stringify({ position: "right", mascotImageUrl: "/console/assets/ddeer.png", launcherLabel: "在线咨询", rosterTitle: "选择成员" }));
+  insertChannel.run(DEFAULT_IDENTIFIERS.miniappChannelId, DEFAULT_IDENTIFIERS.workspaceId, "miniapp", "顶脉智能名片", JSON.stringify(defaultMiniappAssistantConfig));
+  const websiteChannelConfig = db.prepare("SELECT draft_config_json, published_config_json FROM workspace_channels WHERE id = ?").get(DEFAULT_IDENTIFIERS.websiteChannelId);
   const legacyRosterTitle = `选择专属\u987e\u95ee`;
   const websiteDraftConfig = json(websiteChannelConfig?.draft_config_json);
   const websitePublishedConfig = json(websiteChannelConfig?.published_config_json);
-  if (websiteDraftConfig.rosterTitle === legacyRosterTitle) db.prepare(`UPDATE workspace_channels SET draft_config_json = ? WHERE id = 'wuhe-website'`).run(JSON.stringify({ ...websiteDraftConfig, rosterTitle: "选择成员" }));
-  if (websitePublishedConfig.rosterTitle === legacyRosterTitle) db.prepare(`UPDATE workspace_channels SET published_config_json = ? WHERE id = 'wuhe-website'`).run(JSON.stringify({ ...websitePublishedConfig, rosterTitle: "选择成员" }));
+  if (websiteDraftConfig.rosterTitle === legacyRosterTitle) db.prepare("UPDATE workspace_channels SET draft_config_json = ? WHERE id = ?").run(JSON.stringify({ ...websiteDraftConfig, rosterTitle: "选择成员" }), DEFAULT_IDENTIFIERS.websiteChannelId);
+  if (websitePublishedConfig.rosterTitle === legacyRosterTitle) db.prepare("UPDATE workspace_channels SET published_config_json = ? WHERE id = ?").run(JSON.stringify({ ...websitePublishedConfig, rosterTitle: "选择成员" }), DEFAULT_IDENTIFIERS.websiteChannelId);
 
   const insertDeployment = db.prepare(`INSERT OR IGNORE INTO channel_deployments (id, workspace_channel_id, person_id, account_id, public_slug, sort_order, draft_config_json) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-  insertDeployment.run("wuhe-website-assistant", "wuhe-website", "wuhe-assistant", "website-default", "wuhe-assistant-web", 10, JSON.stringify({ welcomeMessage: "您好，我是向小顶，有什么可以帮您？", suggestedQuestions: ["了解集团服务", "咨询合作方案"] }));
-  insertDeployment.run("wuhe-miniapp-assistant", "wuhe-miniapp", "wuhe-assistant", "miniapp-default", "wuhe-assistant", 10, JSON.stringify({ coverUrl: "/console/assets/moosee-work-serious-scene.png", companyName: "顶脉教育集团", phone: "400-0731-177", wechat: "dingmai-ai", email: "service@dingmai.example", website: "https://www.dingmai.example", address: "杭州市滨江区江南大道 88 号", qrCodeUrl: "/console/assets/contact-qr-demo.png", welcomeMessage: "您好，我是向小顶，很高兴认识您。", suggestedQuestions: ["你是谁", "怎么合作"], resources: [], leadForm: { enabled: true, fields: ["name", "contact"] } }));
+  insertDeployment.run(DEFAULT_IDENTIFIERS.websiteDeploymentId, DEFAULT_IDENTIFIERS.websiteChannelId, DEFAULT_IDENTIFIERS.personId, "website-default", DEFAULT_IDENTIFIERS.websitePublicSlug, 10, JSON.stringify({ welcomeMessage: "您好，我是向小顶，有什么可以帮您？", suggestedQuestions: ["了解集团服务", "咨询合作方案"] }));
+  insertDeployment.run(DEFAULT_IDENTIFIERS.miniappDeploymentId, DEFAULT_IDENTIFIERS.miniappChannelId, DEFAULT_IDENTIFIERS.personId, "miniapp-default", DEFAULT_IDENTIFIERS.miniappPublicSlug, 10, JSON.stringify({ coverUrl: "/console/assets/moosee-work-serious-scene.png", companyName: "顶脉教育集团", phone: "400-0731-177", wechat: "dingmai-ai", email: "service@dingmai.example", website: "https://www.dingmai.example", address: "杭州市滨江区江南大道 88 号", qrCodeUrl: "/console/assets/contact-qr-demo.png", welcomeMessage: "您好，我是向小顶，很高兴认识您。", suggestedQuestions: ["你是谁", "怎么合作"], resources: [], leadForm: { enabled: true, fields: ["name", "contact"] } }));
 
   const legacyQrCodeUrl = "/console/assets/contact-qr-demo.svg";
   const pngQrCodeUrl = "/console/assets/contact-qr-demo.png";
@@ -504,13 +607,13 @@ function seed(db) {
   db.prepare(`UPDATE channel_deployments SET draft_config_json = REPLACE(draft_config_json, ?, ?), published_config_json = REPLACE(published_config_json, ?, ?) WHERE draft_config_json LIKE ? OR published_config_json LIKE ?`)
     .run(legacyQrCodeUrl, pngQrCodeUrl, legacyQrCodeUrl, pngQrCodeUrl, `%${legacyQrCodeUrl}%`, `%${legacyQrCodeUrl}%`);
 
-  db.prepare(`UPDATE workspaces SET name = '顶脉教育集团', company_context_json = ? WHERE id = 'dingmai' AND name = '伍合 AIGC'`)
-    .run(JSON.stringify({ industry: "教育服务", description: "顶脉教育集团智能服务工作区" }));
-  db.prepare(`UPDATE people SET name = '向小顶', title = '总裁', persona_json = ? WHERE id = 'wuhe-assistant' AND name = '伍合智能\u987e\u95ee' AND title = 'AIGC 服务\u987e\u95ee'`)
-    .run(JSON.stringify({ personality: "专业、耐心、表达清晰", speakingStyle: "先理解客户需求，再给出明确建议", responsibilities: "介绍顶脉教育集团及相关服务，收集客户需求并推进后续沟通", systemPrompt: "你是顶脉教育集团总裁向小顶，应基于公司资料准确回答，不确定时主动转人工。" }));
-  db.prepare(`UPDATE people SET avatar_url = '/console/assets/bot-avatar.png' WHERE id = 'wuhe-assistant' AND name = '向小顶' AND avatar_url = ''`).run();
-  db.prepare(`UPDATE people SET title = '商务合作负责人' WHERE id = 'wuhe-sales' AND title = '商务合作\u987e\u95ee'`).run();
-  const miniappConfigRow = db.prepare(`SELECT draft_config_json, published_config_json FROM workspace_channels WHERE id = 'wuhe-miniapp'`).get();
+  db.prepare(`UPDATE workspaces SET name = '顶脉教育集团', company_context_json = ? WHERE id = ? AND name = '伍合 AIGC'`)
+    .run(JSON.stringify({ industry: "教育服务", description: "顶脉教育集团智能服务工作区" }), DEFAULT_IDENTIFIERS.workspaceId);
+  db.prepare(`UPDATE people SET name = '向小顶', title = '总裁', persona_json = ? WHERE id = ? AND name = '伍合智能\u987e\u95ee' AND title = 'AIGC 服务\u987e\u95ee'`)
+    .run(JSON.stringify({ personality: "专业、耐心、表达清晰", speakingStyle: "先理解客户需求，再给出明确建议", responsibilities: "介绍顶脉教育集团及相关服务，收集客户需求并推进后续沟通", systemPrompt: "你是顶脉教育集团总裁向小顶，应基于公司资料准确回答，不确定时主动转人工。" }), DEFAULT_IDENTIFIERS.personId);
+  db.prepare(`UPDATE people SET avatar_url = '/console/assets/bot-avatar.png' WHERE id = ? AND name = '向小顶' AND avatar_url = ''`).run(DEFAULT_IDENTIFIERS.personId);
+  db.prepare(`UPDATE people SET title = '商务合作负责人' WHERE workspace_id = ? AND title = '商务合作\u987e\u95ee'`).run(DEFAULT_IDENTIFIERS.workspaceId);
+  const miniappConfigRow = db.prepare("SELECT draft_config_json, published_config_json FROM workspace_channels WHERE id = ?").get(DEFAULT_IDENTIFIERS.miniappChannelId);
   const mergeMiniappConfig = (stored) => {
     const config = json(stored);
     const assistantSceneVideoUrl = [
@@ -529,36 +632,38 @@ function seed(db) {
   };
   const mergedMiniappDraft = mergeMiniappConfig(miniappConfigRow?.draft_config_json);
   const mergedMiniappPublished = mergeMiniappConfig(miniappConfigRow?.published_config_json);
-  db.prepare(`UPDATE workspace_channels SET draft_config_json = ?, published_config_json = ? WHERE id = 'wuhe-miniapp'`)
-    .run(JSON.stringify(mergedMiniappDraft), JSON.stringify(mergedMiniappPublished));
-  const miniappDeploymentRow = db.prepare(`SELECT draft_config_json FROM channel_deployments WHERE id = 'wuhe-miniapp-assistant'`).get();
+  db.prepare("UPDATE workspace_channels SET draft_config_json = ?, published_config_json = ? WHERE id = ?")
+    .run(JSON.stringify(mergedMiniappDraft), JSON.stringify(mergedMiniappPublished), DEFAULT_IDENTIFIERS.miniappChannelId);
+  const miniappDeploymentRow = db.prepare("SELECT draft_config_json FROM channel_deployments WHERE id = ?").get(DEFAULT_IDENTIFIERS.miniappDeploymentId);
   const miniappDeploymentConfig = json(miniappDeploymentRow?.draft_config_json);
   if (miniappDeploymentConfig.companyName === "伍合 AIGC" || miniappDeploymentConfig.welcomeMessage?.includes("伍合智能\u987e\u95ee")) {
-    db.prepare(`UPDATE channel_deployments SET draft_config_json = ? WHERE id = 'wuhe-miniapp-assistant'`).run(JSON.stringify({ ...miniappDeploymentConfig, companyName: miniappDeploymentConfig.companyName === "伍合 AIGC" ? "顶脉教育集团" : miniappDeploymentConfig.companyName, welcomeMessage: miniappDeploymentConfig.welcomeMessage?.replace("伍合智能\u987e\u95ee", "向小顶") }));
+    db.prepare("UPDATE channel_deployments SET draft_config_json = ? WHERE id = ?").run(JSON.stringify({ ...miniappDeploymentConfig, companyName: miniappDeploymentConfig.companyName === "伍合 AIGC" ? "顶脉教育集团" : miniappDeploymentConfig.companyName, welcomeMessage: miniappDeploymentConfig.welcomeMessage?.replace("伍合智能\u987e\u95ee", "向小顶") }), DEFAULT_IDENTIFIERS.miniappDeploymentId);
   }
 
-  const personProfileRow = db.prepare(`SELECT profile_json FROM people WHERE id = 'wuhe-assistant'`).get();
+  const personProfileRow = db.prepare("SELECT profile_json FROM people WHERE id = ?").get(DEFAULT_IDENTIFIERS.personId);
   if (!Object.keys(json(personProfileRow?.profile_json)).length && Object.keys(miniappDeploymentConfig).length) {
-    db.prepare(`UPDATE people SET profile_json = ? WHERE id = 'wuhe-assistant'`).run(JSON.stringify(miniappDeploymentConfig));
+    db.prepare("UPDATE people SET profile_json = ? WHERE id = ?").run(JSON.stringify(miniappDeploymentConfig), DEFAULT_IDENTIFIERS.personId);
   }
 
-  db.prepare(`UPDATE channel_accounts SET workspace_id = 'dingmai', person_id = 'wuhe-assistant', workspace_channel_id = 'wuhe-website', deployment_id = 'wuhe-website-assistant' WHERE id = 'website-default' AND (workspace_id IS NULL OR workspace_id = '')`).run();
-  db.prepare(`UPDATE channel_accounts SET workspace_id = 'dingmai', person_id = 'wuhe-assistant', workspace_channel_id = 'wuhe-miniapp', deployment_id = 'wuhe-miniapp-assistant' WHERE id = 'miniapp-default' AND (workspace_id IS NULL OR workspace_id = '')`).run();
-  db.prepare(`UPDATE workspace_channels SET webhook_secret = COALESCE(NULLIF((SELECT webhook_secret FROM channel_accounts WHERE id = 'website-default'), ''), webhook_secret) WHERE id = 'wuhe-website' AND webhook_secret = ''`).run();
-  db.prepare(`UPDATE workspace_channels SET webhook_secret = COALESCE(NULLIF((SELECT webhook_secret FROM channel_accounts WHERE id = 'miniapp-default'), ''), webhook_secret) WHERE id = 'wuhe-miniapp' AND webhook_secret = ''`).run();
-  db.prepare(`UPDATE people SET config_account_id = 'miniapp-default' WHERE id = 'wuhe-assistant' AND (config_account_id IS NULL OR config_account_id = '')`).run();
+  db.prepare("UPDATE channel_accounts SET workspace_id = ?, person_id = ?, workspace_channel_id = ?, deployment_id = ? WHERE id = 'website-default' AND (workspace_id IS NULL OR workspace_id = '')")
+    .run(DEFAULT_IDENTIFIERS.workspaceId, DEFAULT_IDENTIFIERS.personId, DEFAULT_IDENTIFIERS.websiteChannelId, DEFAULT_IDENTIFIERS.websiteDeploymentId);
+  db.prepare("UPDATE channel_accounts SET workspace_id = ?, person_id = ?, workspace_channel_id = ?, deployment_id = ? WHERE id = 'miniapp-default' AND (workspace_id IS NULL OR workspace_id = '')")
+    .run(DEFAULT_IDENTIFIERS.workspaceId, DEFAULT_IDENTIFIERS.personId, DEFAULT_IDENTIFIERS.miniappChannelId, DEFAULT_IDENTIFIERS.miniappDeploymentId);
+  db.prepare("UPDATE workspace_channels SET webhook_secret = COALESCE(NULLIF((SELECT webhook_secret FROM channel_accounts WHERE id = 'website-default'), ''), webhook_secret) WHERE id = ? AND webhook_secret = ''").run(DEFAULT_IDENTIFIERS.websiteChannelId);
+  db.prepare("UPDATE workspace_channels SET webhook_secret = COALESCE(NULLIF((SELECT webhook_secret FROM channel_accounts WHERE id = 'miniapp-default'), ''), webhook_secret) WHERE id = ? AND webhook_secret = ''").run(DEFAULT_IDENTIFIERS.miniappChannelId);
+  db.prepare("UPDATE people SET config_account_id = 'miniapp-default' WHERE id = ? AND (config_account_id IS NULL OR config_account_id = '')").run(DEFAULT_IDENTIFIERS.personId);
 
   ensureAssistantAccount(db, {
-    channelId: "wuhe-website",
-    accountId: "wuhe-website-company-assistant",
+    channelId: DEFAULT_IDENTIFIERS.websiteChannelId,
+    accountId: DEFAULT_IDENTIFIERS.websiteAssistantAccountId,
     provider: "website",
-    name: "伍合官网公司助手"
+    name: "顶脉官网公司助手"
   });
   ensureAssistantAccount(db, {
-    channelId: "wuhe-miniapp",
-    accountId: "wuhe-miniapp-company-assistant",
+    channelId: DEFAULT_IDENTIFIERS.miniappChannelId,
+    accountId: DEFAULT_IDENTIFIERS.miniappAssistantAccountId,
     provider: "miniapp",
-    name: "伍合名片公司助手"
+    name: "顶脉名片公司助手"
   });
 
 }
