@@ -581,8 +581,8 @@ test("channel draft is private until publish and preview is schema-versioned", a
   await request(app.baseUrl, "/api/admin/people/dingmai-assistant", { method: "PUT", body: { profile: { ...personProfile, biography: "尚未发布的新简介" } } });
   const changedDraft = await request(app.baseUrl, "/api/admin/deployments/dingmai-miniapp-assistant/preview");
   assert.equal(changedDraft.data.deployment.config.biography, "尚未发布的新简介");
-  const unchangedPublic = await request(app.baseUrl, "/api/public/channels/dingmai-assistant");
-  assert.equal(unchangedPublic.data.deployment.config.biography, undefined);
+  const updatedPublic = await request(app.baseUrl, "/api/public/channels/dingmai-assistant");
+  assert.equal(updatedPublic.data.deployment.config.biography, "尚未发布的新简介");
   const publicPage = await fetch(`${app.baseUrl}${publicView.data.endpoints.publicPage}`);
   assert.equal(publicPage.status, 200);
   assert.match(publicPage.headers.get("content-type"), /text\/html/);
@@ -630,15 +630,35 @@ test("new people can be deployed to an existing website channel", async (t) => {
   const app = await fixture();
   t.after(() => app.close());
 
-  const person = await request(app.baseUrl, "/api/admin/workspaces/dingmai/people", { method: "POST", body: { id: "sales-li", name: "李明", title: "商务负责人", persona: { personality: "稳重" } } });
+  await request(app.baseUrl, "/api/admin/channels/dingmai-website/publish", { method: "POST" });
+  const person = await request(app.baseUrl, "/api/admin/workspaces/dingmai/people", { method: "POST", body: {
+    id: "sales-li",
+    name: "李明",
+    title: "商务负责人",
+    persona: { personality: "稳重" },
+    profile: { phone: "13800000000", suggestedQuestions: ["如何合作？"] }
+  } });
   assert.equal(person.response.status, 201);
   const deployment = await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments", { method: "POST", body: { id: "dingmai-web-li", workspaceChannelId: "dingmai-website", personId: "sales-li", publicSlug: "dingmai-li", sortOrder: 20, config: { welcomeMessage: "您好，我是李明" } } });
   assert.equal(deployment.response.status, 201);
   assert.equal(deployment.data.provider, "website");
+  assert.equal(deployment.data.publishedVersion, 1);
   assert.equal(app.store.getAccount("dingmai-web-li").person.name, "李明");
   const preview = await request(app.baseUrl, "/api/admin/deployments/dingmai-web-li/preview");
   assert.equal(preview.data.deployments.length, 2);
   assert.deepEqual(preview.data.deployments.map((item) => item.person.name), ["向小顶", "李明"]);
+  const published = await request(app.baseUrl, "/api/public/channels/dingmai-website");
+  const publishedPerson = published.data.deployments.find((item) => item.person.id === "sales-li");
+  assert.equal(publishedPerson.config.phone, "13800000000");
+  assert.deepEqual(publishedPerson.config.suggestedQuestions, ["如何合作？"]);
+
+  await request(app.baseUrl, "/api/admin/people/sales-li", { method: "PUT", body: {
+    profile: { phone: "13900000000", suggestedQuestions: ["有哪些服务？", "如何合作？"] }
+  } });
+  const refreshed = await request(app.baseUrl, "/api/public/channels/dingmai-website");
+  const refreshedPerson = refreshed.data.deployments.find((item) => item.person.id === "sales-li");
+  assert.equal(refreshedPerson.config.phone, "13900000000");
+  assert.deepEqual(refreshedPerson.config.suggestedQuestions, ["有哪些服务？", "如何合作？"]);
 });
 
 test("one person shares flow and tag configuration across channel deployments", async (t) => {

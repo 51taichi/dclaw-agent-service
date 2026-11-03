@@ -190,8 +190,17 @@ export class Store {
     const existing = this.getPerson(id);
     if (!existing) return null;
     const agentConfigId = input.agentConfigId === undefined ? existing.agentConfigId : this.agentConfigReference(input.agentConfigId);
+    const timestamp = isoNow();
     this.db.prepare(`UPDATE people SET name = ?, title = ?, avatar_url = ?, enabled = ?, persona_json = ?, profile_json = ?, agent_config_id = ?, updated_at = ? WHERE id = ?`)
-      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.title, existing.title, 160), cleanText(input.avatarUrl, existing.avatarUrl, 2000), input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), JSON.stringify(input.persona === undefined ? existing.persona : objectValue(input.persona)), JSON.stringify(input.profile === undefined ? existing.profile : objectValue(input.profile)), agentConfigId, isoNow(), id);
+      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.title, existing.title, 160), cleanText(input.avatarUrl, existing.avatarUrl, 2000), input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), JSON.stringify(input.persona === undefined ? existing.persona : objectValue(input.persona)), JSON.stringify(input.profile === undefined ? existing.profile : objectValue(input.profile)), agentConfigId, timestamp, id);
+    this.db.prepare(`UPDATE channel_deployments
+      SET published_config_json = (SELECT profile_json FROM people WHERE people.id = channel_deployments.person_id),
+          published_version = CASE WHEN published_version < 1 THEN 1 ELSE published_version + 1 END,
+          published_at = ?, updated_at = ?
+      WHERE person_id = ? AND enabled = 1 AND EXISTS (
+        SELECT 1 FROM workspace_channels channel
+        WHERE channel.id = channel_deployments.workspace_channel_id AND channel.enabled = 1 AND channel.published_version > 0
+      )`).run(timestamp, timestamp, id);
     return this.getPerson(id);
   }
 
@@ -280,6 +289,12 @@ export class Store {
         .run(accountId, channel.provider, `${person.name} · ${channel.name}`, input.enabled === false ? 0 : 1, this.getWorkspace(workspaceId).accent, channel.webhookSecret || "", JSON.stringify({ delivery: "poll" }), workspaceId, person.id, channel.id, id);
       this.db.prepare(`INSERT INTO channel_deployments (id, workspace_channel_id, person_id, account_id, public_slug, enabled, sort_order, draft_config_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, channel.id, person.id, accountId, publicSlug, input.enabled === false ? 0 : 1, safeInteger(input.sortOrder), JSON.stringify(objectValue(input.config)));
+      if (channel.publishedVersion > 0 && input.enabled !== false) {
+        const timestamp = isoNow();
+        this.db.prepare(`UPDATE channel_deployments
+          SET published_config_json = ?, published_version = 1, published_at = ?, updated_at = ?
+          WHERE id = ?`).run(JSON.stringify(person.profile || {}), timestamp, timestamp, id);
+      }
       this.db.prepare("UPDATE people SET config_account_id = COALESCE(NULLIF(config_account_id, ''), ?), updated_at = ? WHERE id = ?").run(accountId, isoNow(), person.id);
       this.db.prepare("INSERT INTO state_machine_configs (account_id, config_json, enabled) VALUES (?, ?, 0)").run(accountId, JSON.stringify(defaultFlowConfig(person.name)));
       this.db.prepare("INSERT INTO tag_schemas (account_id, config_json) VALUES (?, ?)").run(accountId, JSON.stringify(normalizeStoredTagSchema({ dateTag: { enabled: true, cutoffTime: "00:00" }, groups: [] })));
@@ -424,7 +439,7 @@ export class Store {
       .filter(({ item, person: deployedPerson }) => !published || (item.enabled && deployedPerson?.enabled))
       .map(({ item, person: deployedPerson }) => ({
         ...item,
-        config: { ...(published ? item.publishedConfig : deployedPerson?.profile || {}) },
+        config: { ...(published && item.publishedVersion > 0 ? item.publishedConfig : deployedPerson?.profile || {}) },
         channelOverrides: published ? item.publishedConfig : item.config,
         person: deployedPerson ? {
           id: deployedPerson.id,
@@ -449,7 +464,7 @@ export class Store {
       } : {}),
       deployment: {
         ...deployment,
-        config: { ...(published ? deployment.publishedConfig : person.profile || {}) },
+        config: { ...(published && deployment.publishedVersion > 0 ? deployment.publishedConfig : person.profile || {}) },
         channelOverrides: published ? deployment.publishedConfig : deployment.config
       },
       deployments,
