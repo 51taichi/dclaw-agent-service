@@ -83,6 +83,9 @@ test("website custom frame keeps a fixed transparent skin while the employee lis
   assert.match(previewSource, /height: state === "open" \? Math\.ceil\(panel\.getBoundingClientRect\(\)\.height\)/);
   assert.match(previewStyles, /border-image-slice:\s*262 6 6 6 fill/);
   assert.match(previewStyles, /width:\s*138px;[^}]*height:\s*calc\(83px \+ var\(--visible-agents, 1\) \* 48px\)/);
+  assert.match(previewStyles, /\.widget-panel\.has-custom-skin\.card-open\s*\{[^}]*box-shadow:[^}]*0 36px 90px/);
+  assert.doesNotMatch(previewStyles, /\.widget-panel\.has-custom-skin\.card-open::after/);
+  assert.match(previewStyles, /\.embed-mode \.widget-panel\.has-custom-skin\.card-open\s*\{\s*inset:\s*6px/);
   assert.match(previewStyles, /grid-auto-rows:\s*44px;[^}]*padding:\s*5px/);
   assert.match(previewStyles, /agent-option > span[^}]*height:\s*30px/);
   assert.match(previewSource, /function detectSkinTone\(imageUrl\)/);
@@ -103,6 +106,10 @@ test("website custom frame keeps a fixed transparent skin while the employee lis
   assert.match(previewStyles, /\.widget-drag-handle\s*\{/);
   assert.match(previewSource, /type:\s*"dclaw:embed-drag"/);
   assert.match(previewSource, /parameters\.set\("previewPerson", deployment\.id\)/);
+  assert.match(previewSource, /classList\.toggle\("website-card-surface", cardSurface\)/);
+  assert.match(previewSource, /class="chrome-back" title="返回" aria-label="返回"/);
+  assert.match(previewStyles, /\.website-card-surface \.card-face-front > \.card-hero \.miniapp-menu\s*\{\s*display:\s*none/);
+  assert.match(previewStyles, /\.website-card-surface \.card-face-front > \.card-hero \.chrome-back::after\s*\{\s*content:\s*"返回"/);
   assert.match(embedSource, /rosterWidth = clamp\(Number\(message\.width\)/);
   assert.match(embedSource, /rosterHeight = clamp\(Number\(message\.height\)/);
   assert.match(embedSource, /message\.type === "dclaw:embed-drag"/);

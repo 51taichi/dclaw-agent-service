@@ -156,6 +156,7 @@ async function load() {
   const cardSurface = parameters.get("surface") === "card";
   const embedSurface = parameters.get("surface") === "embed";
   document.documentElement.classList.toggle("embed-surface", embedSurface);
+  document.documentElement.classList.toggle("website-card-surface", cardSurface);
   const viewData = data;
   root.innerHTML = data.channelType === "miniapp" || cardSurface ? cardPreview(viewData) : websitePreview(data, { embedSurface });
   document.title = `${data.deployment.personName || data.person?.name || data.workspace.name} · ${data.channel.name}`;
@@ -227,7 +228,7 @@ function cardPreview(data) {
     <div class="card-flip-shell" data-card-flip-shell>
     <section class="phone card-channel card-face card-face-front is-expanded" data-card-shell data-card-front>
     <header class="card-hero" data-cover-url="${escapeHtml(config.coverUrl || DEFAULT_COVER)}">
-      <div class="miniapp-chrome"><button class="chrome-back" title="返回">‹</button><span class="miniapp-menu">•••　◉</span></div>
+      <div class="miniapp-chrome"><button class="chrome-back" title="返回" aria-label="返回">‹</button><span class="miniapp-menu">•••　◉</span></div>
       <div class="expanded-profile">
         <div class="card-identity">${avatar(profileAvatar, current.name, "hero-avatar")}<span class="identity-copy"><strong><span>${escapeHtml(current.name)}</span><i>在线</i></strong><small class="identity-meta"><span>${escapeHtml(current.title)}</span><b>·</b><span>${escapeHtml(companyName)}</span></small></span></div>
         ${(contacts.length || config.qrCodeUrl) ? `<div class="contact-panel${completeContactLayout ? " contact-layout-complete" : ""}" aria-label="联系方式">${renderContactRow(primaryContacts, "contact-primary")}${(secondaryContacts.length || config.qrCodeUrl) ? `<div class="contact-row contact-secondary contact-count-${secondaryContacts.length}${config.qrCodeUrl ? " has-qr" : ""}">${secondaryContacts.map((item) => `<span class="contact-item" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}：${escapeHtml(item.value)}">${icon(item.icon)}<strong>${escapeHtml(item.value)}</strong></span>`).join("")}${config.qrCodeUrl ? `<button type="button" class="contact-qr" data-qr-open title="点击放大二维码" aria-label="放大联系二维码"><img src="${escapeHtml(config.qrCodeUrl)}" alt=""/></button>` : ""}</div>` : ""}</div>` : ""}

@@ -33,6 +33,11 @@ button { cursor: pointer; }
 .miniapp-chrome { position: absolute; z-index: 2; top: 14px; right: 14px; left: 14px; display: flex; align-items: center; justify-content: space-between; }
 .chrome-back { width: 34px; height: 34px; padding: 0; border: 0; background: transparent; color: #fff; font-size: 36px; font-weight: 200; line-height: 1; }
 .miniapp-menu { padding: 7px 13px; border-radius: 18px; background: rgba(255,255,255,.88); color: #101724; font-weight: 900; }
+.website-card-surface .card-face-front > .card-hero .miniapp-chrome { right: auto; }
+.website-card-surface .card-face-front > .card-hero .miniapp-menu { display: none; }
+.website-card-surface .card-face-front > .card-hero .chrome-back { display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 66px; height: 36px; border: 1px solid rgba(255,255,255,.62); border-radius: 18px; background: rgba(9,19,38,.56); box-shadow: 0 5px 16px rgba(4,10,24,.22), inset 0 1px rgba(255,255,255,.18); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: 0; font-weight: 700; }
+.website-card-surface .card-face-front > .card-hero .chrome-back::before { content: "‹"; font-size: 29px; font-weight: 300; line-height: 1; transform: translateY(-1px); }
+.website-card-surface .card-face-front > .card-hero .chrome-back::after { content: "返回"; font-size: 12px; line-height: 1; }
 .expanded-profile { position: relative; z-index: 1; width: 100%; min-width: 0; transition: opacity 140ms ease, transform 180ms ease; }
 .card-identity, .compact-profile { display: flex; align-items: center; gap: 12px; }
 .card-identity strong, .card-identity small, .compact-profile strong, .compact-profile small { display: block; }
@@ -220,6 +225,7 @@ html.embed-surface #previewRoot { width: 100%; height: 100%; background: transpa
 .empty-roster { display: grid; min-height: 240px; place-items: center; color: #778198; }
 .widget-panel.has-custom-skin:not(.card-open) { right: 32px; bottom: 32px; width: 138px; height: calc(83px + var(--visible-agents, 1) * 48px); padding: 74px 2px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-sizing: border-box; overflow: visible; grid-template-rows: minmax(0, 1fr); }
 .widget-panel.has-custom-skin:not(.card-open)::before { position: absolute; z-index: 0; inset: 0; border: solid transparent; border-width: 74px 2px 3px; border-image-source: var(--panel-skin); border-image-slice: 262 6 6 6 fill; border-image-width: 74px 2px 3px 2px; border-image-repeat: stretch; content: ""; pointer-events: none; }
+.widget-panel.has-custom-skin.card-open { border: 1px solid color-mix(in srgb, var(--website-brand, #315ee8) 34%, rgba(255,255,255,.88)); border-radius: 12px; background: #f4f5f7; box-shadow: 0 0 0 1px rgba(255,255,255,.82), 0 0 0 5px color-mix(in srgb, var(--website-brand, #315ee8) 9%, transparent), 0 18px 44px rgba(13,24,48,.22), 0 36px 90px rgba(13,24,48,.14); overflow: hidden; }
 .widget-drag-handle { position: absolute; z-index: 3; top: 0; right: 0; left: 0; height: 74px; cursor: grab; touch-action: none; user-select: none; }
 .widget-panel.is-dragging .widget-drag-handle { cursor: grabbing; }
 .widget-panel.card-open .widget-drag-handle { display: none; }
@@ -239,6 +245,7 @@ html.embed-surface #previewRoot { width: 100%; height: 100%; background: transpa
 .widget-panel.has-custom-skin:not(.card-open) .roster-avatar { width: 30px; height: 30px; background: var(--skin-avatar-bg); color: var(--skin-item-text); }
 .widget-panel.has-custom-skin:not(.card-open) .empty-roster { min-height: 44px; background: rgba(255,255,255,.84); }
 .embed-mode .widget-panel.has-custom-skin:not(.card-open) { right: 0; bottom: 0; left: auto; width: 138px; }
+@media (min-width: 621px) { .embed-mode .widget-panel.has-custom-skin.card-open { inset: 6px; width: auto; height: auto; } }
 .widget-card-view { grid-area: 1 / 1 / -1 / -1; min-width: 0; min-height: 0; background: #f4f5f7; }
 .widget-card-view iframe { display: block; width: 100%; height: 100%; border: 0; background: #f4f5f7; }
 .widget-chat-view { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
