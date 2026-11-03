@@ -34,11 +34,11 @@ const icons = {
 const icon = (name) => `<svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24">${icons[name]}</svg>`;
 const randomId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
-const skinToneCache = new Map();
+const skinPaletteCache = new Map();
 
-function detectSkinTone(imageUrl) {
-  if (!imageUrl) return Promise.resolve("dark");
-  if (skinToneCache.has(imageUrl)) return skinToneCache.get(imageUrl);
+function detectSkinPalette(imageUrl) {
+  if (!imageUrl) return Promise.resolve({ tone: "dark", brand: "" });
+  if (skinPaletteCache.has(imageUrl)) return skinPaletteCache.get(imageUrl);
   const detection = new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";
@@ -55,25 +55,46 @@ function detectSkinTone(imageUrl) {
         const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
         let luminance = 0;
         let weight = 0;
+        let colorWeight = 0;
+        let red = 0;
+        let green = 0;
+        let blue = 0;
         for (let y = 23; y < 38; y += 1) {
           for (let x = 4; x < 36; x += 1) {
             const index = (y * canvas.width + x) * 4;
             const alpha = pixels[index + 3] / 255;
             if (alpha < 0.2) continue;
-            luminance += ((pixels[index] * 0.2126 + pixels[index + 1] * 0.7152 + pixels[index + 2] * 0.0722) / 255) * alpha;
+            const pixelRed = pixels[index];
+            const pixelGreen = pixels[index + 1];
+            const pixelBlue = pixels[index + 2];
+            const maximum = Math.max(pixelRed, pixelGreen, pixelBlue);
+            const saturation = maximum ? (maximum - Math.min(pixelRed, pixelGreen, pixelBlue)) / maximum : 0;
+            const chromaWeight = alpha * (0.2 + saturation * saturation * 1.8);
+            luminance += ((pixelRed * 0.2126 + pixelGreen * 0.7152 + pixelBlue * 0.0722) / 255) * alpha;
             weight += alpha;
+            red += pixelRed * chromaWeight;
+            green += pixelGreen * chromaWeight;
+            blue += pixelBlue * chromaWeight;
+            colorWeight += chromaWeight;
           }
         }
-        resolve(weight && luminance / weight >= 0.5 ? "light" : "dark");
+        const brand = colorWeight
+          ? `#${[red, green, blue].map((value) => Math.round(value / colorWeight).toString(16).padStart(2, "0")).join("")}`
+          : "";
+        resolve({ tone: weight && luminance / weight >= 0.5 ? "light" : "dark", brand });
       } catch {
-        resolve("dark");
+        resolve({ tone: "dark", brand: "" });
       }
     };
-    image.onerror = () => resolve("dark");
+    image.onerror = () => resolve({ tone: "dark", brand: "" });
     image.src = imageUrl;
   });
-  skinToneCache.set(imageUrl, detection);
+  skinPaletteCache.set(imageUrl, detection);
   return detection;
+}
+
+function detectSkinTone(imageUrl) {
+  return detectSkinPalette(imageUrl).then((palette) => palette.tone);
 }
 
 function persistentId(key) {
@@ -891,6 +912,7 @@ function bindCardPreview(data) {
 
 function websitePreview(data, { embedSurface = false } = {}) {
   const channel = data.channel.config || {};
+  const websiteBrand = safeColor(data.workspace?.accent, "#315ee8");
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
   const agents = data.deployments.map((deployment) => identity(data, deployment));
   const homepageImage = channel.homepageImageUrl || "/console/assets/moosee-work-serious-scene.png";
@@ -899,7 +921,7 @@ function websitePreview(data, { embedSurface = false } = {}) {
   const panelSkin = channel.panelSkinImageUrl || "";
   const visibleAgents = Math.max(1, Math.min(agents.length, 3));
   const employeeStatusLabel = !channel.employeeActionLabel || channel.employeeActionLabel === "咨询" ? "在线" : channel.employeeActionLabel;
-  return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""}" style="--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--panel-header:#ffffff;--panel-background:#f5f7fa;--panel-border:${safeColor(channel.panelBorderColor, "#d7deea")};--roster-title-color:#17233d;--roster-subtitle-color:#748097;--employee-action-color:${safeColor(channel.employeeActionColor, "#176b54")};--panel-skin:url(&quot;${escapeHtml(panelSkin)}&quot;);--visible-agents:${visibleAgents}">
+  return `<section class="website-canvas ${embedSurface ? "embed-mode" : ""}" style="--homepage-image:url(&quot;${escapeHtml(homepageImage)}&quot;);--website-brand:${websiteBrand};--panel-header:#ffffff;--panel-background:#f5f7fa;--panel-border:${safeColor(channel.panelBorderColor, "#d7deea")};--roster-title-color:#17233d;--roster-subtitle-color:#748097;--employee-action-color:${safeColor(channel.employeeActionColor, "#176b54")};--panel-skin:url(&quot;${escapeHtml(panelSkin)}&quot;);--visible-agents:${visibleAgents}">
     ${embedSurface ? "" : `<div class="demo-site" aria-label="官网背景图预览"></div>`}
     <aside class="widget-panel ${panelSkin ? "has-custom-skin" : ""}" data-widget-panel ${panelSkin ? 'data-skin-tone="dark"' : ""} data-shape="${escapeHtml(panelShape)}" data-avatar-shape="${escapeHtml(avatarShape)}">
       ${panelSkin ? `<span class="widget-drag-handle" data-widget-drag-handle title="拖动客服框"></span>` : ""}
@@ -921,7 +943,11 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
   const dragHandle = root.querySelector("[data-widget-drag-handle]");
   const channel = data.channel.config || {};
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
-  if (channel.panelSkinImageUrl) detectSkinTone(channel.panelSkinImageUrl).then((tone) => { if (panel.isConnected) panel.dataset.skinTone = tone; });
+  if (channel.panelSkinImageUrl) detectSkinPalette(channel.panelSkinImageUrl).then((palette) => {
+    if (!panel.isConnected) return;
+    panel.dataset.skinTone = palette.tone;
+    if (palette.brand) panel.closest(".website-canvas")?.style.setProperty("--website-brand", palette.brand);
+  });
   let currentDeploymentId = "";
   let localRosterPosition = null;
 

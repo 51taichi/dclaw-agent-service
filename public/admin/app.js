@@ -11,11 +11,11 @@ let mapSkinToneRevision = 0;
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.getAttribute("id"), node]));
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
 const safeMapColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
-const mapSkinToneCache = new Map();
+const mapSkinPaletteCache = new Map();
 
-function detectMapSkinTone(imageUrl) {
-  if (!imageUrl) return Promise.resolve("dark");
-  if (mapSkinToneCache.has(imageUrl)) return mapSkinToneCache.get(imageUrl);
+function detectMapSkinPalette(imageUrl) {
+  if (!imageUrl) return Promise.resolve({ tone: "dark", brand: "" });
+  if (mapSkinPaletteCache.has(imageUrl)) return mapSkinPaletteCache.get(imageUrl);
   const detection = new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";
@@ -32,25 +32,46 @@ function detectMapSkinTone(imageUrl) {
         const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
         let luminance = 0;
         let weight = 0;
+        let colorWeight = 0;
+        let red = 0;
+        let green = 0;
+        let blue = 0;
         for (let y = 23; y < 38; y += 1) {
           for (let x = 4; x < 36; x += 1) {
             const index = (y * canvas.width + x) * 4;
             const alpha = pixels[index + 3] / 255;
             if (alpha < 0.2) continue;
-            luminance += ((pixels[index] * 0.2126 + pixels[index + 1] * 0.7152 + pixels[index + 2] * 0.0722) / 255) * alpha;
+            const pixelRed = pixels[index];
+            const pixelGreen = pixels[index + 1];
+            const pixelBlue = pixels[index + 2];
+            const maximum = Math.max(pixelRed, pixelGreen, pixelBlue);
+            const saturation = maximum ? (maximum - Math.min(pixelRed, pixelGreen, pixelBlue)) / maximum : 0;
+            const chromaWeight = alpha * (0.2 + saturation * saturation * 1.8);
+            luminance += ((pixelRed * 0.2126 + pixelGreen * 0.7152 + pixelBlue * 0.0722) / 255) * alpha;
             weight += alpha;
+            red += pixelRed * chromaWeight;
+            green += pixelGreen * chromaWeight;
+            blue += pixelBlue * chromaWeight;
+            colorWeight += chromaWeight;
           }
         }
-        resolve(weight && luminance / weight >= 0.5 ? "light" : "dark");
+        const brand = colorWeight
+          ? `#${[red, green, blue].map((value) => Math.round(value / colorWeight).toString(16).padStart(2, "0")).join("")}`
+          : "";
+        resolve({ tone: weight && luminance / weight >= 0.5 ? "light" : "dark", brand });
       } catch {
-        resolve("dark");
+        resolve({ tone: "dark", brand: "" });
       }
     };
-    image.onerror = () => resolve("dark");
+    image.onerror = () => resolve({ tone: "dark", brand: "" });
     image.src = imageUrl;
   });
-  mapSkinToneCache.set(imageUrl, detection);
+  mapSkinPaletteCache.set(imageUrl, detection);
   return detection;
+}
+
+function detectMapSkinTone(imageUrl) {
+  return detectMapSkinPalette(imageUrl).then((palette) => palette.tone);
 }
 
 function syncMapSkinTone(imageUrl) {
@@ -60,8 +81,10 @@ function syncMapSkinTone(imageUrl) {
     return;
   }
   els.websiteRosterMap.dataset.skinTone = "dark";
-  detectMapSkinTone(imageUrl).then((tone) => {
-    if (revision === mapSkinToneRevision) els.websiteRosterMap.dataset.skinTone = tone;
+  detectMapSkinPalette(imageUrl).then((palette) => {
+    if (revision !== mapSkinToneRevision) return;
+    els.websiteRosterMap.dataset.skinTone = palette.tone;
+    if (palette.brand) els.websiteRosterMap.style.setProperty("--map-brand-color", palette.brand);
   });
 }
 
@@ -500,6 +523,7 @@ function syncFieldMapValues(provider) {
     els.websiteRosterMap.style.setProperty("--map-panel-background", "#f5f7fa");
     els.websiteRosterMap.style.setProperty("--map-panel-border", safeMapColor(values.panelBorderColor, "#d7deea"));
     els.websiteRosterMap.style.setProperty("--map-action-color", safeMapColor(values.employeeActionColor, "#176b54"));
+    els.websiteRosterMap.style.setProperty("--map-brand-color", safeMapColor(state.workspace?.accent, "#315ee8"));
     const panelSkin = values.panelSkinImageUrl || "";
     els.websiteRosterMap.classList.toggle("has-custom-skin", Boolean(panelSkin));
     els.websiteRosterMap.style.setProperty("--map-panel-skin", panelSkin ? `url("${String(panelSkin).replace(/["\\]/g, "")}")` : "none");

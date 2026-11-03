@@ -86,10 +86,14 @@ test("website custom frame keeps a fixed transparent skin while the employee lis
   assert.match(previewStyles, /grid-auto-rows:\s*44px;[^}]*padding:\s*5px/);
   assert.match(previewStyles, /agent-option > span[^}]*height:\s*30px/);
   assert.match(previewSource, /function detectSkinTone\(imageUrl\)/);
+  assert.match(previewSource, /function detectSkinPalette\(imageUrl\)/);
+  assert.match(previewSource, /palette\.brand/);
   assert.match(previewSource, /for \(let y = 23; y < 38; y \+= 1\)/);
   assert.match(previewSource, /data-skin-tone="dark"/);
-  assert.match(previewStyles, /data-skin-tone="dark"[^}]*--skin-item-bg:\s*rgba\(255,255,255,\.08\)/);
-  assert.match(previewStyles, /data-skin-tone="light"[^}]*--skin-item-bg:\s*rgba\(9,27,52,\.06\)/);
+  assert.match(previewSource, /--website-brand:\$\{websiteBrand\}/);
+  assert.match(previewStyles, /data-skin-tone="dark"[^}]*--skin-item-bg:\s*color-mix\(in srgb, var\(--website-brand/);
+  assert.match(previewStyles, /data-skin-tone="light"[^}]*--skin-item-bg:\s*color-mix\(in srgb, var\(--website-brand/);
+  assert.match(adminSource, /--map-brand-color/);
   assert.doesNotMatch(previewStyles, /has-custom-skin:not\(\.card-open\) \.agent-option[^}]*background:\s*rgba\(255,255,255,\.9\)/);
   assert.match(adminSource, /function detectMapSkinTone\(imageUrl\)/);
   assert.doesNotMatch(previewStyles, /has-custom-skin:not\(\.card-open\)[^{]*\{[^}]*transform:\s*scale/);
