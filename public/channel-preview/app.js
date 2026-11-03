@@ -69,7 +69,7 @@ function detectSkinPalette(imageUrl) {
             const pixelBlue = pixels[index + 2];
             const maximum = Math.max(pixelRed, pixelGreen, pixelBlue);
             const saturation = maximum ? (maximum - Math.min(pixelRed, pixelGreen, pixelBlue)) / maximum : 0;
-            const chromaWeight = alpha * (0.2 + saturation * saturation * 1.8);
+            const chromaWeight = alpha * (0.02 + saturation * saturation * saturation * 3);
             luminance += ((pixelRed * 0.2126 + pixelGreen * 0.7152 + pixelBlue * 0.0722) / 255) * alpha;
             weight += alpha;
             red += pixelRed * chromaWeight;
@@ -912,7 +912,9 @@ function bindCardPreview(data) {
 
 function websitePreview(data, { embedSurface = false } = {}) {
   const channel = data.channel.config || {};
-  const websiteBrand = safeColor(data.workspace?.accent, "#315ee8");
+  const websiteBrand = channel.employeeItemColorAuto === false
+    ? safeColor(channel.employeeItemColor, safeColor(data.workspace?.accent, "#315ee8"))
+    : safeColor(data.workspace?.accent, "#315ee8");
   const mascot = channel.mascotImageUrl || DEFAULT_MASCOT;
   const agents = data.deployments.map((deployment) => identity(data, deployment));
   const homepageImage = channel.homepageImageUrl || "/console/assets/moosee-work-serious-scene.png";
@@ -946,7 +948,7 @@ function bindWebsitePreview(data, { embedSurface = false, publicSlug = "" } = {}
   if (channel.panelSkinImageUrl) detectSkinPalette(channel.panelSkinImageUrl).then((palette) => {
     if (!panel.isConnected) return;
     panel.dataset.skinTone = palette.tone;
-    if (palette.brand) panel.closest(".website-canvas")?.style.setProperty("--website-brand", palette.brand);
+    if (channel.employeeItemColorAuto !== false && palette.brand) panel.closest(".website-canvas")?.style.setProperty("--website-brand", palette.brand);
   });
   let currentDeploymentId = "";
   let localRosterPosition = null;

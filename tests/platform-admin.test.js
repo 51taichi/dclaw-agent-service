@@ -115,6 +115,8 @@ test("seed migrates the two real channels into one workspace and removes local d
   assert.ok(websiteFields.some((field) => field.key === "homepageImageUrl" && field.type === "image"));
   assert.equal(websiteFields.some((field) => ["mascotImageUrl", "rosterTitle", "rosterSubtitle"].includes(field.key)), false);
   assert.ok(websiteFields.some((field) => field.key === "panelBorderColor" && field.type === "color"));
+  assert.ok(websiteFields.some((field) => field.key === "employeeItemColorAuto" && field.type === "boolean" && field.default === true));
+  assert.ok(websiteFields.some((field) => field.key === "employeeItemColor" && field.type === "color"));
   assert.equal(websiteFields.some((field) => ["panelHeaderColor", "panelBackgroundColor"].includes(field.key)), false);
   assert.ok(websiteFields.some((field) => field.key === "panelShape" && field.options.includes("直角")));
   assert.ok(websiteFields.some((field) => field.key === "employeeAvatarShape" && field.options.includes("圆角方形")));

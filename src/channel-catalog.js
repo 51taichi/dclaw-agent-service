@@ -43,6 +43,8 @@ const catalog = [
     channelFields: [
       { key: "homepageImageUrl", label: "官网背景图", type: "image", default: "/console/assets/moosee-work-serious-scene.png" },
       { key: "panelSkinImageUrl", label: "定制客服框图片", type: "image", default: "", fullWidth: true, imageSpec: { width: 490, height: 472, transparent: true, topSlice: 262, maxVisibleItems: 3 } },
+      { key: "employeeItemColorAuto", label: "自动适配员工卡片配色", type: "boolean", default: true },
+      { key: "employeeItemColor", label: "员工卡片主色", type: "color", default: "#315ee8" },
       { key: "employeeActionLabel", label: "员工状态文案", type: "text", default: "在线", colorKey: "employeeActionColor", colorDefault: "#176b54" },
       { key: "employeeAvatarShape", label: "员工头像形状", type: "select", options: ["圆形", "圆角方形"], default: "圆形" },
       { key: "panelBorderColor", label: "标准模板边框", type: "color", default: "#d7deea" },

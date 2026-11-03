@@ -46,7 +46,7 @@ function detectMapSkinPalette(imageUrl) {
             const pixelBlue = pixels[index + 2];
             const maximum = Math.max(pixelRed, pixelGreen, pixelBlue);
             const saturation = maximum ? (maximum - Math.min(pixelRed, pixelGreen, pixelBlue)) / maximum : 0;
-            const chromaWeight = alpha * (0.2 + saturation * saturation * 1.8);
+            const chromaWeight = alpha * (0.02 + saturation * saturation * saturation * 3);
             luminance += ((pixelRed * 0.2126 + pixelGreen * 0.7152 + pixelBlue * 0.0722) / 255) * alpha;
             weight += alpha;
             red += pixelRed * chromaWeight;
@@ -74,7 +74,7 @@ function detectMapSkinTone(imageUrl) {
   return detectMapSkinPalette(imageUrl).then((palette) => palette.tone);
 }
 
-function syncMapSkinTone(imageUrl) {
+function syncMapSkinTone(imageUrl, autoColor = true) {
   const revision = ++mapSkinToneRevision;
   if (!imageUrl) {
     delete els.websiteRosterMap.dataset.skinTone;
@@ -84,7 +84,7 @@ function syncMapSkinTone(imageUrl) {
   detectMapSkinPalette(imageUrl).then((palette) => {
     if (revision !== mapSkinToneRevision) return;
     els.websiteRosterMap.dataset.skinTone = palette.tone;
-    if (palette.brand) els.websiteRosterMap.style.setProperty("--map-brand-color", palette.brand);
+    if (autoColor && palette.brand) els.websiteRosterMap.style.setProperty("--map-brand-color", palette.brand);
   });
 }
 
@@ -253,7 +253,13 @@ function renderPersonChannels() {
 }
 
 const WEBSITE_BACKGROUND_KEYS = new Set(["homepageImageUrl"]);
-const WEBSITE_CONFIG_KEYS = new Set(["panelSkinImageUrl", "employeeActionLabel", "employeeActionColor", "employeeAvatarShape", "panelBorderColor", "panelShape", "allowedDomains"]);
+const WEBSITE_CONFIG_KEYS = new Set(["panelSkinImageUrl", "employeeItemColorAuto", "employeeItemColor", "employeeActionLabel", "employeeActionColor", "employeeAvatarShape", "panelBorderColor", "panelShape", "allowedDomains"]);
+
+function syncWebsiteColorControls() {
+  const autoColor = els.websiteConfigFields.querySelector('[data-config-key="employeeItemColorAuto"]');
+  const colorField = els.websiteConfigFields.querySelector('[data-config-key="employeeItemColor"]')?.closest("label");
+  if (colorField) colorField.hidden = autoColor?.checked !== false;
+}
 
 function channelFor(provider) {
   return state.channels.find((item) => item.provider === provider) || null;
@@ -299,6 +305,7 @@ function renderProviderForm(provider) {
   if (provider === "website") {
     renderDynamicFields(els.websiteBackgroundFields, fields.filter((field) => WEBSITE_BACKGROUND_KEYS.has(field.key)), values);
     renderDynamicFields(container, fields.filter((field) => WEBSITE_CONFIG_KEYS.has(field.key)), values);
+    syncWebsiteColorControls();
   } else renderDynamicFields(container, fields, values);
   const agentOverrideEnabled = Boolean(channel?.assistantAgentConfigId);
   form.elements.assistantAgentOverrideEnabled.checked = agentOverrideEnabled;
@@ -523,11 +530,15 @@ function syncFieldMapValues(provider) {
     els.websiteRosterMap.style.setProperty("--map-panel-background", "#f5f7fa");
     els.websiteRosterMap.style.setProperty("--map-panel-border", safeMapColor(values.panelBorderColor, "#d7deea"));
     els.websiteRosterMap.style.setProperty("--map-action-color", safeMapColor(values.employeeActionColor, "#176b54"));
-    els.websiteRosterMap.style.setProperty("--map-brand-color", safeMapColor(state.workspace?.accent, "#315ee8"));
+    const autoItemColor = values.employeeItemColorAuto !== false;
+    const itemColor = autoItemColor
+      ? safeMapColor(state.workspace?.accent, "#315ee8")
+      : safeMapColor(values.employeeItemColor, safeMapColor(state.workspace?.accent, "#315ee8"));
+    els.websiteRosterMap.style.setProperty("--map-brand-color", itemColor);
     const panelSkin = values.panelSkinImageUrl || "";
     els.websiteRosterMap.classList.toggle("has-custom-skin", Boolean(panelSkin));
     els.websiteRosterMap.style.setProperty("--map-panel-skin", panelSkin ? `url("${String(panelSkin).replace(/["\\]/g, "")}")` : "none");
-    syncMapSkinTone(panelSkin);
+    syncMapSkinTone(panelSkin, autoItemColor);
     els.websiteRosterMap.style.setProperty("--map-visible-agents", String(Math.max(1, Math.min(samplePeople.length, 3))));
     els.websiteRosterMap.dataset.shape = values.panelShape || "轻圆角";
     els.websiteRosterMap.dataset.avatarShape = values.employeeAvatarShape || "圆形";
@@ -934,6 +945,7 @@ function bindEvents() {
       });
       const syncConfigInput = (event) => {
         if (event.target.matches(".inline-color-input")) event.target.closest(".inline-color-control")?.style.setProperty("--inline-color", event.target.value);
+        if (provider === "website" && event.target.matches('[data-config-key="employeeItemColorAuto"]')) syncWebsiteColorControls();
         renderFieldMap(provider, state.focusedConfigField);
       };
       container.addEventListener("input", syncConfigInput);

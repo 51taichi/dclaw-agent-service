@@ -88,6 +88,8 @@ test("website custom frame keeps a fixed transparent skin while the employee lis
   assert.match(previewSource, /function detectSkinTone\(imageUrl\)/);
   assert.match(previewSource, /function detectSkinPalette\(imageUrl\)/);
   assert.match(previewSource, /palette\.brand/);
+  assert.match(previewSource, /channel\.employeeItemColorAuto !== false/);
+  assert.match(adminSource, /function syncWebsiteColorControls\(\)/);
   assert.match(previewSource, /for \(let y = 23; y < 38; y \+= 1\)/);
   assert.match(previewSource, /data-skin-tone="dark"/);
   assert.match(previewSource, /--website-brand:\$\{websiteBrand\}/);
