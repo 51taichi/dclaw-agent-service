@@ -29,6 +29,11 @@ const MANUAL_REPLY_EMOJIS = ["😊", "👌", "👍", "🙏", "😄", "🎉", "�
 const MANUAL_REPLY_MAX_ATTACHMENTS = 5;
 let alertsLoaded = false;
 
+function localizedErrorMessage(value, fallback = "操作失败，请稍后重试") {
+  const message = String(value || "").trim();
+  return /[\u3400-\u9fff]/.test(message) ? message : fallback;
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
@@ -36,9 +41,13 @@ async function api(path, options = {}) {
     body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      redirectToAdminLogin();
+      throw new Error("登录状态已失效，请重新登录");
+    }
     let message = `请求失败 (${response.status})`;
-    try { message = (await response.json()).error || message; } catch {}
-    throw new Error(message);
+    try { message = localizedErrorMessage((await response.json()).error, message); } catch {}
+    throw new Error(localizedErrorMessage(message, `请求失败（HTTP ${response.status}）`));
   }
   return response.status === 204 ? null : response.json();
 }
@@ -81,11 +90,27 @@ const tagEditor = createTagEditor({
 });
 
 async function bootstrap() {
+  const workspaceId = new URLSearchParams(location.search).get("workspace") || "";
+  const sessionResponse = await fetch(`/api/admin/auth/session${workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : ""}`);
+  const session = await sessionResponse.json();
+  if (!session.authenticated) {
+    redirectToAdminLogin();
+    return;
+  }
   initUnifiedSelects();
   bindEvents();
   renderManualReplyEmojiBar();
   await loadAccounts();
   setInterval(() => { if (state.account) loadAlerts().catch(handleError); }, 5_000);
+}
+
+function redirectToAdminLogin() {
+  const workspaceId = new URLSearchParams(location.search).get("workspace") || "";
+  const params = new URLSearchParams();
+  if (workspaceId) params.set("workspace", workspaceId);
+  params.set("returnTo", `${location.pathname}${location.search}`);
+  const target = `/admin/?${params}`;
+  if (`${location.pathname}${location.search}` !== target) location.replace(target);
 }
 
 async function loadAccounts(preferredId = state.account?.id) {
@@ -566,7 +591,7 @@ async function uploadManualReplyFile(file) {
     body: file
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `附件上传失败 (${response.status})`);
+  if (!response.ok) throw new Error(localizedErrorMessage(data.error, `附件上传失败（HTTP ${response.status}）`));
   return data.asset;
 }
 
@@ -819,7 +844,7 @@ function bindEvents() {
 
 function handleError(error) {
   console.error(error);
-  showToast(error.message || String(error), true);
+  showToast(localizedErrorMessage(error?.message || error), true);
 }
 
 bootstrap().catch(handleError);

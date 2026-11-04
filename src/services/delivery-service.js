@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { toChineseErrorMessage } from "../error-message.js";
 
 export class DeliveryService {
   constructor({ store, registry, maxAttempts = 3 }) {
@@ -36,11 +37,11 @@ export class DeliveryService {
         return this.store.getMessage(message.id);
       } catch (error) {
         lastError = error;
-        this.store.finishDelivery(deliveryId, { status: "failed", error: String(error.message || error) });
+        this.store.finishDelivery(deliveryId, { status: "failed", error: toChineseErrorMessage(error, "消息投递失败，请稍后重试") });
         this.store.audit(account.id, conversation.id, "delivery", attempt < this.maxAttempts ? "delivery.retrying" : "delivery.failed", { messageId: message.id, attempt, error: String(error.message || error) });
       }
     }
-    this.store.createAlert(conversation.id, message.id, { title: "消息投递失败", detail: String(lastError?.message || lastError) });
+    this.store.createAlert(conversation.id, message.id, { title: "消息投递失败", detail: toChineseErrorMessage(lastError, "消息投递失败，请稍后重试") });
     throw lastError;
   }
 }

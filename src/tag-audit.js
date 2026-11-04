@@ -117,55 +117,55 @@ export function validateTagAuditContract({
     const itemKey = key(item.groupId, item.tagId);
     const path = `tagEvaluation[${index}]`;
     if (!item.groupId || !item.tagId) {
-      errors.push(error(path, "tag evaluations require groupId and tagId", "schema"));
+      errors.push(error(path, "标签评估必须包含 groupId 和 tagId", "schema"));
       return;
     }
     if (!configured.has(itemKey)) {
-      errors.push(error(path, `tag '${itemKey}' is not configured`));
+      errors.push(error(path, `标签“${itemKey}”尚未配置`));
     }
     if (evaluationByKey.has(itemKey)) {
-      errors.push(error(path, `tag '${itemKey}' was evaluated more than once`));
+      errors.push(error(path, `标签“${itemKey}”被重复评估`));
     } else {
       evaluationByKey.set(itemKey, item);
     }
     if (typeof item.matched !== "boolean") {
-      errors.push(error(`${path}.matched`, "matched must be a boolean", "schema"));
+      errors.push(error(`${path}.matched`, "matched 必须是布尔值", "schema"));
     }
     if (!item.reason) {
-      errors.push(error(`${path}.reason`, "reason is required", "schema"));
+      errors.push(error(`${path}.reason`, "reason 不能为空", "schema"));
     }
     if (item.matched === true) {
       const configuredTag = configured.get(itemKey);
       const requiresCustomerEvidence = configuredTag?.evidenceMode !== "system";
       if (requiresCustomerEvidence && !item.evidenceMessageId) {
-        errors.push(error(`${path}.evidenceMessageId`, "evidenceMessageId is required when matched=true", "schema"));
+        errors.push(error(`${path}.evidenceMessageId`, "matched=true 时 evidenceMessageId 不能为空", "schema"));
       } else if (item.evidenceMessageId && !evidence.has(item.evidenceMessageId)) {
         errors.push(error(
           `${path}.evidenceMessageId`,
-          `evidenceMessageId '${item.evidenceMessageId}' is not in tagEvidenceCandidates`
+          `evidenceMessageId“${item.evidenceMessageId}”不在标签证据候选列表中`
         ));
       } else if (item.evidenceMessageId && item.evidenceText !== evidence.get(item.evidenceMessageId)) {
         errors.push(error(
           `${path}.evidenceText`,
-          "evidenceText must exactly match the selected tagEvidenceCandidates text"
+          "evidenceText 必须与选中的标签证据文字完全一致"
         ));
       } else if (!item.evidenceMessageId && item.evidenceText) {
         errors.push(error(
           `${path}.evidenceText`,
-          "evidenceText requires evidenceMessageId"
+          "填写 evidenceText 时必须同时填写 evidenceMessageId"
         ));
       }
     } else if (item.evidenceMessageId || item.evidenceText) {
       errors.push(error(
         `${path}.evidenceMessageId`,
-        "evidenceMessageId and evidenceText must be empty when matched=false"
+        "matched=false 时 evidenceMessageId 和 evidenceText 必须为空"
       ));
     }
   });
 
   for (const configuredKey of configured.keys()) {
     if (!evaluationByKey.has(configuredKey)) {
-      errors.push(error("tagEvaluation", `tag '${configuredKey}' was not evaluated`));
+      errors.push(error("tagEvaluation", `标签“${configuredKey}”尚未评估`));
     }
   }
 
@@ -175,12 +175,12 @@ export function validateTagAuditContract({
       const actionKey = key(action.groupId, action.tagId);
       const path = `tagDecision.${actionName}[${index}]`;
       if (!configured.has(actionKey)) {
-        errors.push(error(path, `tag '${actionKey}' is not configured`));
+        errors.push(error(path, `标签“${actionKey}”尚未配置`));
       }
       if (actionName === "add") {
         decisionAdds.set(actionKey, action);
         if (evaluationByKey.get(actionKey)?.matched !== true) {
-          errors.push(error(path, `tag '${actionKey}' does not have a positive evaluation`));
+          errors.push(error(path, `标签“${actionKey}”没有命中评估结果`));
         }
       }
     });
@@ -203,7 +203,7 @@ export function validateTagAuditContract({
         if (!current.has(tagKey) && !decisionAdds.has(tagKey)) {
           errors.push(error(
             "tagDecision.add",
-            `matched tag '${tagKey}' must appear in tagDecision.add`
+            `已命中的标签“${tagKey}”必须出现在 tagDecision.add 中`
           ));
         }
       }
@@ -219,7 +219,7 @@ export function validateTagAuditContract({
     if (!current.has(winnerKey) && !blockedByOneWay && !decisionAdds.has(winnerKey)) {
       errors.push(error(
         "tagDecision.add",
-        `matched tag '${winnerKey}' must appear in tagDecision.add`
+        `已命中的标签“${winnerKey}”必须出现在 tagDecision.add 中`
       ));
     }
   }

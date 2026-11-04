@@ -1,6 +1,7 @@
 import { initUnifiedSelects, syncUnifiedSelect } from "../components/select.js";
 
 const state = {
+  session: null,
   workspaces: [], workspace: null, people: [], channels: [], deployments: [], channelTypes: [],
   miniappConfig: null,
   person: null, creatingWorkspace: false, creatingPerson: false,
@@ -12,6 +13,10 @@ let mapSkinToneRevision = 0;
 
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.getAttribute("id"), node]));
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+const localizedErrorMessage = (value, fallback = "操作失败，请稍后重试") => {
+  const message = String(value || "").trim();
+  return /[\u3400-\u9fff]/.test(message) ? message : fallback;
+};
 const safeMapColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
 const mapSkinPaletteCache = new Map();
 
@@ -94,7 +99,7 @@ async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...options.headers }, body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || `请求失败 (${response.status})`);
+    throw new Error(localizedErrorMessage(data.error, `请求失败（HTTP ${response.status}）`));
   }
   return response.status === 204 ? null : response.json();
 }
@@ -114,13 +119,25 @@ async function uploadAdminAsset(file, kind) {
     body: file
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `上传失败 (${response.status})`);
+  if (!response.ok) throw new Error(localizedErrorMessage(data.error, `上传失败（HTTP ${response.status}）`));
   return data.asset;
 }
 
 async function bootstrap() {
   initUnifiedSelects();
   bindEvents();
+  const requestedWorkspaceId = new URLSearchParams(location.search).get("workspace") || "";
+  const session = await api(`/api/admin/auth/session${requestedWorkspaceId ? `?workspace=${encodeURIComponent(requestedWorkspaceId)}` : ""}`);
+  if (!session.authenticated) {
+    showLogin(session);
+    return;
+  }
+  state.session = session;
+  applySession();
+  await loadApplication();
+}
+
+async function loadApplication() {
   const [workspaces, types, agents] = await Promise.all([api("/api/admin/workspaces"), api("/api/admin/channel-types"), api("/api/admin/agents")]);
   state.workspaces = workspaces.items;
   state.channelTypes = types.items;
@@ -134,8 +151,59 @@ async function bootstrap() {
   else startWorkspace();
   const requestedTabValue = new URLSearchParams(location.search).get("tab");
   const requestedTab = requestedTabValue === "channels" ? "config" : requestedTabValue;
-  const requestedButton = document.querySelector(`[data-tab="${requestedTab}"]`);
+  const requestedButton = document.querySelector(`[data-tab="${state.session?.role === "workspace" && requestedTab === "agent" ? "workspace" : requestedTab}"]`);
   if (requestedButton) requestedButton.click();
+}
+
+function showLogin(session) {
+  state.session = session;
+  els.adminMain.hidden = true;
+  els.loginShell.hidden = false;
+  const workspace = session.targetWorkspace;
+  els.loginTitle.textContent = workspace ? `${workspace.name}工作区` : "平台管理员登录";
+  els.loginDescription.textContent = workspace ? `请输入 ${workspace.id} 的工作区密码` : "登录后可查看和管理全部工作区";
+  els.loginForm.elements.password.focus();
+}
+
+function applySession() {
+  els.loginShell.hidden = true;
+  els.adminMain.hidden = false;
+  const workspaceRole = state.session?.role === "workspace";
+  els.roleBadge.hidden = false;
+  els.roleBadge.textContent = workspaceRole ? "工作区管理员" : "平台管理员";
+  els.logoutButton.hidden = !state.session?.authRequired;
+  els.newWorkspace.hidden = workspaceRole;
+  els.agentTab.hidden = workspaceRole;
+  els.workspacePasswordField.hidden = workspaceRole;
+  document.querySelector(".workspace-list-pane").hidden = workspaceRole;
+  document.querySelector(".workspace-management-layout").classList.toggle("single-workspace", workspaceRole);
+}
+
+async function login(event) {
+  event.preventDefault();
+  els.loginError.hidden = true;
+  const submit = els.loginForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    await api("/api/admin/auth/login", { method: "POST", body: {
+      workspaceId: new URLSearchParams(location.search).get("workspace") || "",
+      password: els.loginForm.elements.password.value
+    } });
+    const returnTo = new URLSearchParams(location.search).get("returnTo") || "";
+    if (returnTo.startsWith("/console/") && !returnTo.startsWith("//")) location.replace(returnTo);
+    else location.reload();
+  } catch (error) {
+    els.loginError.textContent = localizedErrorMessage(error?.message || error);
+    els.loginError.hidden = false;
+    els.loginForm.elements.password.select();
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function logout() {
+  await api("/api/admin/auth/logout", { method: "POST" });
+  location.reload();
 }
 
 async function loadWorkspaceContext() {
@@ -163,8 +231,7 @@ function renderAll() {
   els.workspaceTitle.textContent = `工作区 / ${state.workspace.name}`;
   els.workspaceStatus.textContent = state.workspace.enabled ? "运行中" : "已停用";
   els.workspaceStatus.className = `pill ${state.workspace.enabled ? "ok" : "off"}`;
-  els.openConsole.href = `/console/?workspace=${encodeURIComponent(state.workspace.id)}`;
-  els.openWorkspaceConsole.href = els.openConsole.href;
+  els.openWorkspaceConsole.href = `/console/?workspace=${encodeURIComponent(state.workspace.id)}`;
   renderWorkspaceList();
   renderWorkspaceForm();
   renderPeople();
@@ -193,6 +260,8 @@ function renderWorkspaceForm() {
   form.elements.id.disabled = Boolean(workspace);
   setField(form, "slug", workspace?.slug || "");
   setField(form, "name", workspace?.name || "");
+  setField(form, "adminPassword", "");
+  els.workspacePasswordHint.textContent = workspace?.passwordConfigured ? "已配置，留空表示不修改" : "未配置，至少输入 8 位";
   els.workspaceLogoField.innerHTML = fixedMediaFieldMarkup({ name: "logoUrl", label: "公司 Logo", kind: "image", value: workspace?.logoUrl || "" });
   setField(form, "industry", workspace?.companyContext?.industry || "");
   setField(form, "description", workspace?.companyContext?.description || "");
@@ -709,7 +778,6 @@ function startWorkspace() {
   els.workspaceShell.hidden = false;
   els.workspaceTitle.textContent = "工作区 / 新建工作区";
   els.workspaceStatus.textContent = "待创建";
-  els.openConsole.href = "/console/";
   activateTab("workspace");
   renderWorkspaceList();
   renderWorkspaceForm();
@@ -720,6 +788,7 @@ async function saveWorkspace(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const body = { id: form.elements.id.value, slug: form.elements.slug.value, name: form.elements.name.value, logoUrl: form.elements.logoUrl.value, enabled: state.creatingWorkspace ? true : state.workspace.enabled, companyContext: { industry: form.elements.industry.value, description: form.elements.description.value } };
+  if (form.elements.adminPassword.value) body.adminPassword = form.elements.adminPassword.value;
   if (state.creatingWorkspace) {
     state.workspace = await api("/api/admin/workspaces", { method: "POST", body });
     await Promise.all([
@@ -908,6 +977,8 @@ function activateTab(tab) {
 }
 
 function bindEvents() {
+  els.loginForm.addEventListener("submit", (event) => login(event).catch(handleError));
+  els.logoutButton.addEventListener("click", () => logout().catch(handleError));
   document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => activateTab(button.dataset.tab)));
   els.workspaceList.addEventListener("click", (event) => { const button = event.target.closest("[data-workspace-id]"); if (!button) return; state.workspace = state.workspaces.find((item) => item.id === button.dataset.workspaceId); loadWorkspaceContext().catch(handleError); });
   els.workspaceList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-workspace-toggle]"); if (!toggle) return; toggleWorkspace(toggle.dataset.workspaceToggle, toggle.checked).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
@@ -1008,6 +1079,6 @@ function setField(form, name, value) {
   if (field instanceof HTMLSelectElement) syncUnifiedSelect(field);
 }
 function toast(message) { els.toast.textContent = message; els.toast.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { els.toast.hidden = true; }, 2600); }
-function handleError(error) { console.error(error); toast(error.message || String(error)); }
+function handleError(error) { console.error(error); toast(localizedErrorMessage(error?.message || error)); }
 
 bootstrap().catch(handleError);

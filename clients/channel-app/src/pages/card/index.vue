@@ -136,7 +136,7 @@ import { computed, nextTick, reactive, ref } from "vue";
 import { onLoad, onReady, onShareAppMessage } from "@dcloudio/uni-app";
 import AppIcon from "../../components/AppIcon.vue";
 import ConversationItem from "../../components/conversation/ConversationItem.vue";
-import { copyText, createId, createVoiceRecorder, persistentId, prepareImageAsset, request, requestRecordPermission, resolveAssetUrl, showToast, uploadBinary } from "../../runtime/index.js";
+import { copyText, createId, createVoiceRecorder, localizedErrorMessage, persistentId, prepareImageAsset, request, requestRecordPermission, resolveAssetUrl, showToast, uploadBinary } from "../../runtime/index.js";
 
 const DEFAULTS = {
   cover: "/console/assets/xiaoding-card-hero-v1.webp",
@@ -297,7 +297,7 @@ async function authorizeWechatProfile() {
       wechatProfileStep.value = "profile";
     }
   } catch (loginError) {
-    showToast(loginError.message || "微信登录失败，请重试");
+    showToast(localizedErrorMessage(loginError, "微信登录失败，请重试"));
   } finally {
     wechatLoginPending.value = false;
   }
@@ -334,7 +334,7 @@ async function saveWechatProfile() {
     wechatAvatarDraft.value = saved.profile?.avatarUrl || avatarUrl;
     persistWechatProfile(saved.profile?.nickName || nickName, wechatAvatarDraft.value);
   } catch (profileError) {
-    showToast(profileError.message || "微信资料保存失败");
+    showToast(localizedErrorMessage(profileError, "微信资料保存失败"));
   } finally {
     wechatLoginPending.value = false;
   }
@@ -375,7 +375,7 @@ async function loadChannel() {
       ...(config.value.resources?.length ? [message("resource-list", { items: config.value.resources })] : [])
     ];
   } catch (loadError) {
-    error.value = loadError.message || "名片加载失败";
+    error.value = localizedErrorMessage(loadError, "名片加载失败");
   } finally {
     loading.value = false;
     nextTick(measureStage);
@@ -420,7 +420,8 @@ function scrollConversation(targetRef, target) {
 function appendAgentReply(target, content, attachments = []) {
   if (content) target.value.push(message("assistant-response", { content }));
   for (const attachment of attachments || []) {
-    if (["single-choice", "multi-choice"].includes(attachment.type)) target.value.push(message(attachment.type, { ...attachment }));
+    if (["single-choice", "multi-choice", "lead-form"].includes(attachment.type)) target.value.push(message(attachment.type, { ...attachment }));
+    else if (attachment.type === "card") target.value.push(message("attachment-card", { attachment }));
     else target.value.push(message("attachment", { attachment }));
   }
 }
@@ -466,7 +467,7 @@ async function deliver({ text, type = "text", attachments = [] }, surface = "fro
   if (syncError) throw new Error("会话同步失败，请重试");
   const result = await request(messageEndpoint, { method: "POST", data: { conversationId: activeConversationId, userId: activeUserId, displayName: conversationDisplayName(company), message: { id: createId(), type, text, attachments } } });
   const failed = result.items?.find((item) => item.handledBy === "error");
-  if (failed) throw new Error(failed.error || "Agent 暂时无法回复");
+  if (failed) throw new Error(localizedErrorMessage(failed.error, "Agent 暂时无法回复"));
   const after = company ? companyOutboxAfter : outboxAfter;
   const outboxUrl = conversationOutboxUrl(outboxEndpoint, activeConversationId, after.value);
   const outbox = await request(outboxUrl);
@@ -475,29 +476,29 @@ async function deliver({ text, type = "text", attachments = [] }, surface = "fro
   return { content: replies.map((item) => item.content).filter(Boolean).join("\n\n"), attachments: replies.flatMap((item) => item.attachments || []) };
 }
 
-async function sendFrontText(raw) {
+async function sendFrontText(raw, { displayText = "" } = {}) {
   const text = String(raw || "").trim();
   if (!text) return;
   frontInput.value = "";
   heroExpanded.value = false;
-  frontMessages.value.push(message("message", { role: "customer", content: text }));
+  frontMessages.value.push(message("message", { role: "customer", content: displayText || text }));
   scrollConversation(frontScrollTarget, "front-bottom");
   try {
     const reply = await withAgentLoading(frontMessages, frontScrollTarget, "front-bottom", () => deliver({ text }));
     appendAgentReply(frontMessages, reply.content || "收到，我会继续为您介绍。", reply.attachments);
-  } catch (sendError) { showToast(sendError.message); }
+  } catch (sendError) { showToast(localizedErrorMessage(sendError, "消息发送失败")); }
   scrollConversation(frontScrollTarget, "front-bottom");
 }
 
-async function sendCompanyText(raw) {
+async function sendCompanyText(raw, { displayText = "" } = {}) {
   const text = String(raw || "").trim();
   if (!text) return;
-  companyMessages.value.push(message("message", { role: "customer", content: text }));
+  companyMessages.value.push(message("message", { role: "customer", content: displayText || text }));
   scrollConversation(backScrollTarget, "back-bottom");
   try {
     const reply = await withAgentLoading(companyMessages, backScrollTarget, "back-bottom", () => deliver({ text }, "back"));
     appendAgentReply(companyMessages, reply.content || `关于“${text}”，${assistant.value.name}可以结合${companyName.value}的资料为你继续介绍。`, reply.attachments);
-  } catch (sendError) { showToast(sendError.message); }
+  } catch (sendError) { showToast(localizedErrorMessage(sendError, "消息发送失败")); }
   scrollConversation(backScrollTarget, "back-bottom");
 }
 
@@ -509,8 +510,8 @@ function submitChoice(target, payload) {
 }
 function submitFrontChoice(payload) { submitChoice(frontMessages, payload); }
 function submitCompanyChoice(payload) { submitChoice(companyMessages, payload); }
-function submitFrontLead(payload) { payload.item.submitted = true; sendFrontText(`姓名：${payload.name}；联系方式：${payload.contact}`); }
-function submitCompanyLead(payload) { payload.item.submitted = true; sendCompanyText(`姓名：${payload.name}；联系方式：${payload.contact}`); }
+function submitFrontLead(payload) { payload.item.submitted = true; sendFrontText(`客户已同意后续联系；姓名：${payload.name}；联系方式：${payload.contact}`, { displayText: "已提交联系信息" }); }
+function submitCompanyLead(payload) { payload.item.submitted = true; sendCompanyText(`客户已同意后续联系；姓名：${payload.name}；联系方式：${payload.contact}`, { displayText: "已提交联系信息" }); }
 
 async function handleAction(action, item) {
   if (action === "copy") { await copyText(item.content); return; }
@@ -557,7 +558,7 @@ function ensureRecorder() {
         });
         appendAgentReply(target, reply.content || "语音已收到。", reply.attachments);
       } catch (sendError) {
-        showToast(sendError.message || "语音发送失败");
+        showToast(localizedErrorMessage(sendError, "语音发送失败"));
       }
       scrollConversation(scrollTarget, scrollAnchor);
     },

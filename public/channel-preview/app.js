@@ -35,6 +35,10 @@ const icons = {
 const icon = (name) => `<svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24">${icons[name]}</svg>`;
 const randomId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+const localizedErrorMessage = (value, fallback = "操作失败，请稍后重试") => {
+  const message = String(value || "").trim();
+  return /[\u3400-\u9fff]/.test(message) ? message : fallback;
+};
 const skinPaletteCache = new Map();
 
 function detectSkinPalette(imageUrl) {
@@ -528,9 +532,9 @@ function bindCardPreview(data) {
       })
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "消息发送失败");
+    if (!response.ok) throw new Error(localizedErrorMessage(payload.error, "消息发送失败"));
     const failed = payload.items?.find((item) => item.handledBy === "error");
-    if (failed) throw new Error(failed.error || "Agent 暂时无法回复");
+    if (failed) throw new Error(localizedErrorMessage(failed.error, "Agent 暂时无法回复"));
     await pollOutbox();
   }
 
@@ -542,7 +546,7 @@ function bindCardPreview(data) {
       body: blob
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "媒体上传失败");
+    if (!response.ok) throw new Error(localizedErrorMessage(payload.error, "媒体上传失败"));
     return payload.attachment;
   }
 
@@ -557,7 +561,7 @@ function bindCardPreview(data) {
     try {
       await withAgentLoading(stream, scrollToBottom, () => deliverMessage({ text: value }));
     } catch (error) {
-      showToast(error.message || "消息发送失败");
+      showToast(localizedErrorMessage(error?.message, "消息发送失败"));
     }
   }
 
@@ -607,8 +611,48 @@ function bindCardPreview(data) {
       controls.forEach((control) => { control.disabled = false; });
       button.disabled = false;
       button.textContent = "重新提交";
-      showToast(error.message || "回答提交失败");
+      showToast(localizedErrorMessage(error?.message, "回答提交失败"));
     }
+  }
+
+  async function submitLead(form) {
+    const nameInput = form.elements.namedItem("name");
+    const contactInput = form.elements.namedItem("contact");
+    const name = String(nameInput?.value || "").trim();
+    const contact = String(contactInput?.value || "").trim();
+    if (!name || !contact) return showToast("请完整填写联系信息");
+
+    const company = companyConversation.contains(form);
+    const target = company ? companyConversation : stream;
+    const button = form.querySelector("[data-action='submit-lead']");
+    const controls = [...form.querySelectorAll("input")];
+    controls.forEach((control) => { control.disabled = true; });
+    button.disabled = true;
+    button.textContent = "提交中...";
+    target.insertAdjacentHTML("beforeend", renderConversationComponent("message", { role: "customer", content: "已提交联系信息" }));
+    if (!company) setExpanded(false);
+    (company ? scrollCompanyToLatest : scrollToBottom)();
+
+    const submission = `客户已同意后续联系；姓名：${name}；联系方式：${contact}`;
+    try {
+      if (company) await appendCompanyConversation(submission, { appendCustomer: false });
+      else await withAgentLoading(stream, scrollToBottom, () => deliverMessage({ text: submission }));
+      contactInput.value = maskContact(contact);
+      form.classList.add("is-submitted");
+      button.textContent = "已提交";
+    } catch (error) {
+      controls.forEach((control) => { control.disabled = false; });
+      button.disabled = false;
+      button.textContent = "重新提交";
+      showToast(localizedErrorMessage(error?.message, "联系信息提交失败"));
+    }
+  }
+
+  function maskContact(value) {
+    const text = String(value || "").trim();
+    if (/^\d{7,}$/.test(text)) return `${text.slice(0, 3)}****${text.slice(-4)}`;
+    if (text.length <= 4) return "****";
+    return `${text.slice(0, 2)}${"*".repeat(Math.min(7, text.length - 4))}${text.slice(-2)}`;
   }
 
   async function appendAttachment(file, kind) {
@@ -623,7 +667,7 @@ function bindCardPreview(data) {
         await deliverMessage({ text: kind === "image" ? "[图片]" : `[文件] ${file.name}`, type: kind, attachments: attachment ? [attachment] : [] });
       });
     } catch (error) {
-      showToast(error.message || "附件发送失败");
+      showToast(localizedErrorMessage(error?.message, "附件发送失败"));
     }
   }
 
@@ -642,7 +686,7 @@ function bindCardPreview(data) {
         await deliverMessage({ text: `[语音消息 ${Math.max(1, Math.round(duration))} 秒]`, type: "audio", attachments: attachment ? [attachment] : [] });
       });
     } catch (error) {
-      showToast(error.message || "语音发送失败");
+      showToast(localizedErrorMessage(error?.message, "语音发送失败"));
     }
   }
 
@@ -667,12 +711,12 @@ function bindCardPreview(data) {
             body: JSON.stringify({ conversationId: companyConversationId, userId: companyUserId, displayName: "公司名片访客", message: { id: randomId(), type: "audio", text: prompt, attachments: attachment ? [attachment] : [] } })
           });
           const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload.error || "语音发送失败");
+          if (!response.ok) throw new Error(localizedErrorMessage(payload.error, "语音发送失败"));
           await pollCompanyOutbox();
         }
       });
     } catch (error) {
-      showToast(error.message || "语音发送失败");
+      showToast(localizedErrorMessage(error?.message, "语音发送失败"));
     }
     scrollCompanyToLatest();
   }
@@ -801,12 +845,12 @@ function bindCardPreview(data) {
             body: JSON.stringify({ conversationId: companyConversationId, userId: companyUserId, displayName: "公司名片访客", message: { id: randomId(), type: "text", text: prompt, attachments: [] } })
           });
           const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload.error || "消息发送失败");
+          if (!response.ok) throw new Error(localizedErrorMessage(payload.error, "消息发送失败"));
           await pollCompanyOutbox();
         }
       });
     } catch (error) {
-      companyConversation.insertAdjacentHTML("beforeend", renderConversationComponent("assistant-response", { content: error.message || "公司助手暂时无法回复" }));
+      companyConversation.insertAdjacentHTML("beforeend", renderConversationComponent("assistant-response", { content: localizedErrorMessage(error?.message, "公司助手暂时无法回复") }));
     }
     scrollCompanyToLatest();
   }
@@ -859,6 +903,12 @@ function bindCardPreview(data) {
     form.querySelector("[data-action='submit-choice']").disabled = !form.querySelector("input:checked");
   });
   root.addEventListener("submit", (event) => {
+    const leadForm = event.target.closest("[data-lead-form]");
+    if (leadForm) {
+      event.preventDefault();
+      submitLead(leadForm);
+      return;
+    }
     const form = event.target.closest("[data-choice-form]");
     if (!form) return;
     event.preventDefault();

@@ -23,7 +23,7 @@ export class Store {
     const provider = cleanText(input.provider, "", 32);
     const name = cleanText(input.name, "", 120);
     if (!/^[a-z][a-z0-9-]{2,79}$/.test(id) || !/^[a-z][a-z0-9-]{1,31}$/.test(provider) || !name) {
-      throw new TypeError("Invalid channel account");
+      throw new TypeError("渠道账号信息无效");
     }
     this.db.prepare(`
       INSERT INTO channel_accounts (id, provider, name, enabled, accent, agent_api_url, agent_api_key, agent_id, webhook_secret, config_json)
@@ -80,7 +80,7 @@ export class Store {
   createWorkspace(input) {
     const id = identifier(input.id || input.slug);
     const slug = identifier(input.slug || input.id);
-    const name = requiredText(input.name, "Workspace name", 120);
+    const name = requiredText(input.name, "工作区名称", 120);
     this.db.prepare(`INSERT INTO workspaces (id, slug, name, enabled, accent, logo_url, company_context_json) VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .run(id, slug, name, input.enabled === false ? 0 : 1, color(input.accent), cleanText(input.logoUrl, "", 2000), JSON.stringify(objectValue(input.companyContext)));
     return this.getWorkspace(id);
@@ -102,6 +102,44 @@ export class Store {
     return this.getWorkspace(id);
   }
 
+  getWorkspacePasswordHash(id) {
+    return this.db.prepare("SELECT admin_password_hash FROM workspaces WHERE id = ?").get(id)?.admin_password_hash || "";
+  }
+
+  setWorkspacePasswordHash(id, passwordHash) {
+    const result = this.db.prepare("UPDATE workspaces SET admin_password_hash = ?, updated_at = ? WHERE id = ?")
+      .run(String(passwordHash || ""), isoNow(), id);
+    return Boolean(result.changes);
+  }
+
+  createAdminSession({ tokenHash, scopeType, workspaceId = null, expiresAt }) {
+    this.db.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").run(isoNow());
+    this.db.prepare("INSERT INTO admin_sessions (token_hash, scope_type, workspace_id, expires_at) VALUES (?, ?, ?, ?)")
+      .run(tokenHash, scopeType, workspaceId, expiresAt);
+  }
+
+  getAdminSession(tokenHash) {
+    this.db.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").run(isoNow());
+    const row = this.db.prepare(`SELECT session.*, workspace.name AS workspace_name, workspace.slug AS workspace_slug
+      FROM admin_sessions session LEFT JOIN workspaces workspace ON workspace.id = session.workspace_id
+      WHERE session.token_hash = ? AND session.expires_at > ?`).get(tokenHash, isoNow());
+    return row ? {
+      scopeType: row.scope_type,
+      workspaceId: row.workspace_id || null,
+      workspaceName: row.workspace_name || "",
+      workspaceSlug: row.workspace_slug || "",
+      expiresAt: row.expires_at
+    } : null;
+  }
+
+  deleteAdminSession(tokenHash) {
+    this.db.prepare("DELETE FROM admin_sessions WHERE token_hash = ?").run(tokenHash);
+  }
+
+  deleteWorkspaceAdminSessions(workspaceId) {
+    this.db.prepare("DELETE FROM admin_sessions WHERE scope_type = 'workspace' AND workspace_id = ?").run(workspaceId);
+  }
+
   getWorkspaceMiniapp(workspaceId, { includeSecrets = false } = {}) {
     const row = this.db.prepare("SELECT * FROM workspace_miniapps WHERE workspace_id = ?").get(workspaceId);
     return row ? workspaceMiniappView(row, includeSecrets) : null;
@@ -113,7 +151,7 @@ export class Store {
     if (!/^wx[A-Za-z0-9_-]{8,40}$/.test(appId)) throw new TypeError("小程序 AppID 格式不正确");
     const mode = ["shared", "dedicated"].includes(input.mode) ? input.mode : "dedicated";
     const status = ["configured", "verified", "error"].includes(input.status) ? input.status : "configured";
-    const encryptedAppSecret = requiredText(input.encryptedAppSecret, "Encrypted AppSecret", 4000);
+    const encryptedAppSecret = requiredText(input.encryptedAppSecret, "加密后的 AppSecret", 4000);
     this.db.prepare(`INSERT INTO workspace_miniapps (workspace_id, mode, name, app_id, encrypted_app_secret, original_id, status, verified_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(workspace_id) DO UPDATE SET mode = excluded.mode, name = excluded.name, app_id = excluded.app_id,
@@ -146,9 +184,9 @@ export class Store {
   }
 
   ensureWechatVisitor(workspaceId, appId, openid, unionid = "") {
-    const normalizedWorkspaceId = requiredText(workspaceId, "Workspace ID", 80);
-    const normalizedAppId = requiredText(appId, "WeChat AppID", 80);
-    const normalizedOpenid = requiredText(openid, "WeChat openid", 160);
+    const normalizedWorkspaceId = requiredText(workspaceId, "工作区 ID", 80);
+    const normalizedAppId = requiredText(appId, "微信 AppID", 80);
+    const normalizedOpenid = requiredText(openid, "微信 openid", 160);
     this.db.prepare(`INSERT INTO workspace_wechat_visitors (workspace_id, app_id, openid, unionid) VALUES (?, ?, ?, ?)
       ON CONFLICT(workspace_id, app_id, openid) DO UPDATE SET unionid = CASE WHEN excluded.unionid <> '' THEN excluded.unionid ELSE workspace_wechat_visitors.unionid END, updated_at = ?`)
       .run(normalizedWorkspaceId, normalizedAppId, normalizedOpenid, cleanText(unionid, "", 160), isoNow());
@@ -178,11 +216,11 @@ export class Store {
   }
 
   createPerson(workspaceId, input) {
-    if (!this.getWorkspace(workspaceId)) throw new TypeError("Workspace not found");
+    if (!this.getWorkspace(workspaceId)) throw new TypeError("工作区不存在");
     const id = identifier(input.id);
     const agentConfigId = this.agentConfigReference(input.agentConfigId);
     this.db.prepare(`INSERT INTO people (id, workspace_id, name, title, avatar_url, enabled, persona_json, profile_json, agent_config_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, workspaceId, requiredText(input.name, "Person name", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, JSON.stringify(objectValue(input.persona)), JSON.stringify(objectValue(input.profile)), agentConfigId);
+      .run(id, workspaceId, requiredText(input.name, "智能员工名称", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, JSON.stringify(objectValue(input.persona)), JSON.stringify(objectValue(input.profile)), agentConfigId);
     return this.getPerson(id);
   }
 
@@ -217,11 +255,11 @@ export class Store {
   }
 
   createWorkspaceChannel(workspaceId, input) {
-    if (!this.getWorkspace(workspaceId)) throw new TypeError("Workspace not found");
+    if (!this.getWorkspace(workspaceId)) throw new TypeError("工作区不存在");
     const id = identifier(input.id);
     const provider = cleanText(input.provider, "", 32);
-    if (!["website", "miniapp"].includes(provider)) throw new TypeError("Unsupported channel provider");
-    const name = requiredText(input.name, "Channel name", 120);
+    if (!["website", "miniapp"].includes(provider)) throw new TypeError("不支持该渠道类型");
+    const name = requiredText(input.name, "渠道名称", 120);
     const assistantAccountId = `${id}-company-assistant`;
     const secret = cleanText(input.webhookSecret, "", 500);
     const assistantAgentConfigId = this.agentConfigReference(input.assistantAgentConfigId);
@@ -279,7 +317,7 @@ export class Store {
   createDeployment(workspaceId, input) {
     const channel = this.getWorkspaceChannel(input.workspaceChannelId);
     const person = this.getPerson(input.personId);
-    if (!channel || !person || channel.workspaceId !== workspaceId || person.workspaceId !== workspaceId) throw new TypeError("Channel and person must belong to workspace");
+    if (!channel || !person || channel.workspaceId !== workspaceId || person.workspaceId !== workspaceId) throw new TypeError("渠道和智能员工必须属于同一工作区");
     const id = identifier(input.id);
     const accountId = identifier(input.accountId || id);
     const publicSlug = identifier(input.publicSlug || id);
@@ -353,7 +391,7 @@ export class Store {
 
   createAgentConfig(input) {
     const id = agentConfigIdentifier(input.id);
-    const name = requiredText(input.name, "Agent config name", 120);
+    const name = requiredText(input.name, "Agent 配置名称", 120);
     this.db.prepare(`INSERT INTO agent_configs (id, name, agent_api_url, agent_api_key, agent_id, concurrency_limit, billing_label) VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .run(id, name, cleanText(input.agentApiUrl, "", 2000), cleanText(input.agentApiKey, "", 2000), cleanText(input.agentId, "", 200), 0, "");
     return this.getAgentConfig(id);
@@ -371,16 +409,16 @@ export class Store {
   deleteAgentConfig(id) {
     const existing = this.getAgentConfig(id);
     if (!existing) return false;
-    if (existing.isDefault) throw new TypeError("Default Agent config cannot be deleted");
+    if (existing.isDefault) throw new TypeError("默认 Agent 配置不能删除");
     const used = this.db.prepare("SELECT 1 FROM people WHERE agent_config_id = ? UNION ALL SELECT 1 FROM workspace_channels WHERE assistant_agent_config_id = ? LIMIT 1").get(id, id);
-    if (used) throw new TypeError("Agent config is currently bound");
+    if (used) throw new TypeError("Agent 配置正在使用，不能删除");
     this.db.prepare("DELETE FROM agent_configs WHERE id = ?").run(id);
     return true;
   }
 
   saveAgentDefaults({ defaultAgentConfigId, personAgentConfigId, assistantAgentConfigId }) {
     const defaultId = this.agentConfigReference(defaultAgentConfigId || personAgentConfigId || assistantAgentConfigId);
-    if (!defaultId) throw new TypeError("Default Agent config is required");
+    if (!defaultId) throw new TypeError("必须选择默认 Agent 配置");
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.prepare("UPDATE agent_configs SET default_for_person = CASE WHEN id = ? THEN 1 ELSE 0 END, default_for_assistant = CASE WHEN id = ? THEN 1 ELSE 0 END, updated_at = ?").run(defaultId, defaultId, isoNow());
@@ -399,7 +437,7 @@ export class Store {
 
   agentConfigReference(value) {
     const id = cleanText(value, "", 80);
-    if (id && !this.getAgentConfig(id)) throw new TypeError("Agent config not found");
+    if (id && !this.getAgentConfig(id)) throw new TypeError("Agent 配置不存在");
     return id || null;
   }
 
@@ -409,11 +447,11 @@ export class Store {
   }
 
   saveAgentBinding(scopeType, scopeId, input) {
-    if (!["platform", "workspace", "person", "assistant"].includes(scopeType)) throw new TypeError("Invalid Agent binding scope");
-    if (scopeType === "platform" && scopeId !== "default") throw new TypeError("Invalid platform scope");
-    if (scopeType === "workspace" && !this.getWorkspace(scopeId)) throw new TypeError("Workspace not found");
-    if (scopeType === "person" && !this.getPerson(scopeId)) throw new TypeError("Person not found");
-    if (scopeType === "assistant" && !this.getWorkspaceChannel(scopeId)) throw new TypeError("Channel not found");
+    if (!["platform", "workspace", "person", "assistant"].includes(scopeType)) throw new TypeError("Agent 绑定范围无效");
+    if (scopeType === "platform" && scopeId !== "default") throw new TypeError("平台级绑定范围无效");
+    if (scopeType === "workspace" && !this.getWorkspace(scopeId)) throw new TypeError("工作区不存在");
+    if (scopeType === "person" && !this.getPerson(scopeId)) throw new TypeError("智能员工不存在");
+    if (scopeType === "assistant" && !this.getWorkspaceChannel(scopeId)) throw new TypeError("渠道不存在");
     const existing = this.getAgentBinding(scopeType, scopeId, { includeSecrets: true });
     const key = input.agentApiKey === undefined || input.agentApiKey === "••••••••" ? existing?.agentApiKey || "" : cleanText(input.agentApiKey, "", 2000);
     const value = {
@@ -907,7 +945,7 @@ export class Store {
 
   acknowledgeDelivery(accountId, providerMessageId, status) {
     const allowed = new Set(["queued", "sent", "delivered", "read", "failed"]);
-    if (!allowed.has(status)) throw new TypeError("Invalid delivery status");
+    if (!allowed.has(status)) throw new TypeError("消息送达状态无效");
     const delivery = this.db.prepare("SELECT d.id, d.message_id FROM deliveries d WHERE d.account_id = ? AND d.provider_message_id = ?").get(accountId, providerMessageId);
     if (!delivery) return false;
     this.db.prepare("UPDATE deliveries SET status = ?, updated_at = ? WHERE id = ?").run(status, isoNow(), delivery.id);
@@ -916,7 +954,7 @@ export class Store {
   }
 
   setConversationMode(id, mode, { operator = "console", note = "" } = {}) {
-    if (!['ai', 'human'].includes(mode)) throw new TypeError("Invalid conversation mode");
+    if (!['ai', 'human'].includes(mode)) throw new TypeError("会话模式无效");
     const current = this.getConversation(id);
     if (!current) return null;
     if (current.mode !== mode) {
@@ -931,7 +969,7 @@ export class Store {
     const conversation = this.getConversation(id);
     if (!conversation) return null;
     const machine = this.getFlowMachine(conversation.accountId);
-    if (!machine.config.nodes.some((item) => item.id === state)) throw new TypeError("Unknown flow node");
+    if (!machine.config.nodes.some((item) => item.id === state)) throw new TypeError("流程节点不存在");
     const session = this.getOrCreateFlowSession(id, conversation.accountId, machine);
     if (session.currentNodeId === state) return conversation;
     const timestamp = isoNow();
@@ -984,7 +1022,7 @@ export class Store {
   }
 
   saveFlowMachine(accountId, input = {}) {
-    if (!this.getAccount(accountId)) throw new TypeError("Channel account not found");
+    if (!this.getAccount(accountId)) throw new TypeError("渠道账号不存在");
     const config = normalizeFlowConfig(input.config || input);
     const enabled = input.enabled !== false;
     const timestamp = isoNow();
@@ -1068,7 +1106,7 @@ export class Store {
   }
 
   finishActivation(id, { status, error = "" }) {
-    if (!["sent", "failed", "canceled"].includes(status)) throw new TypeError("Invalid activation status");
+    if (!["sent", "failed", "canceled"].includes(status)) throw new TypeError("客户激活任务状态无效");
     const condition = status === "canceled" ? "status IN ('pending', 'processing')" : "status = 'processing'";
     return Boolean(this.db.prepare(`UPDATE activation_tasks SET status = ?, last_error = ?, updated_at = ? WHERE id = ? AND ${condition}`).run(status, cleanText(error, "", 1000), isoNow(), id).changes);
   }
@@ -1084,7 +1122,7 @@ export class Store {
   }
 
   saveTagSchema(accountId, schema) {
-    if (!this.getAccount(accountId)) throw new TypeError("Channel account not found");
+    if (!this.getAccount(accountId)) throw new TypeError("渠道账号不存在");
     const config = normalizeStoredTagSchema(schema?.schema || schema);
     validateTagSchema(config);
     const timestamp = isoNow();
@@ -1159,6 +1197,13 @@ export class Store {
       SELECT a.*, c.display_name FROM attention_alerts a JOIN conversations c ON c.id = a.conversation_id
       WHERE c.account_id = ? AND (? = '' OR a.status = ?) ORDER BY a.created_at DESC LIMIT 200
     `).all(accountId, status, status).map((row) => ({ id: Number(row.id), conversationId: Number(row.conversation_id), messageId: row.message_id ? Number(row.message_id) : null, title: row.title, detail: row.detail, status: row.status, displayName: row.display_name, createdAt: row.created_at, resolvedAt: row.resolved_at }));
+  }
+
+  getAlert(id) {
+    const row = this.db.prepare(`SELECT alert.id, conversation.account_id
+      FROM attention_alerts alert JOIN conversations conversation ON conversation.id = alert.conversation_id
+      WHERE alert.id = ?`).get(id);
+    return row ? { id: Number(row.id), accountId: row.account_id } : null;
   }
 
   resolveAlert(id) {
@@ -1236,6 +1281,7 @@ function workspaceView(row) {
     personCount: Number(row.person_count || 0),
     channelCount: Number(row.channel_count || 0),
     miniappStatus: row.miniapp_status || "unconfigured",
+    passwordConfigured: Boolean(row.admin_password_hash),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -1508,13 +1554,13 @@ function cleanText(value, fallback = "", max = 1000) {
 
 function requiredText(value, label, max) {
   const result = cleanText(value, "", max);
-  if (!result) throw new TypeError(`${label} is required`);
+  if (!result) throw new TypeError(`${label}不能为空`);
   return result;
 }
 
 function identifier(value) {
   const result = cleanText(value, "", 80);
-  if (!/^[a-z][a-z0-9-]{2,79}$/.test(result)) throw new TypeError("Invalid identifier");
+  if (!/^[a-z][a-z0-9-]{2,79}$/.test(result)) throw new TypeError("标识格式无效：需为 3-80 位，以小写字母开头，仅支持小写字母、数字和连字符 -");
   return result;
 }
 
@@ -1550,11 +1596,11 @@ function safeInteger(value) {
 function validateTagSchema(schema) {
   const groupIds = new Set();
   for (const group of schema.groups) {
-    if (!group.id || !group.name || groupIds.has(group.id)) throw new TypeError("Tag group ids must be unique and non-empty");
+    if (!group.id || !group.name || groupIds.has(group.id)) throw new TypeError("标签组 ID 不能为空且不能重复");
     groupIds.add(group.id);
     const tagIds = new Set();
     for (const tag of group.tags) {
-      if (!tag.id || !tag.name || tagIds.has(tag.id)) throw new TypeError(`Tag ids in '${group.id}' must be unique and non-empty`);
+      if (!tag.id || !tag.name || tagIds.has(tag.id)) throw new TypeError(`标签组“${group.id}”中的标签 ID 不能为空且不能重复`);
       tagIds.add(tag.id);
     }
   }

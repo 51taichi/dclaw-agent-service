@@ -36,7 +36,7 @@ export function normalizeActivation(raw = {}) {
 export function normalizeFlowConfig(input = {}) {
   const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
   const rawNodes = Array.isArray(source.nodes) ? source.nodes : [];
-  if (!rawNodes.length) throw new TypeError("flow machine requires at least one node");
+  if (!rawNodes.length) throw new TypeError("客服流程至少需要一个节点");
   const nodes = rawNodes.map((node, index) => ({
     id: text(node?.id, `node_${index + 1}`),
     name: text(node?.name, `节点 ${index + 1}`),
@@ -53,14 +53,14 @@ export function normalizeFlowConfig(input = {}) {
     transitions: Array.isArray(node?.transitions) ? node.transitions : []
   }));
   if (nodes.some((node) => !/^[a-z][a-z0-9_]{1,79}$/i.test(node.id) || !node.name)) {
-    throw new TypeError("each flow node requires a valid id and name");
+    throw new TypeError("每个流程节点都需要有效的 ID 和名称");
   }
   const ids = new Set(nodes.map((node) => node.id));
-  if (ids.size !== nodes.length) throw new TypeError("flow node ids must be unique");
+  if (ids.size !== nodes.length) throw new TypeError("流程节点 ID 不能重复");
   const entryNodeId = text(source.entryNodeId, nodes[0].id);
-  if (!ids.has(entryNodeId)) throw new TypeError("entryNodeId must match a node id");
+  if (!ids.has(entryNodeId)) throw new TypeError("入口节点 ID 必须对应已有流程节点");
   for (const node of nodes) {
-    if (node.nextNodeId && !ids.has(node.nextNodeId)) throw new TypeError(`nextNodeId not found: ${node.nextNodeId}`);
+    if (node.nextNodeId && !ids.has(node.nextNodeId)) throw new TypeError(`下一流程节点不存在：${node.nextNodeId}`);
   }
   return {
     name: text(source.name, "默认客服流程") || "默认客服流程",
@@ -136,12 +136,12 @@ export function compactFlowForAgent({ machine, session }) {
 
 export function validateFlowDecision(raw, { flowContext } = {}) {
   if (!flowContext) return null;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new TypeError("flowDecision is required when a flow context is provided");
-  if (typeof raw.nodeCompleted !== "boolean") throw new TypeError("flowDecision.nodeCompleted must be a boolean");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new TypeError("存在流程上下文时必须返回 flowDecision");
+  if (typeof raw.nodeCompleted !== "boolean") throw new TypeError("flowDecision.nodeCompleted 必须是布尔值");
   const currentNodeId = text(flowContext.currentNode?.id);
   const declaredCurrentNodeId = text(raw.currentNodeId);
   if (declaredCurrentNodeId && declaredCurrentNodeId !== currentNodeId) {
-    throw new TypeError("flowDecision.currentNodeId must match the current node");
+    throw new TypeError("flowDecision.currentNodeId 必须与当前流程节点一致");
   }
   const patch = raw.collectedDataPatch && typeof raw.collectedDataPatch === "object" && !Array.isArray(raw.collectedDataPatch)
     ? raw.collectedDataPatch
@@ -150,18 +150,18 @@ export function validateFlowDecision(raw, { flowContext } = {}) {
   const collectedDataPatch = {};
   for (const [rawField, value] of Object.entries(patch)) {
     const field = text(rawField);
-    if (!allowedFields.has(field)) throw new TypeError(`flowDecision.collectedDataPatch.${field} is not configured for the current node`);
+    if (!allowedFields.has(field)) throw new TypeError(`当前流程节点未配置采集字段：${field}`);
     if (!["string", "number", "boolean"].includes(typeof value) || (typeof value === "string" && !value.trim())) {
-      throw new TypeError(`flowDecision.collectedDataPatch.${field} must contain a value`);
+      throw new TypeError(`采集字段“${field}”必须包含有效值`);
     }
     collectedDataPatch[field] = typeof value === "string" ? value.trim() : value;
   }
   const nextNodeId = text(raw.nextNodeId);
   if (!raw.nodeCompleted && nextNodeId && nextNodeId !== currentNodeId) {
-    throw new TypeError("flowDecision.nextNodeId must remain on the current node when nodeCompleted=false");
+    throw new TypeError("当前节点未完成时，flowDecision.nextNodeId 必须保持为当前节点");
   }
   if (raw.nodeCompleted && nextNodeId !== (flowContext.allowedNextNodeId || "")) {
-    throw new TypeError("flowDecision.nextNodeId must match the configured next node");
+    throw new TypeError("flowDecision.nextNodeId 必须与已配置的下一节点一致");
   }
   return {
     currentNodeId,

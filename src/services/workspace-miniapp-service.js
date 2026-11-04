@@ -1,4 +1,5 @@
 import { WechatAuth } from "./wechat-auth.js";
+import { toChineseErrorMessage } from "../error-message.js";
 
 export class WorkspaceMiniappService {
   constructor({ store, vault, fetchImpl = globalThis.fetch, sessionTtlDays = 30 } = {}) {
@@ -39,7 +40,9 @@ export class WorkspaceMiniappService {
     const response = await this.fetchImpl(url, { headers: { Accept: "application/json" } });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result?.access_token) {
-      const error = new Error(`微信小程序配置验证失败${result?.errmsg ? `：${result.errmsg}` : ""}`);
+      const detail = result?.errmsg ? toChineseErrorMessage(result.errmsg, "") : "";
+      const errorCode = result?.errcode ? `（错误码 ${result.errcode}）` : "";
+      const error = new Error(`微信小程序配置验证失败${detail ? `：${detail}` : errorCode}`);
       error.status = 400;
       throw error;
     }

@@ -41,13 +41,13 @@
     <view class="choice-footer"><button class="primary-button" :class="{ 'is-disabled': !selected.length || item.submitted }" :disabled="!selected.length || item.submitted" @tap="submitChoice">{{ item.submitted ? '已提交' : item.submitLabel || '提交回答' }}</button></view>
   </view>
 
-  <view v-else-if="item.type === 'lead-form'" class="component-card lead-card">
-    <view class="component-title"><text>保持联系</text><text class="muted">我们将尽快联系您</text></view>
+  <view v-else-if="item.type === 'lead-form'" class="component-card lead-card" :class="{ submitted: item.submitted }">
+    <view class="component-title"><text>{{ item.title || '保持联系' }}</text><text class="muted">{{ item.subtitle || '我们将尽快联系您' }}</text></view>
     <view class="lead-fields">
-      <view class="lead-field"><text>怎么称呼您</text><input class="lead-input" v-model="lead.name" placeholder="请输入姓名" /></view>
-      <view class="lead-field"><text>怎么联系到您</text><input class="lead-input" v-model="lead.contact" placeholder="手机号或微信号" /></view>
+      <view class="lead-field"><text>怎么称呼您</text><input class="lead-input" v-model="lead.name" :disabled="item.submitted" :placeholder="item.namePlaceholder || '请输入姓名'" /></view>
+      <view class="lead-field"><text>怎么联系到您</text><input class="lead-input" v-model="lead.contact" :disabled="item.submitted" :placeholder="item.contactPlaceholder || '请输入手机号或微信号'" /></view>
     </view>
-    <view class="choice-footer"><button class="primary-button" :class="{ 'is-disabled': item.submitted }" :disabled="item.submitted" @tap="submitLead">{{ item.submitted ? '已提交' : '提交' }}</button></view>
+    <view class="choice-footer"><button class="primary-button" :class="{ 'is-disabled': item.submitted }" :disabled="item.submitted" @tap="submitLead">{{ item.submitted ? '已提交' : item.submitLabel || '提交' }}</button></view>
   </view>
 
   <view v-else-if="item.type === 'resource-list'" class="component-card resource-card">
@@ -59,7 +59,13 @@
 
   <view v-else-if="item.type === 'attachment'" class="message agent-message attachment" @tap="$emit('open', attachment.url)">
     <image v-if="attachment.type === 'image'" class="attachment-image" :src="attachmentImage" mode="aspectFill" />
-    <template v-else><view class="attachment-icon"><AppIcon :name="attachment.type === 'card' ? 'link' : 'file'" tone="blue" :size="18" /></view><view class="attachment-copy"><text>{{ attachment.title || attachment.name || '查看资料' }}</text><text v-if="attachment.subtitle" class="muted">{{ attachment.subtitle }}</text></view></template>
+    <template v-else-if="attachment.type !== 'card'"><view class="attachment-icon"><AppIcon name="file" tone="blue" :size="18" /></view><view class="attachment-copy"><text>{{ attachment.title || attachment.name || '查看资料' }}</text><text v-if="attachment.subtitle" class="muted">{{ attachment.subtitle }}</text></view></template>
+  </view>
+
+  <view v-else-if="item.type === 'attachment-card'" class="link-card" @tap="$emit('open', attachment.url)">
+    <image v-if="cardImage" class="link-card-image" :src="cardImage" mode="aspectFill" />
+    <view v-else class="link-card-image link-card-fallback"><AppIcon name="link" tone="blue" :size="24" /></view>
+    <view class="link-card-copy"><text class="link-card-title">{{ attachment.title || attachment.name || '查看详情' }}</text><text v-if="attachment.subtitle" class="link-card-subtitle">{{ attachment.subtitle }}</text><text class="link-card-action">{{ attachment.name || '查看详情' }}</text></view>
   </view>
 
   <view v-else-if="item.type === 'voice-message'" class="message voice-message" :class="item.role === 'customer' ? 'customer-message' : 'agent-message'">
@@ -70,7 +76,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from "vue";
 import AppIcon from "../AppIcon.vue";
-import { prepareImageAsset, resolveAssetUrl } from "../../runtime/index.js";
+import { prepareImageAsset } from "../../runtime/index.js";
 
 const props = defineProps({ item: { type: Object, required: true } });
 const emit = defineEmits(["action", "question", "choice", "lead", "open"]);
@@ -80,9 +86,11 @@ const isChoice = computed(() => props.item.type === "single-choice" || props.ite
 const normalizedOptions = computed(() => (props.item.options || []).map((option) => typeof option === "string" ? { label: option, value: option, description: "" } : { ...option, value: String(option.value ?? option.label) }));
 const attachment = computed(() => props.item.attachment || props.item);
 const attachmentImage = ref("");
+const cardImage = ref("");
 
 watch(() => props.item.selectedValues, (value) => { selected.value = Array.isArray(value) ? value.map(String) : []; }, { immediate: true });
-watch(() => attachment.value.url, async (value) => { attachmentImage.value = value ? await prepareImageAsset(value) : resolveAssetUrl(value); }, { immediate: true });
+watch([() => attachment.value.type, () => attachment.value.url], async ([type, value]) => { attachmentImage.value = type === "image" && value ? await prepareImageAsset(value) : ""; }, { immediate: true });
+watch([() => attachment.value.type, () => attachment.value.pictureUrl], async ([type, value]) => { cardImage.value = type === "card" && value ? await prepareImageAsset(value) : ""; }, { immediate: true });
 
 function toggleChoice(value) {
   if (props.item.submitted) return;
@@ -97,8 +105,17 @@ function submitChoice() {
 }
 
 function submitLead() {
-  if (!lead.name.trim() || !lead.contact.trim()) return uni.showToast({ title: "请完整填写联系信息", icon: "none" });
-  emit("lead", { item: props.item, name: lead.name.trim(), contact: lead.contact.trim() });
+  const name = lead.name.trim();
+  const contact = lead.contact.trim();
+  if (!name || !contact) return uni.showToast({ title: "请完整填写联系信息", icon: "none" });
+  emit("lead", { item: props.item, name, contact });
+  lead.contact = maskContact(contact);
+}
+
+function maskContact(value) {
+  if (/^\d{7,}$/.test(value)) return `${value.slice(0, 3)}****${value.slice(-4)}`;
+  if (value.length <= 4) return "****";
+  return `${value.slice(0, 2)}${"*".repeat(Math.min(7, value.length - 4))}${value.slice(-2)}`;
 }
 </script>
 
@@ -138,12 +155,22 @@ function submitLead() {
 .lead-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 20rpx; }
 .lead-field { color: #3d485f; font-size: 22rpx; font-weight: 700; }
 .lead-input { height: 72rpx; margin-top: 8rpx; border-bottom: 1rpx solid #dce1ea; font-size: 22rpx; font-weight: 400; }
+.lead-card.submitted { border-color: #dfe2e7; background: #f6f7f9; box-shadow: none; }
+.lead-card.submitted .lead-field, .lead-card.submitted .lead-input { color: #7f8793; }
 .resource-row { display: grid; grid-template-columns: 68rpx minmax(0,1fr) 40rpx; align-items: center; gap: 14rpx; padding: 18rpx 0; border-top: 1rpx solid #edf0f4; }
 .resource-type { display: flex; align-items: center; justify-content: center; height: 64rpx; border-radius: 10rpx; background: #e7f0ff; color: #1f5ca8; font-size: 18rpx; font-weight: 800; }
 .resource-name { overflow: hidden; font-size: 23rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .attachment { display: flex; align-items: center; gap: 16rpx; }
 .attachment-image { width: 280rpx; height: 220rpx; border-radius: 12rpx; }
 .attachment-icon { display: flex; align-items: center; justify-content: center; width: 56rpx; height: 56rpx; border-radius: 10rpx; background: #e7f0ff; color: #1f5ca8; }
+.link-card { display: flex; align-self: flex-start; width: min(100%, 640rpx); min-height: 168rpx; margin: 0 0 20rpx; overflow: hidden; border: 1rpx solid #dfe3e9; border-radius: 14rpx; background: #fff; box-shadow: 0 10rpx 30rpx rgba(24,33,52,.06); box-sizing: border-box; }
+.link-card-image { flex: 0 0 152rpx; width: 152rpx; min-height: 168rpx; background: #eef3f8; }
+.link-card-fallback { display: flex; align-items: center; justify-content: center; }
+.link-card-copy { display: flex; flex: 1; flex-direction: column; justify-content: center; min-width: 0; padding: 22rpx 24rpx; }
+.link-card-title, .link-card-subtitle, .link-card-action { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-card-title { color: #182033; font-size: 26rpx; font-weight: 700; }
+.link-card-subtitle { margin-top: 8rpx; color: #69758a; font-size: 20rpx; }
+.link-card-action { margin-top: 8rpx; color: #1478f2; font-size: 20rpx; font-weight: 800; }
 .voice-message { display: flex; justify-content: space-between; min-width: 180rpx; color: #185ca8; }
 
 @media (min-width: 620px) {
@@ -174,6 +201,11 @@ function submitLead() {
   .attachment { gap: 8px; }
   .attachment-image { width: 180px; height: 140px; border-radius: 6px; }
   .attachment-icon { width: 32px; height: 32px; border-radius: 5px; }
+  .link-card { width: min(100%, 320px); min-height: 84px; margin-bottom: 12px; border-width: 1px; border-radius: 7px; box-shadow: 0 5px 16px rgba(24,33,52,.06); }
+  .link-card-image { flex-basis: 76px; width: 76px; min-height: 84px; }
+  .link-card-copy { padding: 11px 12px; }
+  .link-card-title { font-size: 13px; }
+  .link-card-subtitle, .link-card-action { margin-top: 4px; font-size: 10px; }
   .voice-message { min-width: 92px; }
 }
 </style>

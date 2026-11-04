@@ -9,6 +9,11 @@ const bundledMiniappImages = {
 };
 const preparedImageCache = new Map();
 
+export function localizedErrorMessage(value, fallback = "操作失败，请稍后重试") {
+  const message = String(value || "").trim();
+  return /[\u3400-\u9fff]/.test(message) ? message : fallback;
+}
+
 export function resolveAssetUrl(value) {
   const url = String(value || "").trim();
   const bundled = PLATFORM === "mp-weixin" ? bundledMiniappImages[assetPathname(url)] : "";
@@ -46,10 +51,10 @@ export function request(path, { method = "GET", data, headers = {} } = {}) {
       header: { "Content-Type": "application/json", ...headers },
       success(response) {
         if (response.statusCode >= 200 && response.statusCode < 300) resolve(response.data);
-        else reject(new Error(response.data?.error || `请求失败（${response.statusCode}）`));
+        else reject(new Error(localizedErrorMessage(response.data?.error, `请求失败（HTTP ${response.statusCode}）`)));
       },
       fail(error) {
-        reject(new Error(error.errMsg || "网络连接失败"));
+        reject(new Error(localizedErrorMessage(error.errMsg, "网络连接失败")));
       }
     });
   });
@@ -61,7 +66,7 @@ function readLocalFile(filePath) {
       uni.getFileSystemManager().readFile({
         filePath,
         success(result) { resolve(result.data); },
-        fail(error) { reject(new Error(error.errMsg || "录音文件读取失败")); }
+        fail(error) { reject(new Error(localizedErrorMessage(error.errMsg, "录音文件读取失败"))); }
       });
       return;
     }
@@ -89,7 +94,7 @@ function cacheRemoteImage(url) {
         const mimeType = String(response.header?.["content-type"] || response.header?.["Content-Type"] || "").split(";", 1)[0].toLowerCase();
         persistImage(response.data, url, mimeType).then(resolve, reject);
       },
-      fail(error) { reject(new Error(error.errMsg || "图片下载失败")); }
+      fail(error) { reject(new Error(localizedErrorMessage(error.errMsg, "图片下载失败"))); }
     });
   });
 }
@@ -106,7 +111,7 @@ function persistImage(data, url, mimeType) {
       path: filePath,
       success() { resolve(filePath); },
       fail() {
-        fileSystem.writeFile({ filePath, data, success: () => resolve(filePath), fail: (error) => reject(new Error(error.errMsg || "图片缓存失败")) });
+        fileSystem.writeFile({ filePath, data, success: () => resolve(filePath), fail: (error) => reject(new Error(localizedErrorMessage(error.errMsg, "图片缓存失败"))) });
       }
     });
   });

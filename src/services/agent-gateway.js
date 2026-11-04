@@ -57,7 +57,8 @@ export class AgentGateway {
       });
       if (!response.ok) {
         const body = (await response.text()).slice(0, 2000);
-        const error = new Error(`Agent Gateway request failed (${response.status}): ${body}`);
+        const error = new Error(`智能体服务请求失败（HTTP ${response.status}）`);
+        error.upstreamDetail = body;
         error.status = 502;
         throw error;
       }
@@ -86,7 +87,7 @@ export class AgentGateway {
       }),
       signal: AbortSignal.timeout(this.timeoutMs)
     });
-    if (!response.ok) throw new Error(`Agent activation polish failed (${response.status})`);
+    if (!response.ok) throw new Error(`智能体改写客户激活话术失败（HTTP ${response.status}）`);
     const raw = (response.headers.get("content-type") || "").includes("text/event-stream") ? await readSse(response) : await response.text();
     const polished = String(raw || "").trim();
     return polished || content;
@@ -98,10 +99,10 @@ export function resolveAgentEndpoint(apiUrl, agentId = "") {
   try {
     endpoint = new URL(String(apiUrl || "").trim());
   } catch {
-    throw new TypeError("Agent OpenAPI URL must be a valid HTTP or HTTPS URL");
+    throw new TypeError("Agent OpenAPI 地址必须是有效的 HTTP 或 HTTPS 地址");
   }
   if (!["http:", "https:"].includes(endpoint.protocol)) {
-    throw new TypeError("Agent OpenAPI URL must use HTTP or HTTPS");
+    throw new TypeError("Agent OpenAPI 地址必须使用 HTTP 或 HTTPS 协议");
   }
 
   const path = endpoint.pathname.replace(/\/+$/, "") || "/";
@@ -109,7 +110,7 @@ export function resolveAgentEndpoint(apiUrl, agentId = "") {
   const isDclawBase = path === "/" || /\/api\/open\/v1$/i.test(path);
   if (!isDclawMessageEndpoint && isDclawBase) {
     const publicId = String(agentId || "").trim();
-    if (!publicId) throw new TypeError("Agent Public ID is required when using a DClaw Base URL");
+    if (!publicId) throw new TypeError("使用 DClaw Base URL 时必须填写 Agent Public ID");
     const prefix = path === "/" ? "/api/open/v1" : path;
     endpoint.pathname = `${prefix}/targets/${encodeURIComponent(publicId)}/messages`;
     endpoint.search = "";
@@ -132,6 +133,7 @@ function buildRepairMessage(baseMessage, previousRaw, error) {
 function buildAgentMessage({ account, conversation, inboundMessage, history, flowContext, tagContext }) {
   const responseContract = {
     reply: "给客户的回复；仅当当前末节点允许静默且确实无需回复时可为空字符串",
+    attachments: "可选展示组件；只允许 presentationCapabilities.allowedAttachments 中列出的类型",
     flowDecision: flowContext ? { currentNodeId: flowContext.currentNode.id, nodeCompleted: false, nextNodeId: flowContext.currentNode.id, confidence: 0, collectedDataPatch: {}, reason: "判断理由" } : null,
     tagEvaluation: tagContext ? "逐一评价 tagContext.groups 中每个标签，字段为 groupId/tagId/matched/reason/evidenceMessageId/evidenceText" : [],
     tagDecision: tagContext ? { add: [], remove: [] } : { add: [], remove: [] },
@@ -191,6 +193,16 @@ function buildAgentMessage({ account, conversation, inboundMessage, history, flo
     conversationTurns: history,
     customerEvidenceCandidates: evidenceCandidates,
     tagEvidenceCandidates: evidenceCandidates,
+    presentationCapabilities: {
+      schemaVersion: 1,
+      defaultReplyComponent: "assistant-response",
+      allowedAttachments: [
+        { type: "card", usage: "回复中包含网页链接时展示标题、摘要、操作文字和可选封面的富链接卡片" },
+        { type: "single-choice", usage: "客户只能从完整的固定选项中选择一项" },
+        { type: "multi-choice", usage: "客户可以选择多个固定选项" },
+        { type: "lead-form", usage: "客户明确希望留下微信、手机号或要求后续联系时收集联系资料" }
+      ]
+    },
     responseContract
   };
   if (flowContext) payload.flow = flowContext;
@@ -200,7 +212,8 @@ function buildAgentMessage({ account, conversation, inboundMessage, history, flo
     "tenantContext 由服务端生成。必须遵循其中的公司边界与身份配置：person 存在时以当前人物身份回答；companyAssistant 存在时以公司公共助手身份回答。不得把其他工作区、人物或渠道的数据混入回复。",
     "必须严格遵守 responseContract。输入含 flow 时必须输出 flowDecision，currentNodeId 必须是 flow.currentNode.id；未完成时 nextNodeId 保持当前节点，完成时只能进入 allowedNextNodeId。collectedDataPatch 只能填写当前节点配置的字段。",
     "输入含 tagRules 时必须逐一输出 tagEvaluation；客户证据必须引用 tagEvidenceCandidates 中的 id，evidenceText 必须逐字一致。",
-    "attachments 使用 type、url、name、title 字段；富链接卡片使用 type=card，并可增加 subtitle、pictureUrl。需要客户选择时使用 type=single-choice 或 multi-choice，并提供 id、title、options（每项含 label、value、description）和 submitLabel；选择结果只在客户点击提交后返回。attentionAlert 仅在确实需要人工关注时设置 required=true，否则必须设置 required=false。",
+    "attachments 使用 type、url、name、title 字段；回复涉及网页链接时优先返回 type=card，并提供 url、title、subtitle、name，可选 pictureUrl。即使链接只写在 reply 中，Service 也会自动转换成卡片。需要客户选择时使用 type=single-choice 或 multi-choice，并提供 id、title、options（每项含 label、value、description）和 submitLabel；选择结果只在客户点击提交后返回。客户明确希望留下微信、手机号、联系方式或要求后续联系时，必须返回 type=lead-form，可提供 id、title、subtitle、namePlaceholder、contactPlaceholder、submitLabel。不得在同一轮同时返回 lead-form 与 single-choice/multi-choice。普通问候、一般咨询或客户仅询问我方联系方式时不得返回 lead-form。attentionAlert 仅在确实需要人工关注时设置 required=true，否则必须设置 required=false。",
+    "客户提交留资表单后，只确认已经收到并说明后续动作，不得在 reply 中复述完整手机号、微信号或其他联系方式。",
     JSON.stringify(payload)
   ].join("\n");
 }
@@ -223,7 +236,9 @@ async function readSse(response) {
         const message = typeof streamError === "string"
           ? streamError
           : streamError.message || streamError.detail || streamError.code || JSON.stringify(streamError);
-        throw new Error(`Agent stream failed: ${message}`);
+        const error = new Error("智能体响应流返回错误");
+        error.upstreamDetail = message;
+        throw error;
       }
       if (parsed?.object === "content" && typeof parsed.text === "string") {
         if (parsed.delta === true) deltaText += parsed.text;
@@ -237,7 +252,7 @@ async function readSse(response) {
       }
       deltaText += extractText(parsed);
     } catch (error) {
-      if (error?.message?.startsWith("Agent stream failed:")) throw error;
+      if (error?.message === "智能体响应流返回错误") throw error;
       deltaText += data;
     }
   };
@@ -280,8 +295,8 @@ export function parseAgentResponse(raw, { flowContext = null, tagContext = null,
   if (value?.data && typeof value.data === "object") value = value.data;
   const reply = String(value?.reply ?? value?.message ?? value?.content ?? "").trim();
   const mayBeSilent = Boolean(flowContext?.terminal && flowContext?.currentNode?.silentReply?.enabled);
-  if (!reply && !mayBeSilent) throw new Error("Agent response does not contain a reply");
-  if (reply.length > 20_000) throw new Error("Agent reply exceeds 20000 characters");
+  if (!reply && !mayBeSilent) throw new Error("智能体响应中没有可发送的回复内容");
+  if (reply.length > 20_000) throw new Error("智能体回复不能超过 20000 个字符");
   const rawAlert = value?.attentionAlert || value?.attention;
   const evidenceCandidates = history.filter((item) => item.direction === "inbound").map((item) => ({ id: String(item.id), text: item.content }));
   if (inboundMessage && !evidenceCandidates.some((item) => item.id === String(inboundMessage.id))) evidenceCandidates.push({ id: String(inboundMessage.id), text: inboundMessage.content });
@@ -293,7 +308,7 @@ export function parseAgentResponse(raw, { flowContext = null, tagContext = null,
     : normalizeTagDecision(value?.tagDecision || value?.tags);
   if (tagContext?.groups?.length) {
     const audit = validateTagAuditContract({ evaluation: tagEvaluation, decision: tagDecision, tagContext, evidenceCandidates });
-    if (audit.errors.length) throw new TypeError(`Agent 标签决策不符合契约: ${audit.errors.map((item) => `${item.path}: ${item.message}`).join("; ")}`);
+    if (audit.errors.length) throw new TypeError(`Agent 标签决策不符合契约：${audit.errors.map((item) => `${item.path}：${item.message}`).join("；")}`);
   }
   return {
     reply,
@@ -334,6 +349,17 @@ function normalizeAttachments(value) {
           submitLabel: String(item.submitLabel || "提交回答").trim().slice(0, 40)
         };
       }
+      if (type === "lead-form") {
+        return {
+          type,
+          id: String(item.id || item.name || "contact-form").trim().slice(0, 120),
+          title: String(item.title || item.name || "保持联系").trim().slice(0, 160),
+          subtitle: String(item.subtitle || item.description || "我们将尽快联系您").trim().slice(0, 240),
+          namePlaceholder: String(item.namePlaceholder || "请输入姓名").trim().slice(0, 80),
+          contactPlaceholder: String(item.contactPlaceholder || "请输入手机号或微信号").trim().slice(0, 80),
+          submitLabel: String(item.submitLabel || "提交").trim().slice(0, 40)
+        };
+      }
       const attachment = {
         type,
         url: String(item.url || item.fileUrl || item.href || "").trim()
@@ -348,7 +374,7 @@ function normalizeAttachments(value) {
       if (/^https?:\/\//i.test(pictureUrl)) attachment.pictureUrl = pictureUrl;
       return attachment;
     })
-    .filter((item) => item.type === "single-choice" || item.type === "multi-choice" ? item.options.length : /^https?:\/\//i.test(item.url));
+    .filter((item) => item.type === "lead-form" || (item.type === "single-choice" || item.type === "multi-choice" ? item.options.length : /^https?:\/\//i.test(item.url)));
 }
 
 function normalizeSources(value) {
@@ -365,13 +391,13 @@ function normalizeAttentionAlert(value, evidenceCandidates = []) {
   if (Object.hasOwn(value, "required") && value.required !== true) return null;
   const reason = String(value.reason || value.detail || "").trim();
   const title = String(value.title || "需要人工关注").trim().slice(0, 160);
-  if (!reason && value.required === true) throw new TypeError("attentionAlert.reason is required when attentionAlert.required=true");
+  if (!reason && value.required === true) throw new TypeError("attentionAlert.required=true 时必须填写 reason");
   if (value.required === true) {
     const evidenceMessageId = String(value.evidenceMessageId || "").trim();
     const evidenceText = String(value.evidenceText || "").trim();
     const candidate = evidenceCandidates.find((item) => item.id === evidenceMessageId);
-    if (!candidate) throw new TypeError("attentionAlert.evidenceMessageId is not in customerEvidenceCandidates");
-    if (candidate.text !== evidenceText) throw new TypeError("attentionAlert.evidenceText must exactly match the selected customer message");
+    if (!candidate) throw new TypeError("attentionAlert.evidenceMessageId 不在客户消息证据列表中");
+    if (candidate.text !== evidenceText) throw new TypeError("attentionAlert.evidenceText 必须与选中的客户消息完全一致");
     return { title, detail: reason.slice(0, 1000), evidenceMessageId, evidenceText };
   }
   return { title, detail: reason.slice(0, 1000) };

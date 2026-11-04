@@ -45,7 +45,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { onLoad, onPullDownRefresh, onShareAppMessage } from "@dcloudio/uni-app";
-import { currentMiniappAppId, request, resolveAssetUrl } from "../../runtime/index.js";
+import { currentMiniappAppId, localizedErrorMessage, request, resolveAssetUrl } from "../../runtime/index.js";
 
 const workspace = ref({ name: "", logoUrl: "", accent: "#2457d6" });
 const cards = ref([]);
@@ -88,7 +88,7 @@ async function loadHome() {
     workspace.value = data.workspace || workspace.value;
     cards.value = Array.isArray(data.cards) ? data.cards : [];
   } catch (loadError) {
-    error.value = loadError.message || "名片列表加载失败";
+    error.value = localizedErrorMessage(loadError, "名片列表加载失败");
   } finally {
     loading.value = false;
   }

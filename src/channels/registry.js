@@ -5,7 +5,7 @@ export class ChannelRegistry {
 
   register(adapter) {
     const valid = defineAdapter(adapter);
-    if (this.#adapters.has(valid.provider)) throw new Error(`Channel adapter already registered: ${valid.provider}`);
+    if (this.#adapters.has(valid.provider)) throw new Error(`渠道适配器已注册：${valid.provider}`);
     this.#adapters.set(valid.provider, valid);
     return this;
   }
@@ -13,7 +13,7 @@ export class ChannelRegistry {
   get(provider) {
     const adapter = this.#adapters.get(provider);
     if (!adapter) {
-      const error = new Error(`Unsupported channel provider: ${provider}`);
+      const error = new Error(`不支持该渠道类型：${provider}`);
       error.status = 404;
       throw error;
     }

@@ -6,7 +6,7 @@ import { createPollingAdapter } from "../src/channels/adapters/polling.js";
 test("registry resolves adapters without exposing provider branches to core services", () => {
   const registry = new ChannelRegistry().register(createPollingAdapter("website", async () => {}));
   assert.equal(registry.get("website").provider, "website");
-  assert.throws(() => registry.get("missing"), /Unsupported channel provider/);
+  assert.throws(() => registry.get("missing"), /不支持该渠道类型/);
 });
 
 test("polling adapter rejects inbound payloads without a conversation identity", () => {

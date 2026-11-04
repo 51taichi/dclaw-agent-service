@@ -1,3 +1,5 @@
+import { toChineseErrorMessage } from "../error-message.js";
+
 export class ActivationService {
   constructor({ store, gateway, delivery, intervalMs = 2_000 }) {
     this.store = store;
@@ -10,7 +12,7 @@ export class ActivationService {
 
   start() {
     if (this.timer) return;
-    this.timer = setInterval(() => this.runDue().catch((error) => console.error("Activation worker failed", error)), this.intervalMs);
+    this.timer = setInterval(() => this.runDue().catch((error) => console.error("客户激活任务执行失败", error)), this.intervalMs);
     this.timer.unref?.();
   }
 
@@ -44,8 +46,8 @@ export class ActivationService {
             results.push({ id: task.id, status: "sent" });
           }
         } catch (error) {
-          this.store.finishActivation(task.id, { status: "failed", error: String(error.message || error) });
-          this.store.createAlert(conversation.id, null, { title: "客户激活发送失败", detail: String(error.message || error) });
+          this.store.finishActivation(task.id, { status: "failed", error: toChineseErrorMessage(error, "客户激活消息发送失败，请稍后重试") });
+          this.store.createAlert(conversation.id, null, { title: "客户激活发送失败", detail: toChineseErrorMessage(error, "客户激活消息发送失败，请稍后重试") });
           results.push({ id: task.id, status: "failed" });
         }
       }

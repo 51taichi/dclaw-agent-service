@@ -14,7 +14,7 @@ export class SpeechTranscriber {
 
   async transcribe({ buffer, mimeType = "audio/mpeg", name = "voice.mp3" }) {
     if (!this.isConfigured()) return "";
-    if (!Buffer.isBuffer(buffer) || !buffer.length) throw new TypeError("Audio content is empty");
+    if (!Buffer.isBuffer(buffer) || !buffer.length) throw new TypeError("语音内容为空");
 
     const form = new FormData();
     form.set("file", new Blob([buffer], { type: mimeType }), name);
@@ -31,7 +31,8 @@ export class SpeechTranscriber {
     });
     if (!response.ok) {
       const body = (await response.text()).slice(0, 1000);
-      const error = new Error(`Speech transcription failed (${response.status}): ${body}`);
+      const error = new Error(`语音转写失败（HTTP ${response.status}）`);
+      error.upstreamDetail = body;
       error.status = 502;
       throw error;
     }
@@ -39,7 +40,7 @@ export class SpeechTranscriber {
     const payload = await response.json().catch(() => ({}));
     const text = String(payload?.text ?? payload?.data?.text ?? payload?.result?.text ?? "").trim();
     if (!text) {
-      const error = new Error("Speech transcription returned no text");
+      const error = new Error("语音转写没有返回文字内容");
       error.status = 502;
       throw error;
     }

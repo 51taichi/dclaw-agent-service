@@ -1,4 +1,5 @@
 import express from "express";
+import { toChineseErrorMessage } from "./error-message.js";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -14,6 +15,7 @@ import { SpeechTranscriber } from "./services/speech-transcriber.js";
 import { CredentialVault } from "./services/credential-vault.js";
 import { WorkspaceMiniappService } from "./services/workspace-miniapp-service.js";
 import { listChannelTypes } from "./channel-catalog.js";
+import { AdminAuth, workspaceSummary } from "./admin-auth.js";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,6 +39,12 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
   const credentialVault = new CredentialVault(config.credentialEncryptionKey);
   const workspaceMiniapps = new WorkspaceMiniappService({ store, vault: credentialVault, fetchImpl, sessionTtlDays: config.wechatSessionTtlDays });
+  const adminAuth = new AdminAuth({
+    store,
+    platformPassword: config.platformAdminPassword,
+    required: config.adminAuthRequired,
+    sessionTtlHours: config.adminSessionTtlHours
+  });
   const app = express();
   const publicMediaDir = path.resolve(path.dirname(config.databasePath), "public-media");
   fs.mkdirSync(publicMediaDir, { recursive: true });
@@ -66,11 +74,48 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
   app.get("/api/public/miniapps/:appId", (req, res) => respondFound(res, store.publicMiniappHome(req.params.appId)));
 
+  app.get("/api/admin/auth/session", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const requestedWorkspaceId = String(req.query.workspace || "").trim();
+    const targetWorkspace = requestedWorkspaceId ? workspaceSummary(store.getWorkspace(requestedWorkspaceId)) : null;
+    res.json({ ...adminAuth.session(req, requestedWorkspaceId), targetWorkspace });
+  });
+  app.post("/api/admin/auth/login", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(adminAuth.login(req, res, req.body || {}));
+  });
+  app.post("/api/admin/auth/logout", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    adminAuth.logout(req, res);
+    res.status(204).end();
+  });
+  app.use((req, res, next) => {
+    if (!isManagementApi(req.path)) return next();
+    return adminAuth.requireSession(req, res, () => {
+      const denial = workspaceScopeDenial(req, store);
+      if (denial) return res.status(403).json({ error: denial, code: "WORKSPACE_ACCESS_DENIED" });
+      next();
+    });
+  });
+
   app.get("/api/admin/channel-types", (_req, res) => res.json({ items: listChannelTypes() }));
-  app.get("/api/admin/workspaces", (_req, res) => res.json({ items: store.listWorkspaces() }));
-  app.post("/api/admin/workspaces", (req, res) => res.status(201).json(store.createWorkspace(req.body || {})));
+  app.get("/api/admin/workspaces", (req, res) => res.json({ items: req.adminSession.role === "workspace" ? [store.getWorkspace(req.adminSession.workspaceId)].filter(Boolean) : store.listWorkspaces() }));
+  app.post("/api/admin/workspaces", (req, res) => {
+    if (req.body?.adminPassword) adminAuth.validateWorkspacePassword(req.body.adminPassword);
+    const workspace = store.createWorkspace(req.body || {});
+    if (req.body?.adminPassword) adminAuth.setWorkspacePassword(workspace.id, req.body.adminPassword);
+    res.status(201).json(store.getWorkspace(workspace.id));
+  });
   app.get("/api/admin/workspaces/:workspaceId", (req, res) => respondFound(res, store.getWorkspace(req.params.workspaceId)));
-  app.put("/api/admin/workspaces/:workspaceId", (req, res) => respondFound(res, store.updateWorkspace(req.params.workspaceId, req.body || {})));
+  app.put("/api/admin/workspaces/:workspaceId", (req, res) => {
+    const body = req.body || {};
+    if (body.adminPassword !== undefined && req.adminSession.role !== "platform") return res.status(403).json({ error: "只有平台管理员可以设置工作区密码" });
+    if (body.adminPassword) adminAuth.validateWorkspacePassword(body.adminPassword);
+    const workspace = store.updateWorkspace(req.params.workspaceId, body);
+    if (!workspace) return respondFound(res, null);
+    if (body.adminPassword) adminAuth.setWorkspacePassword(req.params.workspaceId, body.adminPassword);
+    res.json(store.getWorkspace(req.params.workspaceId));
+  });
   app.get("/api/admin/workspaces/:workspaceId/people", (req, res) => res.json({ items: store.listPeople(req.params.workspaceId) }));
   app.post("/api/admin/workspaces/:workspaceId/people", (req, res) => res.status(201).json(store.createPerson(req.params.workspaceId, req.body || {})));
   app.put("/api/admin/people/:personId", (req, res) => respondFound(res, store.updatePerson(req.params.personId, req.body || {})));
@@ -93,35 +138,35 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.post("/api/admin/agents", (req, res) => res.status(201).json(store.createAgentConfig(req.body || {})));
   app.put("/api/admin/agents/:agentConfigId", (req, res) => respondFound(res, store.updateAgentConfig(req.params.agentConfigId, req.body || {})));
   app.delete("/api/admin/agents/:agentConfigId", (req, res) => {
-    if (!store.deleteAgentConfig(req.params.agentConfigId)) return res.status(404).json({ error: "Agent config not found" });
+    if (!store.deleteAgentConfig(req.params.agentConfigId)) return res.status(404).json({ error: "Agent 配置不存在" });
     res.status(204).end();
   });
   app.put("/api/admin/agent-defaults", (req, res) => res.json({ defaults: store.saveAgentDefaults(req.body || {}) }));
   app.post("/api/admin/deployments/:deploymentId/preview/media", express.raw({ type: () => true, limit: "12mb" }), asyncHandler(async (req, res) => {
     const preview = store.channelPreview(req.params.deploymentId);
-    if (!preview) return res.status(404).json({ error: "Deployment not found" });
+    if (!preview) return res.status(404).json({ error: "发布配置不存在" });
     await savePublicMedia({ req, res, publicMediaDir });
   }));
   app.post("/api/admin/deployments/:deploymentId/preview/messages", asyncHandler(async (req, res) => {
     const preview = store.channelPreview(req.params.deploymentId);
-    if (!preview) return res.status(404).json({ error: "Deployment not found" });
+    if (!preview) return res.status(404).json({ error: "发布配置不存在" });
     await receivePageMessage({ req, res, store, messages, transcriber, publicMediaDir, accountId: preview.deployment.accountId, provider: preview.channelType, surface: "admin-preview", displayName: "后台预览访客" });
   }));
   app.get("/api/admin/deployments/:deploymentId/preview/conversations/:conversationId/outbox", (req, res) => {
     const preview = store.channelPreview(req.params.deploymentId);
-    if (!preview) return res.status(404).json({ error: "Deployment not found" });
+    if (!preview) return res.status(404).json({ error: "发布配置不存在" });
     res.json({ items: store.pollOutbox(preview.deployment.accountId, publicIdentifier(req.params.conversationId, "conversationId"), clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER, 0)) });
   });
   app.post("/api/admin/deployments/:deploymentId/preview/assistant/messages", asyncHandler(async (req, res) => {
     const preview = store.channelPreview(req.params.deploymentId);
     const accountId = preview?.channel?.assistantAccountId;
-    if (!preview || !accountId) return res.status(404).json({ error: "Company assistant not found" });
+    if (!preview || !accountId) return res.status(404).json({ error: "公司助手不存在" });
     await receivePageMessage({ req, res, store, messages, transcriber, publicMediaDir, accountId, provider: preview.channelType, surface: "admin-preview-assistant", displayName: "后台助手预览访客" });
   }));
   app.get("/api/admin/deployments/:deploymentId/preview/assistant/conversations/:conversationId/outbox", (req, res) => {
     const preview = store.channelPreview(req.params.deploymentId);
     const accountId = preview?.channel?.assistantAccountId;
-    if (!preview || !accountId) return res.status(404).json({ error: "Company assistant not found" });
+    if (!preview || !accountId) return res.status(404).json({ error: "公司助手不存在" });
     res.json({ items: store.pollOutbox(accountId, publicIdentifier(req.params.conversationId, "conversationId"), clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER, 0)) });
   });
   app.get("/api/admin/agent-bindings/:scopeType/:scopeId", (req, res) => res.json({ binding: store.getAgentBinding(req.params.scopeType, req.params.scopeId) }));
@@ -140,30 +185,30 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.post("/api/public/channels/:publicSlug/assistant/messages", asyncHandler(async (req, res) => {
     const channel = store.publicChannel(req.params.publicSlug);
     const accountId = channel ? store.getWorkspaceChannel(channel.channel.id, { includeSecrets: true })?.assistantAccountId : null;
-    if (!channel || !accountId) return res.status(404).json({ error: "Company assistant not found" });
+    if (!channel || !accountId) return res.status(404).json({ error: "公司助手不存在" });
     await receivePageMessage({ req, res, store, messages, transcriber, publicMediaDir, accountId, provider: channel.channelType, surface: "public-company-assistant", displayName: "公司名片访客" });
   }));
   app.get("/api/public/channels/:publicSlug/assistant/conversations/:conversationId/outbox", (req, res) => {
     const channel = store.publicChannel(req.params.publicSlug);
     const accountId = channel ? store.getWorkspaceChannel(channel.channel.id, { includeSecrets: true })?.assistantAccountId : null;
-    if (!channel || !accountId) return res.status(404).json({ error: "Company assistant not found" });
+    if (!channel || !accountId) return res.status(404).json({ error: "公司助手不存在" });
     res.json({ items: store.pollOutbox(accountId, publicIdentifier(req.params.conversationId, "conversationId"), clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER, 0)) });
   });
   app.post("/api/public/channels/:publicSlug/media", express.raw({ type: () => true, limit: "12mb" }), asyncHandler(async (req, res) => {
     const channel = store.publicChannel(req.params.publicSlug);
-    if (!channel) return res.status(404).json({ error: "Channel not found" });
+    if (!channel) return res.status(404).json({ error: "渠道不存在" });
     await savePublicMedia({ req, res, publicMediaDir });
   }));
   app.post("/api/public/channels/:publicSlug/messages", asyncHandler(async (req, res) => {
     const channel = store.publicChannel(req.params.publicSlug);
-    if (!channel) return res.status(404).json({ error: "Channel not found" });
+    if (!channel) return res.status(404).json({ error: "渠道不存在" });
     const conversationId = publicIdentifier(req.body?.conversationId, "conversationId");
     const userId = publicIdentifier(req.body?.userId, "userId");
     const messageId = publicIdentifier(req.body?.message?.id, "message.id");
     const text = String(req.body?.message?.text || "").trim().slice(0, 20_000);
     const messageType = ["text", "audio", "image", "file"].includes(req.body?.message?.type) ? req.body.message.type : "text";
     const attachments = publicAttachments(req.body?.message?.attachments, req);
-    if (!text && !attachments.length) throw new TypeError("Message text or attachment is required");
+    if (!text && !attachments.length) throw new TypeError("消息文字或附件至少需要填写一项");
     const account = store.getAccount(channel.deployment.accountId, { includeSecrets: true });
     const transcription = await transcribeInboundAudio({ transcriber, messageType, attachments, req, publicMediaDir });
     const items = await messages.receive({
@@ -182,12 +227,12 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   }));
   app.get("/api/public/channels/:publicSlug/conversations/:conversationId/outbox", (req, res) => {
     const channel = store.publicChannel(req.params.publicSlug);
-    if (!channel) return res.status(404).json({ error: "Channel not found" });
+    if (!channel) return res.status(404).json({ error: "渠道不存在" });
     const conversationId = publicIdentifier(req.params.conversationId, "conversationId");
     res.json({ items: store.pollOutbox(channel.deployment.accountId, conversationId, clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER, 0)) });
   });
 
-  app.get("/api/accounts", (req, res) => res.json({ items: store.listAccounts({ workspaceId: String(req.query.workspace || "") }) }));
+  app.get("/api/accounts", (req, res) => res.json({ items: store.listAccounts({ workspaceId: req.adminSession.role === "workspace" ? req.adminSession.workspaceId : String(req.query.workspace || "") }) }));
   app.post("/api/accounts", (req, res) => {
     registry.get(req.body?.provider);
     res.status(201).json(store.createAccount(req.body || {}));
@@ -224,17 +269,17 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
   app.post("/api/conversations/:conversationId/messages", asyncHandler(async (req, res) => {
     const conversation = store.getConversation(numberId(req.params.conversationId));
-    if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+    if (!conversation) return res.status(404).json({ error: "会话不存在" });
     const account = store.getAccount(conversation.accountId, { includeSecrets: true });
     const content = String(req.body?.content || "").trim();
     const attachments = consoleAttachments(req.body?.attachments, req);
-    if (!content && !attachments.length) return res.status(400).json({ error: "Message content or attachment is required" });
+    if (!content && !attachments.length) return res.status(400).json({ error: "消息内容或附件至少需要填写一项" });
     const result = await delivery.send({ account, conversation, content, attachments, senderType: "human", metadata: { operator: String(req.body?.operator || "console") } });
     res.status(201).json(result);
   }));
   app.post("/api/conversations/:conversationId/reset", (req, res) => {
     const reset = store.resetConversation(numberId(req.params.conversationId));
-    return reset ? res.status(204).end() : res.status(404).json({ error: "Conversation not found" });
+    return reset ? res.status(204).end() : res.status(404).json({ error: "会话不存在" });
   });
 
   app.put("/api/alerts/:alertId/resolve", (req, res) => {
@@ -244,10 +289,10 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
 
   app.post("/api/accounts/:accountId/activation", asyncHandler(async (req, res) => {
     const account = store.getAccount(req.params.accountId, { includeSecrets: true });
-    if (!account) return res.status(404).json({ error: "Channel account not found" });
+    if (!account) return res.status(404).json({ error: "渠道账号不存在" });
     const content = String(req.body?.content || "").trim();
     const ids = [...new Set((Array.isArray(req.body?.conversationIds) ? req.body.conversationIds : []).map(Number).filter(Number.isSafeInteger))];
-    if (!content || !ids.length) return res.status(400).json({ error: "content and conversationIds are required" });
+    if (!content || !ids.length) return res.status(400).json({ error: "群发内容和会话 ID 不能为空" });
     const results = [];
     for (const id of ids) {
       const conversation = store.getConversation(id);
@@ -256,7 +301,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
         const message = await delivery.send({ account, conversation, content, senderType: "human", metadata: { activation: true } });
         results.push({ conversationId: id, ok: true, messageId: message.id });
       } catch (error) {
-        results.push({ conversationId: id, ok: false, error: String(error.message || error) });
+        results.push({ conversationId: id, ok: false, error: toChineseErrorMessage(error, "群发消息失败，请稍后重试") });
       }
     }
     res.status(202).json({ items: results });
@@ -274,13 +319,13 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
 
   app.get("/api/channels/:provider/:accountId/conversations/:externalConversationId/outbox", (req, res) => {
     const account = store.getAccount(req.params.accountId);
-    if (!account || account.provider !== req.params.provider) return res.status(404).json({ error: "Channel account not found" });
+    if (!account || account.provider !== req.params.provider) return res.status(404).json({ error: "渠道账号不存在" });
     res.json({ items: store.pollOutbox(req.params.accountId, req.params.externalConversationId, clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER, 0)) });
   });
 
   app.post("/api/channels/:provider/:accountId/receipts", (req, res) => {
     const account = store.getAccount(req.params.accountId);
-    if (!account || account.provider !== req.params.provider) return res.status(404).json({ error: "Channel account not found" });
+    if (!account || account.provider !== req.params.provider) return res.status(404).json({ error: "渠道账号不存在" });
     const updated = store.acknowledgeDelivery(account.id, String(req.body?.providerMessageId || ""), String(req.body?.status || ""));
     res.status(updated ? 204 : 404).end();
   });
@@ -289,7 +334,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.get("/channels/:publicSlug", (req, res) => {
     if (req.query.surface === "embed") {
       const payload = store.publicChannel(req.params.publicSlug);
-      if (!payload) return res.status(404).json({ error: "Channel not found" });
+      if (!payload) return res.status(404).json({ error: "渠道不存在" });
       const ancestors = embedFrameAncestors(payload.channel.config?.allowedDomains);
       res.set("Content-Security-Policy", `frame-ancestors ${ancestors.join(" ")}`);
     }
@@ -297,13 +342,74 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
   app.use("/", express.static(path.resolve(sourceDir, "../public"), { extensions: ["html"] }));
   app.get("/", (_req, res) => res.redirect("/console/"));
-  app.use((req, res) => res.status(404).json({ error: "Not found", requestId: req.requestId }));
+  app.use((req, res) => res.status(404).json({ error: "请求的资源不存在", requestId: req.requestId }));
   app.use((error, req, res, _next) => {
     console.error(`[${req.requestId}]`, error);
-    res.status(Number(error.status) || (error instanceof TypeError ? 400 : 500)).json({ error: String(error.message || error), requestId: req.requestId });
+    res.status(Number(error.status) || (error instanceof TypeError ? 400 : 500)).json({ error: toChineseErrorMessage(error), requestId: req.requestId });
   });
 
-  return { app, db, store, registry, services: { gateway, delivery, messages, activation, transcriber, credentialVault, workspaceMiniapps } };
+  return { app, db, store, registry, services: { gateway, delivery, messages, activation, transcriber, credentialVault, workspaceMiniapps, adminAuth } };
+}
+
+function isManagementApi(pathname) {
+  return pathname.startsWith("/api/admin/")
+    || pathname === "/api/accounts"
+    || pathname.startsWith("/api/accounts/")
+    || pathname.startsWith("/api/conversations/")
+    || pathname.startsWith("/api/flow-machines/")
+    || pathname.startsWith("/api/tag-schemas/")
+    || pathname.startsWith("/api/alerts/");
+}
+
+function workspaceScopeDenial(req, store) {
+  const session = req.adminSession;
+  if (!session || session.role === "platform") return "";
+  const workspaceId = session.workspaceId;
+  const path = req.path;
+  if (path === "/api/admin/channel-types" || path === "/api/admin/media") return "";
+  if (path === "/api/admin/agents") return req.method === "GET" ? "" : "工作区管理员不能修改平台 Agent 库";
+  if (path.startsWith("/api/admin/agents/") || path === "/api/admin/agent-defaults") return "工作区管理员不能修改平台 Agent 库";
+  if (path === "/api/admin/workspaces") return req.method === "GET" ? "" : "工作区管理员不能创建工作区";
+
+  let match = path.match(/^\/api\/admin\/workspaces\/([^/]+)/);
+  if (match) return decodeURIComponent(match[1]) === workspaceId ? "" : "无权访问其他工作区";
+  match = path.match(/^\/api\/admin\/people\/([^/]+)/);
+  if (match) return resourceBelongsToWorkspace(store.getPerson(decodeURIComponent(match[1])), workspaceId);
+  match = path.match(/^\/api\/admin\/channels\/([^/]+)/);
+  if (match) return resourceBelongsToWorkspace(store.getWorkspaceChannel(decodeURIComponent(match[1])), workspaceId);
+  match = path.match(/^\/api\/admin\/deployments\/([^/]+)/);
+  if (match) return resourceBelongsToWorkspace(store.getDeployment(decodeURIComponent(match[1])), workspaceId);
+  match = path.match(/^\/api\/admin\/agent-bindings\/([^/]+)\/([^/]+)/);
+  if (match) return agentBindingDenial(store, decodeURIComponent(match[1]), decodeURIComponent(match[2]), workspaceId);
+
+  if (path === "/api/accounts") return req.method === "GET" ? "" : "工作区管理员不能新建底层渠道账号";
+  match = path.match(/^\/api\/accounts\/([^/]+)/);
+  if (match) return resourceBelongsToWorkspace(store.getAccount(decodeURIComponent(match[1])), workspaceId);
+  match = path.match(/^\/api\/(?:flow-machines|tag-schemas)\/([^/]+)/);
+  if (match) return resourceBelongsToWorkspace(store.getAccount(decodeURIComponent(match[1])), workspaceId);
+  match = path.match(/^\/api\/conversations\/(\d+)/);
+  if (match) {
+    const conversation = store.getConversation(Number(match[1]));
+    return resourceBelongsToWorkspace(conversation ? store.getAccount(conversation.accountId) : null, workspaceId);
+  }
+  match = path.match(/^\/api\/alerts\/(\d+)/);
+  if (match) {
+    const alert = store.getAlert(Number(match[1]));
+    return resourceBelongsToWorkspace(alert ? store.getAccount(alert.accountId) : null, workspaceId);
+  }
+  return "当前账号无权执行此操作";
+}
+
+function resourceBelongsToWorkspace(resource, workspaceId) {
+  if (!resource) return "请求的资源不存在";
+  return resource.workspaceId === workspaceId ? "" : "无权访问其他工作区的数据";
+}
+
+function agentBindingDenial(store, scopeType, scopeId, workspaceId) {
+  if (scopeType === "workspace") return scopeId === workspaceId ? "" : "无权访问其他工作区";
+  if (scopeType === "person") return resourceBelongsToWorkspace(store.getPerson(scopeId), workspaceId);
+  if (scopeType === "assistant") return resourceBelongsToWorkspace(store.getWorkspaceChannel(scopeId), workspaceId);
+  return "工作区管理员不能修改平台级 Agent 配置";
 }
 
 function embedFrameAncestors(value) {
@@ -323,14 +429,14 @@ function embedFrameAncestors(value) {
 
 async function receivePageMessage({ req, res, store, messages, transcriber, publicMediaDir, accountId, provider, surface, displayName }) {
   const account = store.getAccount(accountId, { includeSecrets: true });
-  if (!account) return res.status(404).json({ error: "Channel account not found" });
+  if (!account) return res.status(404).json({ error: "渠道账号不存在" });
   const conversationId = publicIdentifier(req.body?.conversationId, "conversationId");
   const userId = publicIdentifier(req.body?.userId, "userId");
   const messageId = publicIdentifier(req.body?.message?.id, "message.id");
   const text = String(req.body?.message?.text || "").trim().slice(0, 20_000);
   const messageType = ["text", "audio", "image", "file"].includes(req.body?.message?.type) ? req.body.message.type : "text";
   const attachments = publicAttachments(req.body?.message?.attachments, req);
-  if (!text && !attachments.length) throw new TypeError("Message text or attachment is required");
+  if (!text && !attachments.length) throw new TypeError("消息文字或附件至少需要填写一项");
   const transcription = await transcribeInboundAudio({ transcriber, messageType, attachments, req, publicMediaDir });
   const items = await messages.receive({
     provider,
@@ -351,7 +457,7 @@ async function receivePageMessage({ req, res, store, messages, transcriber, publ
 async function savePublicMedia({ req, res, publicMediaDir }) {
   const mimeType = String(req.header("content-type") || "").split(";", 1)[0].trim().toLowerCase();
   const mediaType = publicMediaType(mimeType);
-  if (!mediaType || !Buffer.isBuffer(req.body) || !req.body.length) return res.status(415).json({ error: "Unsupported or empty media" });
+  if (!mediaType || !Buffer.isBuffer(req.body) || !req.body.length) return res.status(415).json({ error: "媒体文件为空或格式不受支持" });
   const filename = `${randomUUID()}.${mediaType.extension}`;
   await fs.promises.writeFile(path.join(publicMediaDir, filename), req.body, { flag: "wx" });
   const suppliedName = decodeHeaderValue(req.header("x-file-name")).replace(/[\r\n]/g, "").slice(0, 160);
@@ -369,9 +475,9 @@ async function transcribeInboundAudio({ transcriber, messageType, attachments, r
   if (!attachment) return "";
   const ownOrigin = `${req.protocol}://${req.get("host")}`;
   const mediaUrl = new URL(attachment.url);
-  if (mediaUrl.origin !== ownOrigin || !mediaUrl.pathname.startsWith("/media/")) throw new TypeError("Invalid audio attachment URL");
+  if (mediaUrl.origin !== ownOrigin || !mediaUrl.pathname.startsWith("/media/")) throw new TypeError("语音附件地址无效");
   const filename = decodeURIComponent(mediaUrl.pathname.slice("/media/".length));
-  if (!/^[A-Za-z0-9-]+\.(?:webm|m4a|mp3|ogg)$/.test(filename)) throw new TypeError("Invalid audio attachment filename");
+  if (!/^[A-Za-z0-9-]+\.(?:webm|m4a|mp3|ogg)$/.test(filename)) throw new TypeError("语音附件文件名无效");
   const buffer = await fs.promises.readFile(path.join(publicMediaDir, filename));
   return transcriber.transcribe({
     buffer,
@@ -386,7 +492,7 @@ function asyncHandler(handler) {
 
 function numberId(value) {
   const id = Number(value);
-  if (!Number.isSafeInteger(id) || id < 1) throw new TypeError("Invalid numeric id");
+  if (!Number.isSafeInteger(id) || id < 1) throw new TypeError("数字 ID 无效");
   return id;
 }
 
@@ -396,12 +502,12 @@ function clampInt(value, min, max, fallback) {
 }
 
 function respondFound(res, value) {
-  return value ? res.json(value) : res.status(404).json({ error: "Not found" });
+  return value ? res.json(value) : res.status(404).json({ error: "请求的资源不存在" });
 }
 
 function publicIdentifier(value, field) {
   const result = String(value || "");
-  if (!/^[A-Za-z0-9_-]{8,120}$/.test(result)) throw new TypeError(`Invalid ${field}`);
+  if (!/^[A-Za-z0-9_-]{8,120}$/.test(result)) throw new TypeError(`${field} 格式无效`);
   return result;
 }
 

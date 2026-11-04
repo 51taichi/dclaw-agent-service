@@ -11,6 +11,18 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .admin-head-actions, .button-row { display: flex; align-items: center; gap: 10px; }
 .role-badge { padding: 5px 9px; border: 1px solid #ccd4ea; border-radius: 6px; background: #fff; color: #4f5c76; font-size: 12px; font-weight: 700; }
 .admin-head-actions a { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; }
+.admin-login-shell { display: grid; min-height: calc(100dvh - 128px); place-items: center; padding: 28px 16px; }
+.admin-login-card { display: grid; gap: 18px; width: min(420px, 100%); padding: 28px; border: 1px solid #d7ddea; border-top: 4px solid #ef3e2f; border-radius: 8px; background: #fff; box-shadow: 0 18px 52px rgba(31, 42, 74, .12); }
+.admin-login-card h2, .admin-login-card p { margin: 0; letter-spacing: 0; }
+.admin-login-card h2 { color: #202842; font-size: 22px; }
+.admin-login-card p { margin-top: 6px; color: #6c778e; font-size: 13px; line-height: 1.6; }
+.admin-login-mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 7px; background: #eef2ff; color: #3048c3; }
+.admin-login-mark svg { width: 22px; height: 22px; }
+.admin-login-card label { display: grid; grid-template-columns: 1fr; gap: 7px; overflow: visible; border: 0; background: transparent; color: #39445d; font-size: 12px; font-weight: 800; }
+.admin-login-card input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #ccd4e3; border-radius: 6px; outline: 0; font: inherit; }
+.admin-login-card input:focus { border-color: #7287e4; box-shadow: 0 0 0 3px rgba(49, 70, 199, .1); }
+.admin-login-card button { min-height: 42px; }
+.admin-login-card .admin-login-error { margin: -4px 0 0; color: #b52535; font-weight: 700; }
 
 .admin-page { width: min(1740px, calc(100% - 32px)); min-height: calc(100dvh - 92px); margin: 18px auto; }
 .sidebar-head, .workspace-titlebar, .section-title, .preview-head, .form-footer, .binding-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -65,11 +77,14 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .workspace-section-head { min-height: 48px; }
 .workspace-section-head > button { padding: 0 18px; }
 .workspace-management-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; align-items: start; }
+.workspace-management-layout.single-workspace { grid-template-columns: minmax(0, 1fr); }
 .workspace-list-pane { min-height: 480px; padding-right: 14px; border-right: 1px solid #e1e5ee; }
 .workspace-detail-pane { min-width: 0; }
 .workspace-form-actions { justify-content: flex-end; }
 .form-actions-end { justify-content: flex-end; }
 .workspace-form-actions a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; text-decoration: none; }
+.workspace-form-actions a.primary { border: 0; border-radius: 6px; background: linear-gradient(90deg, var(--accent), #2847f0 54%, var(--cyan)); color: #fff; box-shadow: 0 10px 24px rgba(42,48,216,.18); }
+.workspace-form-actions a.primary:hover { background: linear-gradient(90deg, var(--accent-dark), var(--accent), var(--cyan)); box-shadow: 0 12px 28px rgba(42,48,216,.22); }
 
 .admin-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .admin-form > label:not(.toggle-line), .dynamic-fields > label:not(.config-toggle), .binding-card > label:not(.toggle-line), .person-binding-card > label { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: stretch; min-width: 0; border: 1px solid #dce1ec; border-radius: 6px; overflow: hidden; background: #fff; }

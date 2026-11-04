@@ -64,7 +64,7 @@ function renderChoiceGroup(type, props) {
 }
 
 export function renderConversationComponent(type, props = {}) {
-  if (!COMPONENT_TYPES.includes(type)) throw new TypeError(`Unknown conversation component: ${type}`);
+  if (!COMPONENT_TYPES.includes(type)) throw new TypeError(`不支持该会话组件：${type}`);
   if (type === "assistant-loading") {
     return `<div class="dclaw-agent-loading" data-component="assistant-loading" role="status" aria-live="polite" aria-atomic="true"><span>${escapeHtml(props.label || "正在思考")}</span><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i></div>`;
   }
@@ -103,6 +103,7 @@ export function renderConversationComponent(type, props = {}) {
   const customer = props.role === "customer";
   const roleClass = customer ? "customer-message" : "agent-message";
   if (attachment.type === "single-choice" || attachment.type === "multi-choice") return renderConversationComponent(attachment.type, attachment);
+  if (attachment.type === "lead-form") return renderConversationComponent("lead-form", attachment);
   if (attachment.type === "action-button") return renderConversationComponent("action-button", attachment);
   if (attachment.type === "image") {
     return `<div class="${roleClass} attachment-message dclaw-message dclaw-image-message" data-component="attachment"><img src="${safeUrl(attachment.url)}" alt="${escapeHtml(attachment.name || "图片")}"/></div>`;

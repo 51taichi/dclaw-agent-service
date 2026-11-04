@@ -24,7 +24,7 @@ test("tag audit requires exact customer evidence for every matched customer tag"
     evaluation: [{ groupId: "intent", tagId: "high", matched: true, reason: "购买意向", evidenceMessageId: "11", evidenceText: "文本不一致" }],
     decision: { add: [{ groupId: "intent", tagId: "high" }], remove: [] }
   });
-  assert.match(invalid.errors.map((item) => item.message).join(" "), /exactly match/);
+  assert.match(invalid.errors.map((item) => item.message).join(" "), /完全一致/);
 });
 
 test("tag evaluation clears redundant evidence from unmatched tags", () => {
@@ -69,8 +69,8 @@ test("flow decision only collects configured fields and follows the configured n
   const flowContext = compactFlowForAgent({ machine: { enabled: true, config }, session: { currentNodeId: config.entryNodeId, collectedData: {} } });
   const decision = validateFlowDecision({ nodeCompleted: true, nextNodeId: "invite_next_step", collectedDataPatch: { "客户需求": "报价", "联系方式": "13800000000" }, reason: "信息完整" }, { flowContext });
   assert.equal(decision.nextNodeId, "invite_next_step");
-  assert.throws(() => validateFlowDecision({ nodeCompleted: true, nextNodeId: "close_deal", collectedDataPatch: {}, reason: "跳级" }, { flowContext }), /configured next node/);
-  assert.throws(() => validateFlowDecision({ nodeCompleted: false, nextNodeId: "", collectedDataPatch: { "未配置字段": "x" } }, { flowContext }), /not configured/);
+  assert.throws(() => validateFlowDecision({ nodeCompleted: true, nextNodeId: "close_deal", collectedDataPatch: {}, reason: "跳级" }, { flowContext }), /已配置的下一节点/);
+  assert.throws(() => validateFlowDecision({ nodeCompleted: false, nextNodeId: "", collectedDataPatch: { "未配置字段": "x" } }, { flowContext }), /未配置采集字段/);
 });
 
 test("flow decision accepts the WorkTool contract for an incomplete node", () => {

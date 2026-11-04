@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export function loadConfig(env = process.env) {
+  const platformAdminPassword = env.PLATFORM_ADMIN_PASSWORD || "";
+  const adminAuthRequired = booleanValue(env.ADMIN_AUTH_REQUIRED, Boolean(platformAdminPassword));
   return Object.freeze({
     projectRoot,
     host: env.HOST || "127.0.0.1",
@@ -20,8 +22,16 @@ export function loadConfig(env = process.env) {
     wechatMiniappAppId: env.WECHAT_MINIAPP_APP_ID || "",
     wechatMiniappAppSecret: env.WECHAT_MINIAPP_APP_SECRET || "",
     wechatSessionTtlDays: positiveInteger(env.WECHAT_SESSION_TTL_DAYS, 30),
-    credentialEncryptionKey: env.CREDENTIAL_ENCRYPTION_KEY || ""
+    credentialEncryptionKey: env.CREDENTIAL_ENCRYPTION_KEY || "",
+    platformAdminPassword,
+    adminAuthRequired,
+    adminSessionTtlHours: positiveInteger(env.ADMIN_SESSION_TTL_HOURS, 12)
   });
+}
+
+function booleanValue(value, fallback) {
+  if (value === undefined || value === "") return fallback;
+  return !["0", "false", "no", "off"].includes(String(value).trim().toLowerCase());
 }
 
 function positiveInteger(value, fallback) {

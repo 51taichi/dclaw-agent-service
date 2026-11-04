@@ -145,6 +145,8 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
   assert.equal(captured.body.external_user_id, "website:website-default:visitor-1");
   assert.equal(captured.body.external_session_id, "website:website-default:session-1");
   assert.equal(captured.headers["Idempotency-Key"], `agent:website-default:${received.data.items[0].messageId}`);
+  const agentContext = JSON.parse(captured.body.message.split("\n").at(-1));
+  assert.deepEqual(agentContext.presentationCapabilities.allowedAttachments.map((item) => item.type), ["card", "single-choice", "multi-choice", "lead-form"]);
 
   const conversations = await jsonRequest(app.baseUrl, "/api/accounts/website-default/conversations");
   assert.equal(conversations.data.items[0].state, "invite_next_step");
@@ -152,6 +154,78 @@ test("Agent Gateway receives channel-neutral identity and applies validated deci
   assert.deepEqual(conversations.data.items[0].tags.map((tag) => tag.name), ["20261015", "高意向"]);
   const alerts = await jsonRequest(app.baseUrl, "/api/accounts/website-default/alerts");
   assert.deepEqual(new Set(alerts.data.items.map((item) => item.title)), new Set(["标签提醒：高意向", "安排产品人员"]));
+});
+
+test("clear contact-submission intent adds a lead form when the Agent omits it", async (t) => {
+  const agentFetch = async () => new Response(JSON.stringify({
+    reply: "可以，请在下方留下您的微信号，我们会尽快联系您。",
+    attachments: [],
+    tagEvaluation: [],
+    tagDecision: { add: [], remove: [] },
+    attentionAlert: { required: false }
+  }), { status: 200, headers: { "content-type": "application/json" } });
+  const app = await fixture(agentFetch);
+  t.after(() => app.close());
+  await jsonRequest(app.baseUrl, "/api/accounts/website-default", {
+    method: "PUT",
+    body: { agentApiUrl: "https://agent.example.test/openapi/chat", agentApiKey: "secret", agentId: "sales-agent" }
+  });
+  const schema = await jsonRequest(app.baseUrl, "/api/tag-schemas/website-default");
+  await jsonRequest(app.baseUrl, "/api/tag-schemas/website-default", {
+    method: "PUT",
+    body: { schema: { ...schema.data.schema, dateTag: { enabled: false }, groups: [] } }
+  });
+
+  const received = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", {
+    method: "POST",
+    body: inbound({ text: "哪里可以留微信号" })
+  });
+  assert.equal(received.data.items[0].handledBy, "agent", JSON.stringify(received.data));
+  const outbox = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/conversations/session-1/outbox?after=0");
+  assert.equal(outbox.data.items[0].messageType, "rich");
+  assert.equal(outbox.data.items[0].attachments.length, 1);
+  assert.deepEqual(outbox.data.items[0].attachments[0], {
+    type: "lead-form",
+    id: "contact-form",
+    title: "保持联系",
+    subtitle: "我们将尽快联系您",
+    namePlaceholder: "请输入姓名",
+    contactPlaceholder: "请输入手机号或微信号",
+    submitLabel: "提交"
+  });
+});
+
+test("Agent Markdown links reach every channel as rich link cards", async (t) => {
+  const agentFetch = async () => new Response(JSON.stringify({
+    reply: "服务方案：[https://example.test/plan](https://example.test/plan)",
+    attachments: [],
+    tagEvaluation: [],
+    tagDecision: { add: [], remove: [] },
+    attentionAlert: { required: false }
+  }), { status: 200, headers: { "content-type": "application/json" } });
+  const app = await fixture(agentFetch);
+  t.after(() => app.close());
+  await jsonRequest(app.baseUrl, "/api/accounts/website-default", {
+    method: "PUT",
+    body: { agentApiUrl: "https://agent.example.test/openapi/chat", agentApiKey: "secret", agentId: "sales-agent" }
+  });
+  const schema = await jsonRequest(app.baseUrl, "/api/tag-schemas/website-default");
+  await jsonRequest(app.baseUrl, "/api/tag-schemas/website-default", {
+    method: "PUT",
+    body: { schema: { ...schema.data.schema, dateTag: { enabled: false }, groups: [] } }
+  });
+
+  await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound() });
+  const outbox = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/conversations/session-1/outbox?after=0");
+  assert.equal(outbox.data.items[0].messageType, "rich");
+  assert.equal(outbox.data.items[0].content, "服务方案：");
+  assert.deepEqual(outbox.data.items[0].attachments, [{
+    type: "card",
+    title: "example.test",
+    subtitle: "example.test",
+    name: "查看详情",
+    url: "https://example.test/plan"
+  }]);
 });
 
 test("Agent attachments reach the channel outbox and required=false does not create an alert", async (t) => {
@@ -274,7 +348,7 @@ test("Agent Gateway retries a contract-invalid response with validation feedback
   const received = await jsonRequest(app.baseUrl, "/api/channels/miniapp/miniapp-default/events", { method: "POST", body: inbound() });
   assert.equal(received.data.items[0].handledBy, "agent");
   assert.equal(calls.length, 2);
-  assert.match(calls[1].message, /flowDecision is required/);
+  assert.match(calls[1].message, /必须返回 flowDecision/);
   assert.notEqual(calls[0].key, calls[1].key);
 });
 

@@ -227,8 +227,17 @@ function migrate(db) {
       accent TEXT NOT NULL DEFAULT '#2a30d8',
       logo_url TEXT NOT NULL DEFAULT '',
       company_context_json TEXT NOT NULL DEFAULT '{}',
+      admin_password_hash TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (${nowSql}),
       updated_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token_hash TEXT PRIMARY KEY,
+      scope_type TEXT NOT NULL CHECK(scope_type IN ('platform', 'workspace')),
+      workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
     CREATE TABLE IF NOT EXISTS people (
@@ -372,6 +381,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_agent_usage_scope ON agent_usage_logs(workspace_id, person_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_agent_configs_defaults ON agent_configs(default_for_person, default_for_assistant);
     CREATE INDEX IF NOT EXISTS idx_workspace_wechat_visitors_openid ON workspace_wechat_visitors(app_id, openid);
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(expires_at);
   `);
 
   ensureColumn(db, "state_machine_configs", "enabled", "INTEGER NOT NULL DEFAULT 0");
@@ -384,6 +394,7 @@ function migrate(db) {
   ensureColumn(db, "people", "agent_config_id", "TEXT");
   ensureColumn(db, "workspace_channels", "assistant_account_id", "TEXT");
   ensureColumn(db, "workspace_channels", "assistant_agent_config_id", "TEXT");
+  ensureColumn(db, "workspaces", "admin_password_hash", "TEXT NOT NULL DEFAULT ''");
   ensureAssistantBindingScope(db);
 }
 

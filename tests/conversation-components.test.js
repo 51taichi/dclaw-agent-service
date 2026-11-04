@@ -26,6 +26,8 @@ test("agent loading state is accessible and stable across both conversation surf
 test("business cards no longer inject a lead form by default", () => {
   const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
   assert.doesNotMatch(previewSource, /leadFormEnabled|renderConversationComponent\("lead-form"\)|data-more-action="contact"/);
+  assert.match(previewSource, /async function submitLead\(form\)/);
+  assert.match(previewSource, /content: "已提交联系信息"/);
 });
 
 test("web business cards omit the miniapp-only phone action", () => {
@@ -225,6 +227,22 @@ test("rich card attachments use the shared visual component and escape content",
   assert.match(markup, /dclaw-link-card/);
   assert.match(markup, /方案 &lt;script&gt;/);
   assert.doesNotMatch(markup, /<script>/);
+  const miniappComponent = readFileSync(new URL("../clients/channel-app/src/components/conversation/ConversationItem.vue", import.meta.url), "utf8");
+  const miniappPage = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
+  assert.match(miniappComponent, /item\.type === 'attachment-card'/);
+  assert.match(miniappComponent, /link-card-image/);
+  assert.match(miniappPage, /attachment\.type === "card"/);
+});
+
+test("lead-form attachments use the shared interactive lead component", () => {
+  const markup = renderConversationComponent("attachment", {
+    attachment: { type: "lead-form", id: "contact-form", title: "保持联系", subtitle: "我们将尽快联系您" }
+  });
+  const miniappCard = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
+  assert.match(markup, /data-component="lead-form"/);
+  assert.match(markup, /data-action="submit-lead"/);
+  assert.match(miniappCard, /\["single-choice", "multi-choice", "lead-form"\]/);
+  assert.match(miniappCard, /displayText: "已提交联系信息"/);
 });
 
 test("unsafe attachment links are replaced with inert anchors", () => {

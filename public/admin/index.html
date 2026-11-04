@@ -39,19 +39,28 @@
     <header class="topbar admin-topbar">
       <div class="topbar-inner">
         <div class="brand"><img class="brand-logo" src="./assets/dclaw-logo.png" alt="DClaw" /><div class="brand-copy"><h1>官网名片智能体管理后台</h1></div></div>
-        <div class="admin-head-actions"><span class="role-badge">平台管理员</span><a id="openConsole" class="secondary" href="/console/" target="_blank" rel="noopener"><svg><use href="#i-open"/></svg>进入管理中台</a></div>
+        <div class="admin-head-actions"><span id="roleBadge" class="role-badge" hidden></span><button id="logoutButton" class="secondary" type="button" hidden>退出登录</button></div>
       </div>
     </header>
 
     <main class="admin-page">
-      <section class="admin-main">
+      <section id="loginShell" class="admin-login-shell" hidden>
+        <form id="loginForm" class="admin-login-card">
+          <span class="admin-login-mark"><svg><use href="#i-key"/></svg></span>
+          <div><h2 id="loginTitle">管理后台登录</h2><p id="loginDescription">请输入管理密码后继续</p></div>
+          <label><span>登录密码</span><input name="password" type="password" required autocomplete="current-password" autofocus /></label>
+          <button class="primary" type="submit">登录</button>
+          <p id="loginError" class="admin-login-error" hidden></p>
+        </form>
+      </section>
+      <section id="adminMain" class="admin-main" hidden>
         <div id="adminEmpty" class="admin-empty">请选择或创建一个工作区</div>
         <div id="workspaceShell" hidden>
           <nav class="admin-tabs" aria-label="工作区管理">
             <button class="active" data-tab="workspace"><svg><use href="#i-grid"/></svg>工作区</button>
             <button data-tab="config"><svg><use href="#i-settings"/></svg>渠道配置</button>
             <button data-tab="people"><svg><use href="#i-user"/></svg>智能员工</button>
-            <button data-tab="agent"><svg><use href="#i-bot"/></svg>Agent</button>
+            <button id="agentTab" data-tab="agent"><svg><use href="#i-bot"/></svg>Agent</button>
           </nav>
           <div class="workspace-titlebar contextual-titlebar" hidden>
             <div><h1 id="workspaceTitle"></h1></div>
@@ -67,10 +76,11 @@
                   <label><span><svg><use href="#i-hash"/></svg>工作区 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
                   <label><span><svg><use href="#i-globe"/></svg>公开标识</span><input name="slug" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
                   <label><span><svg><use href="#i-building"/></svg>公司名称</span><input name="name" required /></label>
+                  <label id="workspacePasswordField"><span><svg><use href="#i-key"/></svg>工作区密码</span><div class="field-control-with-rule"><input name="adminPassword" type="password" minlength="8" autocomplete="new-password" /><small id="workspacePasswordHint">至少 8 位，留空表示不修改</small></div></label>
                   <div id="workspaceLogoField" class="media-field-host"></div>
                   <label><span><svg><use href="#i-briefcase"/></svg>所属行业</span><input name="industry" /></label>
                   <label><span><svg><use href="#i-edit"/></svg>公司简介</span><textarea name="description" rows="3"></textarea></label>
-                  <div class="form-footer wide workspace-form-actions"><div class="button-row"><a id="openWorkspaceConsole" class="secondary" href="/console/" target="_blank" rel="noopener"><svg><use href="#i-open"/></svg>打开工作区</a><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存</button></div></div>
+                  <div class="form-footer wide workspace-form-actions"><div class="button-row"><a id="openWorkspaceConsole" class="primary" href="/console/" target="_blank" rel="noopener"><svg><use href="#i-open"/></svg>打开工作区</a><button class="primary" type="submit"><svg><use href="#i-save"/></svg>保存</button></div></div>
                 </form>
               </div>
             </div>

@@ -1,5 +1,7 @@
 import { compactFlowForAgent } from "../flow-machine.js";
 import { compactTagRulesForAgent } from "../tags.js";
+import { toChineseErrorMessage } from "../error-message.js";
+import { applyPresentationPolicy } from "../presentation-policy.js";
 
 export class MessageService {
   constructor({ store, registry, gateway, delivery }) {
@@ -12,17 +14,17 @@ export class MessageService {
   async receive({ provider, accountId, payload, secret = "", forceAgent = false }) {
     const account = this.store.getAccount(accountId, { includeSecrets: true });
     if (!account || account.provider !== provider) {
-      const error = new Error("Channel account not found");
+      const error = new Error("渠道账号不存在");
       error.status = 404;
       throw error;
     }
     if (!account.enabled) {
-      const error = new Error("Channel account is disabled");
+      const error = new Error("渠道账号已停用");
       error.status = 409;
       throw error;
     }
     if (account.webhookSecret && secret !== account.webhookSecret) {
-      const error = new Error("Invalid channel secret");
+      const error = new Error("渠道密钥无效");
       error.status = 401;
       throw error;
     }
@@ -51,7 +53,7 @@ export class MessageService {
       const flowContext = compactFlowForAgent(flow);
       const tagSchema = this.store.getTagSchema(account.id).config;
       const tagContext = compactTagRulesForAgent({ schema: tagSchema, currentTags: this.store.listConversationTags(conversation.id) });
-      const decision = await this.gateway.reply({
+      const agentDecision = await this.gateway.reply({
         account,
         conversation,
         inboundMessage: message,
@@ -59,6 +61,7 @@ export class MessageService {
         flowContext,
         tagContext
       });
+      const decision = applyPresentationPolicy({ decision: agentDecision, account, inboundMessage: message });
       this.store.recordAgentUsage({
         bindingId: account.agentBinding?.id || null,
         accountId: account.id,
@@ -87,7 +90,7 @@ export class MessageService {
       }
       if (decision.attentionAlert) this.store.createAlert(conversation.id, message.id, decision.attentionAlert);
       const tagHandoff = matchedDefinitions.find((item) => item.handoffEnabled);
-      if (decision.handoff || tagHandoff) this.store.setConversationMode(conversation.id, "human", { operator: "agent", note: decision.attentionAlert?.detail || (tagHandoff ? `命中标签：${tagHandoff.name}` : "Agent requested handoff") });
+      if (decision.handoff || tagHandoff) this.store.setConversationMode(conversation.id, "human", { operator: "agent", note: decision.attentionAlert?.detail || (tagHandoff ? `命中标签：${tagHandoff.name}` : "Agent 请求转人工") });
       const outbound = decision.reply || decision.attachments?.length
         ? await this.delivery.send({
             account,
@@ -101,6 +104,7 @@ export class MessageService {
       if (!outbound) this.store.audit(account.id, conversation.id, "agent", "agent.silent_reply", { messageId: message.id });
       return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, outboundMessageId: outbound?.id || null, handledBy: "agent" };
     } catch (error) {
+      const publicError = toChineseErrorMessage(error, "智能体服务暂时不可用，请稍后重试");
       this.store.recordAgentUsage({
         bindingId: account.agentBinding?.id || null,
         accountId: account.id,
@@ -111,9 +115,9 @@ export class MessageService {
         requestId: `message:${message.id}`,
         error: String(error.message || error)
       });
-      this.store.createAlert(conversation.id, message.id, { title: "Agent 处理失败", detail: String(error.message || error) });
+      this.store.createAlert(conversation.id, message.id, { title: "Agent 处理失败", detail: publicError });
       this.store.audit(account.id, conversation.id, "agent", "agent.failed", { error: String(error.message || error), messageId: message.id });
-      return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, handledBy: "error", error: String(error.message || error) };
+      return { eventId: event.eventId, conversationId: conversation.id, messageId: message.id, handledBy: "error", error: publicError };
     }
   }
 }
