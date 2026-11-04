@@ -102,6 +102,7 @@ test("website custom frame keeps a fixed transparent skin while the employee lis
   const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
   const previewStyles = readFileSync(new URL("../public/channel-preview/styles.css", import.meta.url), "utf8");
   const embedSource = readFileSync(new URL("../public/embed/dclaw-agent.js", import.meta.url), "utf8");
+  const miniappSource = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
 
   assert.deepEqual(skinField.imageSpec, { width: 490, height: 472, transparent: true, topSlice: 262, maxVisibleItems: 3 });
   assert.match(adminSource, /定制客服框必须为 \$\{width\}×\$\{height\}px/);
@@ -135,9 +136,11 @@ test("website custom frame keeps a fixed transparent skin while the employee lis
   assert.match(previewSource, /type:\s*"dclaw:embed-drag"/);
   assert.match(previewSource, /parameters\.set\("previewPerson", deployment\.id\)/);
   assert.match(previewSource, /classList\.toggle\("website-card-surface", cardSurface\)/);
-  assert.match(previewSource, /class="chrome-back" title="返回" aria-label="返回"/);
-  assert.match(previewStyles, /\.website-card-surface \.card-face-front > \.card-hero \.miniapp-menu\s*\{\s*display:\s*none/);
-  assert.match(previewStyles, /\.website-card-surface \.card-face-front > \.card-hero \.chrome-back::after\s*\{\s*content:\s*"返回"/);
+  assert.match(previewSource, /class="chrome-back unified-back-button" title="返回" aria-label="返回"/);
+  assert.doesNotMatch(previewSource, /miniapp-menu/);
+  assert.doesNotMatch(previewSource, /assistant-company-name/);
+  assert.match(previewStyles, /\.unified-back-button::after\s*\{\s*content:\s*"返回"/);
+  assert.doesNotMatch(miniappSource, /preview-menu/);
   assert.match(embedSource, /rosterWidth = clamp\(Number\(message\.width\)/);
   assert.match(embedSource, /rosterHeight = clamp\(Number\(message\.height\)/);
   assert.match(embedSource, /message\.type === "dclaw:embed-drag"/);

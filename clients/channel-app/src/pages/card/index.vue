@@ -7,10 +7,7 @@
       <view class="face front-face" :class="{ hidden: face !== 'front' }">
         <view class="hero" :class="{ compact: !heroExpanded }" :style="heroStyle">
           <view class="miniapp-chrome">
-            <button class="back-button" aria-label="返回名片首页" @tap="goBack">‹</button>
-            <!-- #ifdef H5 -->
-            <text class="preview-menu">•••　◉</text>
-            <!-- #endif -->
+            <button class="back-button" aria-label="返回名片首页" @tap="goBack"><text>‹</text><text class="back-button-label">返回</text></button>
           </view>
           <view class="identity">
             <button class="profile-avatar-trigger" aria-label="放大头像" @tap="avatarOpen = true"><image class="profile-avatar" :src="profile.avatar" mode="aspectFill" /></button>
@@ -90,10 +87,7 @@
             <view class="assistant-scene">
               <view class="scene-overlay">
                 <view class="miniapp-chrome">
-                  <button class="back-button" @tap="face = 'front'">‹</button>
-                  <!-- #ifdef H5 -->
-                  <text class="preview-menu">•••　◉</text>
-                  <!-- #endif -->
+                  <button class="back-button" aria-label="返回个人名片" @tap="face = 'front'"><text>‹</text><text class="back-button-label">返回</text></button>
                 </view>
                 <text class="scene-brand">{{ assistant.brand }}</text>
                 <view class="speech"><text>{{ assistant.greeting }}</text></view>
@@ -655,8 +649,9 @@ function setTextInputMode() {
 .hero { position: relative; flex: 0 0 510rpx; padding: calc(var(--status-bar-height) + 66rpx) 34rpx 30rpx; overflow: hidden; background-color: #101827; background-position: center; background-size: cover; color: #fff; box-sizing: border-box; transition: flex-basis .24s ease, padding .24s ease; }
 .hero::before { position: absolute; z-index: 2; right: 0; bottom: 18rpx; left: 0; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,.84) 0 calc(50% - 42rpx), transparent calc(50% - 42rpx) calc(50% + 42rpx), rgba(255,255,255,.84) calc(50% + 42rpx)); content: ""; pointer-events: none; }
 .miniapp-chrome { position: absolute; top: calc(var(--status-bar-height) + 12rpx); right: 22rpx; left: 22rpx; z-index: 3; display: flex; align-items: center; justify-content: space-between; color: #fff; font-size: 24rpx; }
-.back-button { display: flex; align-items: center; justify-content: center; width: 56rpx; height: 56rpx; margin: 0; padding: 0; background: transparent; color: #fff; font-size: 52rpx; font-weight: 300; line-height: 52rpx; }
-.preview-menu { padding: 12rpx 20rpx; border-radius: 30rpx; background: rgba(255,255,255,.88); color: #101724; font-size: 20rpx; font-weight: 900; }
+.back-button { display: flex; align-items: center; justify-content: center; gap: 6rpx; width: 132rpx; height: 72rpx; margin: 0; padding: 0; border: 2rpx solid rgba(255,255,255,.62); border-radius: 36rpx; background: rgba(9,19,38,.56); color: #fff; box-shadow: 0 10rpx 32rpx rgba(4,10,24,.22); font-size: 58rpx; font-weight: 300; line-height: 1; }
+.back-button::after { border: 0; }
+.back-button-label { font-size: 24rpx; font-weight: 700; }
 .identity { display: flex; align-items: center; gap: 22rpx; margin-top: 10rpx; }
 .compact-identity { position: absolute; right: 90rpx; bottom: 54rpx; left: 32rpx; display: flex; align-items: center; gap: 18rpx; opacity: 0; pointer-events: none; transform: translateY(12rpx); transition: opacity .18s ease, transform .18s ease; }
 .compact-avatar { width: 84rpx; height: 84rpx; border: 4rpx solid rgba(255,255,255,.82); border-radius: 50%; background: #fff; }
@@ -689,6 +684,8 @@ function setTextInputMode() {
 .toggle-chevron { position: relative; z-index: 1; top: 22rpx; width: 14rpx; height: 14rpx; border-right: 3rpx solid #fff; border-bottom: 3rpx solid #fff; transform: translateY(-12rpx) rotate(225deg); transition: transform .18s ease; }
 .toggle-chevron.down { transform: translateY(-12rpx) rotate(45deg); }
 .hero.compact { flex-basis: 246rpx; padding-top: 88rpx; }
+.hero.compact::before { bottom: 4rpx; }
+.hero.compact .hero-toggle { bottom: -14rpx; }
 .hero.compact .identity, .hero.compact .contact-panel { opacity: 0; pointer-events: none; }
 .hero.compact .compact-identity { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .conversation-scroll { flex: 1; min-height: 0; }
@@ -759,8 +756,8 @@ function setTextInputMode() {
   .hero { flex-basis: 266px; padding: 66px 20px 28px; }
   .hero::before { bottom: 16px; background: linear-gradient(90deg, rgba(255,255,255,.84) 0 calc(50% - 23px), transparent calc(50% - 23px) calc(50% + 23px), rgba(255,255,255,.84) calc(50% + 23px)); }
   .miniapp-chrome { top: 14px; right: 14px; left: 14px; font-size: 12px; }
-  .back-button { width: 34px; height: 34px; font-size: 36px; line-height: 34px; }
-  .preview-menu { padding: 7px 13px; border-radius: 18px; font-size: 11px; }
+  .back-button { gap: 3px; width: 66px; height: 36px; border-width: 1px; border-radius: 18px; font-size: 29px; }
+  .back-button-label { font-size: 12px; }
   .identity { gap: 12px; margin-top: 0; }
   .profile-avatar { width: 64px; height: 64px; border-width: 2px; }
   .identity-copy { gap: 4px; }
@@ -788,6 +785,8 @@ function setTextInputMode() {
   .toggle-chevron { top: 5px; width: 9px; height: 9px; border-width: 0 2px 2px 0; transform: translateY(-6px) rotate(225deg); }
   .toggle-chevron.down { transform: translateY(-6px) rotate(45deg); }
   .hero.compact { flex-basis: 138px; padding: 50px 18px 16px; }
+  .hero.compact::before { bottom: 8px; }
+  .hero.compact .hero-toggle { bottom: -8px; }
   .conversation-list, .company-conversation { padding: 14px 14px 24px; }
   .conversation-list { padding-top: 10px; }
   .ai-page-disclosure { font-size: 10px; line-height: 15px; }

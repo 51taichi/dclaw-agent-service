@@ -235,7 +235,7 @@ function cardPreview(data) {
     <div class="card-flip-shell" data-card-flip-shell>
     <section class="phone card-channel card-face card-face-front is-expanded" data-card-shell data-card-front>
     <header class="card-hero" data-cover-url="${escapeHtml(coverUrl)}">
-      <div class="miniapp-chrome"><button class="chrome-back" title="返回" aria-label="返回">‹</button><span class="miniapp-menu">•••　◉</span></div>
+      <div class="miniapp-chrome"><button class="chrome-back unified-back-button" title="返回" aria-label="返回">‹</button></div>
       <div class="expanded-profile">
         <div class="card-identity">${avatarPreviewTrigger(profileAvatar, current.name, "hero-avatar")}<span class="identity-copy"><strong><span>${escapeHtml(current.name)}</span><i>在线</i></strong><small class="identity-meta"><span>${escapeHtml(current.title)}</span><b>·</b><span>${escapeHtml(companyName)}</span></small></span></div>
         ${(contacts.length || config.qrCodeUrl) ? `<div class="contact-panel${completeContactLayout ? " contact-layout-complete" : ""}" aria-label="联系方式">${renderContactRow(primaryContacts, "contact-primary")}${(secondaryContacts.length || config.qrCodeUrl) ? `<div class="contact-row contact-secondary contact-count-${secondaryContacts.length}${config.qrCodeUrl ? " has-qr" : ""}">${secondaryContacts.map((item) => `<span class="contact-item" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}：${escapeHtml(item.value)}">${icon(item.icon)}<strong>${escapeHtml(item.value)}</strong></span>`).join("")}${config.qrCodeUrl ? `<button type="button" class="contact-qr" data-qr-open title="点击放大二维码" aria-label="放大联系二维码"><img src="${escapeHtml(config.qrCodeUrl)}" alt=""/></button>` : ""}</div>` : ""}</div>` : ""}
@@ -271,20 +271,18 @@ function cardPreview(data) {
       <main class="company-assistant-page${assistantSceneVideo ? " has-scene-video" : ""}" data-company-assistant-page>
         ${assistantSceneVideo ? `<video class="assistant-scene-video" data-assistant-scene-video autoplay muted loop playsinline preload="auto"${assistantScenePoster ? ` poster="${escapeHtml(assistantScenePoster)}"` : ""} aria-hidden="true"><source src="${escapeHtml(assistantSceneVideo)}" type="video/mp4"/></video>` : ""}
         <header class="assistant-conversation-header">
-          <button type="button" data-assistant-home aria-label="返回全屏吉祥物语音助手">‹</button>
+          <button type="button" class="assistant-home-button unified-back-button" data-assistant-home aria-label="返回全屏吉祥物语音助手">‹</button>
           <strong>${escapeHtml(assistantName)}</strong>
           ${voiceEnabled ? `<button type="button" class="assistant-header-sound" aria-label="朗读开关">${icon("volume")}</button>` : ""}
-          <span class="miniapp-menu">•••　◉</span>
         </header>
         <section class="company-assistant-stage">
-          <div class="miniapp-chrome"><button class="company-back-button" data-card-face="front" title="返回个人名片" aria-label="返回${escapeHtml(current.name)}的名片">‹</button><span class="miniapp-menu">•••　◉</span></div>
+          <div class="miniapp-chrome"><button class="company-back-button unified-back-button" data-card-face="front" title="返回个人名片" aria-label="返回${escapeHtml(current.name)}的名片">‹</button></div>
           <strong class="assistant-scene-brand">${escapeHtml(assistantBrandText)}</strong>
           <span class="assistant-music-note note-one">♪</span><span class="assistant-music-note note-two">♫</span><span class="assistant-star star-one">✦</span><span class="assistant-star star-two">✦</span>
           <i class="assistant-cloud cloud-one"></i><i class="assistant-cloud cloud-two"></i><i class="assistant-cloud cloud-three"></i>
           <div class="assistant-mascot-stage">
             <img class="assistant-scene-mascot" src="${escapeHtml(assistantSceneImage)}" alt="${escapeHtml(assistantName)}"/>
             <span class="assistant-speech" data-company-speech>${escapeHtml(assistantGreeting)}</span>
-            <span class="assistant-company-name">${escapeHtml(companyName)}</span>
           </div>
           <div class="assistant-topic-cloud" aria-label="快捷话题">
             ${assistantTopics.map((item, index) => `<button type="button" class="assistant-topic topic-${(index % 4) + 1}" data-assistant-prompt="${escapeHtml(item)}">${escapeHtml(item)}<span>›</span></button>`).join("")}
