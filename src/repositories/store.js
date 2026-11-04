@@ -320,11 +320,25 @@ export class Store {
     const channel = this.getWorkspaceChannel(id);
     if (!channel) return null;
     const timestamp = isoNow();
-    this.db.prepare(`UPDATE workspace_channels SET published_config_json = draft_config_json, published_version = published_version + 1, published_at = ?, updated_at = ? WHERE id = ?`).run(timestamp, timestamp, id);
-    this.db.prepare(`UPDATE channel_deployments
-      SET published_config_json = COALESCE((SELECT profile_json FROM people WHERE people.id = channel_deployments.person_id), '{}'),
-          published_version = published_version + 1, published_at = ?, updated_at = ?
-      WHERE workspace_channel_id = ?`).run(timestamp, timestamp, id);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(`UPDATE workspace_channels SET published_config_json = draft_config_json, published_version = published_version + 1, published_at = ?, updated_at = ? WHERE id = ?`).run(timestamp, timestamp, id);
+      if (channel.provider === "website") {
+        this.db.prepare(`UPDATE workspace_channels
+          SET published_config_json = draft_config_json,
+              published_version = published_version + 1,
+              published_at = ?, updated_at = ?
+          WHERE workspace_id = ? AND provider = 'miniapp'`).run(timestamp, timestamp, channel.workspaceId);
+      }
+      this.db.prepare(`UPDATE channel_deployments
+        SET published_config_json = COALESCE((SELECT profile_json FROM people WHERE people.id = channel_deployments.person_id), '{}'),
+            published_version = published_version + 1, published_at = ?, updated_at = ?
+        WHERE workspace_channel_id = ?`).run(timestamp, timestamp, id);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
     return this.getWorkspaceChannel(id);
   }
 

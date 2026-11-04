@@ -642,6 +642,10 @@ test("new people can be deployed to an existing website channel", async (t) => {
   const app = await fixture();
   t.after(() => app.close());
 
+  const miniappChannel = app.store.getWorkspaceChannel("dingmai-miniapp");
+  await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp", { method: "PUT", body: {
+    config: { ...miniappChannel.config, assistantName: "工作区统一公司助手" }
+  } });
   await request(app.baseUrl, "/api/admin/channels/dingmai-website/publish", { method: "POST" });
   const person = await request(app.baseUrl, "/api/admin/workspaces/dingmai/people", { method: "POST", body: {
     id: "sales-li",
@@ -660,6 +664,7 @@ test("new people can be deployed to an existing website channel", async (t) => {
   assert.equal(preview.data.deployments.length, 2);
   assert.deepEqual(preview.data.deployments.map((item) => item.person.name), ["向小顶", "李明"]);
   const published = await request(app.baseUrl, "/api/public/channels/dingmai-website");
+  assert.equal(published.data.cardPresentation.config.assistantName, "工作区统一公司助手");
   const publishedPerson = published.data.deployments.find((item) => item.person.id === "sales-li");
   assert.equal(publishedPerson.config.phone, "13800000000");
   assert.deepEqual(publishedPerson.config.suggestedQuestions, ["如何合作？"]);
