@@ -1,5 +1,6 @@
 import { createFlowEditor } from "./flow-editor.js";
 import { createTagEditor } from "./tag-editor.js";
+import { initUnifiedSelects } from "../components/select.js";
 
 const state = {
   accounts: [],
@@ -80,6 +81,7 @@ const tagEditor = createTagEditor({
 });
 
 async function bootstrap() {
+  initUnifiedSelects();
   bindEvents();
   renderManualReplyEmojiBar();
   await loadAccounts();

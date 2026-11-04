@@ -116,19 +116,6 @@ root.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "share") {
-    try {
-      if (navigator.share) await navigator.share({ title: "DClaw Agent 回复", text: content, url: location.href });
-      else {
-        await copyText(`${content}\n${location.href}`);
-        showFeedback("回复和页面链接已复制");
-      }
-    } catch (error) {
-      if (error?.name !== "AbortError") showFeedback("分享未完成");
-    }
-    return;
-  }
-
   if (action === "regenerate") {
     button.disabled = true;
     button.classList.add("is-working");

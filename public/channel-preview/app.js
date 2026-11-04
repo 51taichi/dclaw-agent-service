@@ -5,10 +5,12 @@ const DEFAULT_MASCOT = "/console/assets/ddeer.png";
 const DEFAULT_MASCOT_SCENE = "/console/assets/ddeer-transparent.png";
 const DEFAULT_ASSISTANT_SCENE_VIDEO = "/console/assets/ddeer-office-greeting-rig-v3.mp4";
 const DEFAULT_ASSISTANT_SCENE_POSTER = "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg";
-const DEFAULT_COVER = "/console/assets/moosee-work-serious-scene.png";
+const DEFAULT_COVER = "/console/assets/xiaoding-card-hero-v1.webp";
+const LEGACY_DEFAULT_COVER = "/console/assets/moosee-work-serious-scene.png";
 const DEFAULT_ASSISTANT_TOPICS = ["集团业务介绍", "课程与服务", "合作咨询", "联系我们"];
 const DEFAULT_ASSISTANT_PRIMARY_ITEMS = ["了解集团服务", "查看课程体系", "领取合作资料"];
 const DEFAULT_ASSISTANT_RECOMMENDED_ITEMS = ["热门方案推荐", "企业合作咨询", "预约专属服务"];
+const DEFAULT_FACE_TRIGGER_TOP = 218;
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
 const safeColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
 const icons = {
@@ -26,7 +28,6 @@ const icons = {
   globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
   rotate: '<path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/>',
   send: '<path d="m17 11-5-5-5 5"/><path d="M12 6v12"/>',
-  share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
   thumbsDown: '<path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22h0a3.1 3.1 0 0 1-3-3.9Z"/>',
   thumbsUp: '<path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2h0a3.1 3.1 0 0 1 3 3.9Z"/>',
   volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>'
@@ -183,6 +184,10 @@ function avatar(value, name, className = "avatar") {
     : `<span class="${className} avatar-text">${escapeHtml(name.slice(0, 1))}</span>`;
 }
 
+function avatarPreviewTrigger(value, name, className) {
+  return `<button type="button" class="profile-avatar-trigger" data-avatar-open title="点击放大头像" aria-label="放大${escapeHtml(name)}的头像">${avatar(value, name, className)}</button>`;
+}
+
 function cardPreview(data) {
   const current = identity(data);
   const config = current.config;
@@ -224,19 +229,22 @@ function cardPreview(data) {
   const contacts = [...primaryContacts, ...secondaryContacts];
   const completeContactLayout = primaryContacts.length === 2 && secondaryContacts.length === 2 && Boolean(config.qrCodeUrl);
   const renderContactRow = (items, className) => items.length ? `<div class="contact-row ${className} contact-count-${items.length}">${items.map((item) => `<span class="contact-item" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}：${escapeHtml(item.value)}">${icon(item.icon)}<strong>${escapeHtml(item.value)}</strong></span>`).join("")}</div>` : "";
+  const personCover = config.coverUrl && config.coverUrl !== LEGACY_DEFAULT_COVER ? config.coverUrl : "";
+  const coverUrl = personCover || channel.coverUrl || DEFAULT_COVER;
   return `<section class="card-flip-stage" data-card-flip-stage style="--assistant-name-color:${safeColor(channel.assistantNameColor, "#29466f")};--assistant-brand-color:${safeColor(channel.assistantBrandColor, "#254e96")};--assistant-greeting-color:${safeColor(channel.assistantGreetingColor, "#315078")};--assistant-prompt-color:${safeColor(channel.assistantPromptColor, "#60718d")};--assistant-topics-color:${safeColor(channel.assistantTopicsColor, "#426086")};--assistant-primary-title-color:${safeColor(channel.assistantPrimaryTitleColor, "#ffffff")};--assistant-primary-items-color:${safeColor(channel.assistantPrimaryItemsColor, "#28344b")};--assistant-recommended-title-color:${safeColor(channel.assistantRecommendedTitleColor, "#ffffff")};--assistant-recommended-items-color:${safeColor(channel.assistantRecommendedItemsColor, "#28344b")};--assistant-voice-label-color:${safeColor(channel.assistantVoiceLabelColor, "#ffffff")};--assistant-voice-hint-color:${safeColor(channel.assistantVoiceHintColor, "#a2a7b1")}">
     <div class="card-flip-shell" data-card-flip-shell>
     <section class="phone card-channel card-face card-face-front is-expanded" data-card-shell data-card-front>
-    <header class="card-hero" data-cover-url="${escapeHtml(config.coverUrl || DEFAULT_COVER)}">
+    <header class="card-hero" data-cover-url="${escapeHtml(coverUrl)}">
       <div class="miniapp-chrome"><button class="chrome-back" title="返回" aria-label="返回">‹</button><span class="miniapp-menu">•••　◉</span></div>
       <div class="expanded-profile">
-        <div class="card-identity">${avatar(profileAvatar, current.name, "hero-avatar")}<span class="identity-copy"><strong><span>${escapeHtml(current.name)}</span><i>在线</i></strong><small class="identity-meta"><span>${escapeHtml(current.title)}</span><b>·</b><span>${escapeHtml(companyName)}</span></small></span></div>
+        <div class="card-identity">${avatarPreviewTrigger(profileAvatar, current.name, "hero-avatar")}<span class="identity-copy"><strong><span>${escapeHtml(current.name)}</span><i>在线</i></strong><small class="identity-meta"><span>${escapeHtml(current.title)}</span><b>·</b><span>${escapeHtml(companyName)}</span></small></span></div>
         ${(contacts.length || config.qrCodeUrl) ? `<div class="contact-panel${completeContactLayout ? " contact-layout-complete" : ""}" aria-label="联系方式">${renderContactRow(primaryContacts, "contact-primary")}${(secondaryContacts.length || config.qrCodeUrl) ? `<div class="contact-row contact-secondary contact-count-${secondaryContacts.length}${config.qrCodeUrl ? " has-qr" : ""}">${secondaryContacts.map((item) => `<span class="contact-item" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}：${escapeHtml(item.value)}">${icon(item.icon)}<strong>${escapeHtml(item.value)}</strong></span>`).join("")}${config.qrCodeUrl ? `<button type="button" class="contact-qr" data-qr-open title="点击放大二维码" aria-label="放大联系二维码"><img src="${escapeHtml(config.qrCodeUrl)}" alt=""/></button>` : ""}</div>` : ""}</div>` : ""}
       </div>
-      <div class="compact-profile">${avatar(profileAvatar, current.name, "compact-avatar")}<span><strong><span>${escapeHtml(current.name)}</span><i>在线</i></strong><small>${escapeHtml(current.title)} · ${escapeHtml(companyName)}</small></span></div>
+      <div class="compact-profile">${avatarPreviewTrigger(profileAvatar, current.name, "compact-avatar")}<span><strong><span>${escapeHtml(current.name)}</span><i>在线</i></strong><small>${escapeHtml(current.title)} · ${escapeHtml(companyName)}</small></span></div>
       <button class="hero-toggle" data-card-toggle title="收起名片" aria-expanded="true"><span></span></button>
     </header>
     ${config.qrCodeUrl ? `<div class="qr-lightbox" data-qr-lightbox role="dialog" aria-modal="true" aria-label="联系二维码" hidden><button type="button" class="qr-lightbox-backdrop" data-qr-close aria-label="关闭二维码"></button><section><button type="button" class="qr-lightbox-close" data-qr-close aria-label="关闭二维码">×</button><img src="${escapeHtml(config.qrCodeUrl)}" alt="联系二维码"/><strong>扫码联系</strong><small>长按或截图保存二维码</small></section></div>` : ""}
+    <div class="qr-lightbox avatar-lightbox" data-avatar-lightbox role="dialog" aria-modal="true" aria-label="${escapeHtml(current.name)}的头像" hidden><button type="button" class="qr-lightbox-backdrop" data-avatar-close aria-label="关闭头像"></button><section><button type="button" class="qr-lightbox-close" data-avatar-close aria-label="关闭头像">×</button><img src="${escapeHtml(profileAvatar)}" alt="${escapeHtml(current.name)}的头像"/><strong>${escapeHtml(current.name)}</strong><small>${escapeHtml(current.title)} · ${escapeHtml(companyName)}</small></section></div>
     <main class="chat-feed" data-chat-feed>
       ${renderConversationComponent("assistant-response", { content: `${current.welcome}\n\n${biography}` })}
       ${questions.length ? renderConversationComponent("suggestion-chips", { items: questions }) : ""}
@@ -255,7 +263,7 @@ function cardPreview(data) {
         <button class="composer-icon send" data-message-send title="发送">${icon("send")}</button>
         <button class="composer-icon add" data-more-toggle title="更多功能">${icon("plus")}</button>
       </div>
-      <div class="more-panel" data-more-panel hidden><button data-more-action="image">${icon("image")}<span>图片</span></button><button data-more-action="file">${icon("file")}<span>文件</span></button>${config.phone ? `<a href="tel:${escapeHtml(config.phone)}">${icon("phone")}<span>打电话</span></a>` : ""}</div>
+      <div class="more-panel" data-more-panel hidden><button data-more-action="image">${icon("image")}<span>图片</span></button><button data-more-action="file">${icon("file")}<span>文件</span></button></div>
       <div class="composer-toast" data-composer-toast hidden></div>
     </footer>
     </section>
@@ -334,6 +342,7 @@ function bindCardPreview(data) {
   const recordingStatus = root.querySelector("[data-recording-status]");
   const toastNode = root.querySelector("[data-composer-toast]");
   const qrLightbox = root.querySelector("[data-qr-lightbox]");
+  const avatarLightbox = root.querySelector("[data-avatar-lightbox]");
   const companyAssistantPage = root.querySelector("[data-company-assistant-page]");
   const companyConversation = root.querySelector("[data-assistant-conversation]");
   const companySpeech = root.querySelector("[data-company-speech]");
@@ -420,7 +429,7 @@ function bindCardPreview(data) {
 
   function positionFaceTrigger(ratio = faceTriggerRatio) {
     const { minimum, maximum } = faceTriggerBounds();
-    if (!Number.isFinite(ratio)) ratio = (Math.min(maximum, 154) - minimum) / Math.max(1, maximum - minimum);
+    if (!Number.isFinite(ratio)) ratio = (Math.min(maximum, DEFAULT_FACE_TRIGGER_TOP) - minimum) / Math.max(1, maximum - minimum);
     faceTriggerRatio = Math.min(1, Math.max(0, ratio));
     flipTrigger.style.top = `${minimum + ((maximum - minimum) * faceTriggerRatio)}px`;
   }
@@ -826,8 +835,14 @@ function bindCardPreview(data) {
     qrLightbox.querySelector("[data-qr-close]").focus();
   });
   qrLightbox?.querySelectorAll("[data-qr-close]").forEach((button) => button.addEventListener("click", () => { qrLightbox.hidden = true; }));
+  root.querySelectorAll("[data-avatar-open]").forEach((button) => button.addEventListener("click", () => {
+    avatarLightbox.hidden = false;
+    avatarLightbox.querySelector("[data-avatar-close]").focus();
+  }));
+  avatarLightbox.querySelectorAll("[data-avatar-close]").forEach((button) => button.addEventListener("click", () => { avatarLightbox.hidden = true; }));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && qrLightbox && !qrLightbox.hidden) qrLightbox.hidden = true;
+    if (event.key === "Escape" && !avatarLightbox.hidden) avatarLightbox.hidden = true;
   });
   root.querySelector("[data-message-send]").addEventListener("click", sendMessage);
   input.addEventListener("input", syncSendState);
@@ -884,9 +899,6 @@ function bindCardPreview(data) {
       button.classList.add("active");
       button.setAttribute("aria-pressed", "true");
       window.speechSynthesis.speak(utterance);
-    } else if (action === "share") {
-      if (navigator.share) await navigator.share({ title: isCompanyResponse ? assistantName : current.name, text: responseText, url: location.href }).catch(() => {});
-      else showToast("分享链接已准备");
     } else if (action === "regenerate") {
       responseStream.insertAdjacentHTML("beforeend", renderConversationComponent("assistant-response", { content: responseText }));
       requestAnimationFrame(() => {

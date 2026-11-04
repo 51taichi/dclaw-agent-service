@@ -13,11 +13,11 @@
             <!-- #endif -->
           </view>
           <view class="identity">
-            <image class="profile-avatar" :src="profile.avatar" mode="aspectFill" />
+            <button class="profile-avatar-trigger" aria-label="放大头像" @tap="avatarOpen = true"><image class="profile-avatar" :src="profile.avatar" mode="aspectFill" /></button>
             <view class="identity-copy"><view class="name-row"><text>{{ profile.name }}</text><text class="online">在线</text></view><text class="identity-meta">{{ profile.title }} · {{ companyName }}</text></view>
           </view>
           <view class="compact-identity">
-            <image class="compact-avatar" :src="profile.avatar" mode="aspectFill" />
+            <button class="profile-avatar-trigger" aria-label="放大头像" @tap="avatarOpen = true"><image class="compact-avatar" :src="profile.avatar" mode="aspectFill" /></button>
             <view class="identity-copy"><view class="name-row"><text>{{ profile.name }}</text><text class="online">在线</text></view><text class="identity-meta">{{ profile.title }} · {{ companyName }}</text></view>
           </view>
           <view class="contact-panel">
@@ -34,6 +34,16 @@
             <image class="qr-lightbox-image" :src="asset(config.qrCodeUrl)" mode="aspectFit" show-menu-by-longpress />
             <text class="qr-lightbox-title">扫码联系</text>
             <text class="qr-lightbox-hint">长按或截图保存二维码</text>
+          </view>
+        </view>
+
+        <view v-if="avatarOpen" class="qr-lightbox avatar-lightbox" role="dialog" :aria-label="`${profile.name}的头像`">
+          <button class="qr-lightbox-backdrop" aria-label="关闭头像" @tap="avatarOpen = false"></button>
+          <view class="qr-lightbox-card">
+            <button class="qr-lightbox-close" aria-label="关闭头像" @tap="avatarOpen = false">×</button>
+            <image class="qr-lightbox-image avatar-lightbox-image" :src="profile.avatar" mode="aspectFit" show-menu-by-longpress />
+            <text class="qr-lightbox-title">{{ profile.name }}</text>
+            <text class="qr-lightbox-hint">{{ profile.title }} · {{ companyName }}</text>
           </view>
         </view>
 
@@ -135,13 +145,14 @@ import ConversationItem from "../../components/conversation/ConversationItem.vue
 import { copyText, createId, createVoiceRecorder, persistentId, prepareImageAsset, request, requestRecordPermission, resolveAssetUrl, showToast, uploadBinary } from "../../runtime/index.js";
 
 const DEFAULTS = {
-  cover: "/console/assets/moosee-work-serious-scene.png",
+  cover: "/console/assets/xiaoding-card-hero-v1.webp",
   avatar: "/console/assets/bot-avatar.png",
   mascot: "/console/assets/ddeer.png",
   scene: "/console/assets/ddeer-transparent.png",
   video: "/console/assets/ddeer-office-greeting-rig-v3.mp4",
   poster: "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg"
 };
+const LEGACY_DEFAULT_COVER = "/console/assets/moosee-work-serious-scene.png";
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 const options = reactive({ slug: "", deployment: "" });
 const data = ref(null);
@@ -150,6 +161,7 @@ const error = ref("");
 const face = ref("front");
 const heroExpanded = ref(true);
 const qrOpen = ref(false);
+const avatarOpen = ref(false);
 const frontInput = ref("");
 const inputMode = ref("text");
 const frontMessages = ref([]);
@@ -201,7 +213,8 @@ const profile = computed(() => ({
   avatar: asset(config.value.avatarUrl || data.value?.person?.avatarUrl || data.value?.deployment?.avatarUrl || DEFAULTS.avatar)
 }));
 const cleanWebsite = computed(() => String(config.value.website || "").replace(/^https?:\/\//, "").replace(/\/$/, ""));
-const heroStyle = computed(() => `background-image:linear-gradient(180deg,rgba(4,12,31,.1),rgba(4,12,31,.88)),url('${asset(config.value.coverUrl || DEFAULTS.cover)}')`);
+const coverUrl = computed(() => config.value.coverUrl && config.value.coverUrl !== LEGACY_DEFAULT_COVER ? config.value.coverUrl : channel.value.coverUrl || DEFAULTS.cover);
+const heroStyle = computed(() => `background-image:linear-gradient(180deg,rgba(4,12,31,.1),rgba(4,12,31,.88)),url('${asset(coverUrl.value)}')`);
 const faceSwitchStyle = computed(() => `top:${Math.round(faceSwitchRatio.value * 1000) / 10}%;`);
 const voiceEnabled = computed(() => channel.value.voiceEnabled !== false);
 const assistant = computed(() => {
@@ -341,7 +354,7 @@ function skipWechatLogin() {
 
 async function preparePageImages() {
   const values = [
-    config.value.coverUrl || DEFAULTS.cover,
+    coverUrl.value,
     config.value.avatarUrl || data.value?.person?.avatarUrl || data.value?.deployment?.avatarUrl || DEFAULTS.avatar,
     config.value.qrCodeUrl,
     channel.value.assistantAvatarUrl || DEFAULTS.mascot,
@@ -648,6 +661,8 @@ function setTextInputMode() {
 .compact-identity { position: absolute; right: 90rpx; bottom: 54rpx; left: 32rpx; display: flex; align-items: center; gap: 18rpx; opacity: 0; pointer-events: none; transform: translateY(12rpx); transition: opacity .18s ease, transform .18s ease; }
 .compact-avatar { width: 84rpx; height: 84rpx; border: 4rpx solid rgba(255,255,255,.82); border-radius: 50%; background: #fff; }
 .profile-avatar { width: 108rpx; height: 108rpx; border: 4rpx solid rgba(255,255,255,.82); border-radius: 50%; background: #fff; }
+.profile-avatar-trigger { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: auto; height: auto; margin: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; line-height: 0; }
+.profile-avatar-trigger::after { border: 0; }
 .identity-copy { display: flex; flex-direction: column; min-width: 0; gap: 8rpx; }
 .name-row { display: flex; align-items: center; gap: 12rpx; font-size: 32rpx; font-weight: 800; }
 .online { padding: 3rpx 10rpx; border-radius: 6rpx; background: rgba(35,207,124,.9); font-size: 18rpx; }
@@ -666,6 +681,7 @@ function setTextInputMode() {
 .qr-lightbox-card { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 584rpx; padding: 60rpx 52rpx 48rpx; border-radius: 16rpx; background: #fff; box-shadow: 0 44rpx 112rpx rgba(4,10,22,.34); box-sizing: border-box; }
 .qr-lightbox-close { position: absolute; top: 16rpx; right: 16rpx; display: flex; align-items: center; justify-content: center; width: 60rpx; height: 60rpx; margin: 0; padding: 0 0 4rpx; border: 0; border-radius: 50%; background: #f0f2f5; color: #4d5562; font-size: 44rpx; font-weight: 300; line-height: 60rpx; }
 .qr-lightbox-image { width: 440rpx; max-width: 100%; height: 440rpx; border-radius: 12rpx; object-fit: contain; }
+.avatar-lightbox-image { background: #f3f5f8; }
 .qr-lightbox-title { margin-top: 32rpx; color: #20242c; font-size: 32rpx; font-weight: 800; }
 .qr-lightbox-hint { margin-top: 10rpx; color: #858b96; font-size: 22rpx; }
 .hero-toggle { position: absolute; z-index: 4; bottom: 0; left: 50%; display: flex; align-items: center; justify-content: center; width: 86rpx; height: 70rpx; margin: 0; padding: 0; overflow: visible; border: 0; background: transparent; transform: translateX(-50%); }

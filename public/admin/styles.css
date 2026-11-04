@@ -133,6 +133,13 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .agent-binding-select > span svg { width: 15px; height: 15px; color: #68758f; }
 .agent-binding-select select { min-width: 0; width: 100%; min-height: 42px; padding: 10px 12px; border: 0; outline: 0; background: #fff; color: #202842; font: inherit; }
 .agent-binding-block.is-inherited .agent-binding-select select { background: #f5f7fb; color: #647088; cursor: not-allowed; }
+.admin-form > label:has(.ds-select):focus-within,
+.dynamic-fields > label:has(.ds-select):focus-within,
+.agent-binding-select:focus-within,
+.person-binding-card > label:has(.ds-select):focus-within {
+  border-color: #3f4bea;
+  box-shadow: 0 0 0 3px rgba(63, 75, 234, .12);
+}
 .compact-empty { min-height: 64px; border: 1px dashed #d7ddea; border-radius: 7px; }
 .preview-tabs { display: flex; gap: 5px; margin-bottom: 8px; overflow-x: auto; }
 .preview-tabs button { min-height: 32px; padding: 0 10px; border: 1px solid #d4daea; border-radius: 5px; background: #fff; color: #59647b; font-size: 12px; box-shadow: none; }
@@ -329,7 +336,7 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .map-person-composer { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 32px; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid #e0e4ea; background: rgba(255,255,255,.97); }
 .map-person-composer span { min-height: 36px; padding: 10px 13px; border-radius: 18px; background: #f0f2f5; color: #a0a7b2; font-size: 10px; }
 .map-person-composer b { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #eef1f5; color: #526078; font-size: 18px; }
-.map-front-flip-entry { position: absolute; z-index: 6; top: 150px; right: 10px; display: grid; justify-items: center; gap: 2px; }
+.map-front-flip-entry { position: absolute; z-index: 6; top: 196px; right: 10px; display: grid; justify-items: center; gap: 2px; }
 .map-front-flip-entry > span { padding: 3px 6px; border: 2px solid #fff; border-radius: 10px; background: #1478f2; color: #fff; font-size: 9px; font-weight: 800; }
 .map-front-flip-entry img { width: 48px; height: 48px; border: 2px solid #fff; border-radius: 50%; background: #fff; box-shadow: 0 8px 18px rgba(14,25,48,.24); object-fit: contain; }
 .map-front-flip-entry > i { color: #6b7588; font-size: 8px; font-style: normal; }

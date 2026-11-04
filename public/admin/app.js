@@ -1,3 +1,5 @@
+import { initUnifiedSelects, syncUnifiedSelect } from "../components/select.js";
+
 const state = {
   workspaces: [], workspace: null, people: [], channels: [], deployments: [], channelTypes: [],
   miniappConfig: null,
@@ -117,6 +119,7 @@ async function uploadAdminAsset(file, kind) {
 }
 
 async function bootstrap() {
+  initUnifiedSelects();
   bindEvents();
   const [workspaces, types, agents] = await Promise.all([api("/api/admin/workspaces"), api("/api/admin/channel-types"), api("/api/admin/agents")]);
   state.workspaces = workspaces.items;
@@ -483,7 +486,7 @@ function renderFieldMap(provider, key = "") {
   els.fieldMapHint.textContent = key ? "已定位当前字段，修改内容可实时查看" : provider === "website" ? "桌面端模板 · 配置内容实时同步" : "正面是员工名片，反面是公司助手，可点击切换";
   syncFieldMapValues(provider);
   if (provider !== "website") {
-    if (key) setMiniappMapFace("back");
+    if (key) setMiniappMapFace(key === "coverUrl" ? "front" : "back");
     else setMiniappMapFace(state.miniappMapFace);
     const values = fieldMapValues("miniapp");
     const showPoster = key === "assistantScenePosterUrl" && values.assistantScenePosterUrl;
@@ -497,7 +500,7 @@ function renderFieldMap(provider, key = "") {
 
 function fieldMapValues(provider) {
   if (provider === "website") return { ...readDynamicFields(els.websiteBackgroundFields), ...readDynamicFields(els.websiteConfigFields) };
-  return readDynamicFields(els.miniappConfigFields);
+  return { ...(channelFor("miniapp")?.config || {}), ...readDynamicFields(els.miniappConfigFields) };
 }
 
 function syncFieldMapValues(provider) {
@@ -571,7 +574,9 @@ function syncFieldMapValues(provider) {
   els.mapBackPersonName.textContent = person.name || "张三";
   if (person.avatarUrl) els.mapBackPersonAvatar.src = person.avatarUrl;
   else els.mapBackPersonAvatar.removeAttribute("src");
-  const cover = person.profile?.coverUrl || "/console/assets/moosee-work-serious-scene.png";
+  const legacyCover = "/console/assets/moosee-work-serious-scene.png";
+  const personCover = person.profile?.coverUrl && person.profile.coverUrl !== legacyCover ? person.profile.coverUrl : "";
+  const cover = personCover || values.coverUrl || "/console/assets/xiaoding-card-hero-v1.webp";
   els.mapPersonHero.style.setProperty("--map-person-cover", `url("${String(cover).replace(/["\\]/g, "")}")`);
   els.mapFrontAssistantName.textContent = values.assistantName || "D仔";
   if (values.assistantAvatarUrl) els.mapFrontAssistantAvatar.src = values.assistantAvatarUrl;
@@ -996,7 +1001,12 @@ function bindEvents() {
 
 }
 
-function setField(form, name, value) { if (form.elements[name]) form.elements[name].value = value ?? ""; }
+function setField(form, name, value) {
+  const field = form.elements[name];
+  if (!field) return;
+  field.value = value ?? "";
+  if (field instanceof HTMLSelectElement) syncUnifiedSelect(field);
+}
 function toast(message) { els.toast.textContent = message; els.toast.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { els.toast.hidden = true; }, 2600); }
 function handleError(error) { console.error(error); toast(error.message || String(error)); }
 

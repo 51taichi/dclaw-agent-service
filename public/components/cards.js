@@ -4,7 +4,6 @@ const ICONS = {
   image: '<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/>',
   rotate: '<path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/>',
-  share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
   sparkles: '<path d="m12 3-1.6 4.1a2 2 0 0 1-1.1 1.1L5 10l4.3 1.7a2 2 0 0 1 1.1 1.1L12 17l1.6-4.2a2 2 0 0 1 1.1-1.1L19 10l-4.3-1.8a2 2 0 0 1-1.1-1.1Z"/><path d="M5 3v3M3.5 4.5h3M19 17v4M17 19h4"/>',
   thumbsDown: '<path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22h0a3.1 3.1 0 0 1-3-3.9Z"/>',
   thumbsUp: '<path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2h0a3.1 3.1 0 0 1 3 3.9Z"/>',
@@ -42,7 +41,6 @@ function responseActions() {
     <button type="button" data-response-action="speak" title="朗读" aria-label="朗读回复" aria-pressed="false">${componentIcon("volume")}</button>
     <button type="button" data-response-action="like" title="有帮助" aria-label="有帮助" aria-pressed="false">${componentIcon("thumbsUp")}</button>
     <button type="button" data-response-action="dislike" title="没有帮助" aria-label="没有帮助" aria-pressed="false">${componentIcon("thumbsDown")}</button>
-    <button type="button" data-response-action="share" title="分享" aria-label="分享回复">${componentIcon("share")}</button>
   </div><button type="button" data-response-action="regenerate" title="重新生成" aria-label="重新生成回复">${componentIcon("rotate")}</button></div>`;
 }
 

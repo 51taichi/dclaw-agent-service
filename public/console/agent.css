@@ -107,7 +107,9 @@
 .compact-button { min-height: 32px; padding: 0 10px; }
 
 .session-filter-grid { grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(170px, 210px)); }
-.session-filter-grid .tag-multi-select-menu { position: absolute; top: calc(100% + 6px); left: 0; width: 100%; }
+.session-filter-grid .tag-multi-select { overflow: visible; }
+.session-filter-grid .tag-multi-select:focus-within { z-index: 30; }
+.session-filter-grid .tag-multi-select-menu { position: absolute; top: calc(100% + 6px); left: 0; width: max(260px, 100%); }
 .channel-conversation-tabs { grid-template-columns: repeat(var(--channel-count, 1), minmax(0, 1fr)); gap: 6px; padding: 4px; background: #f1f4f9; }
 .channel-conversation-tabs .channel-conversation-tab { height: 40px; border: 1px solid transparent; border-radius: 6px; background: transparent; box-shadow: none; color: var(--muted); }
 .channel-conversation-tabs .channel-conversation-tab .icon { width: 16px; height: 16px; }

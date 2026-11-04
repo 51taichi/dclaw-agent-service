@@ -112,6 +112,7 @@ test("seed migrates the two real channels into one workspace and removes local d
 
   const channelTypes = await request(app.baseUrl, "/api/admin/channel-types");
   const websiteFields = channelTypes.data.items.find((item) => item.provider === "website").channelFields;
+  const miniappFields = channelTypes.data.items.find((item) => item.provider === "miniapp").channelFields;
   assert.ok(websiteFields.some((field) => field.key === "homepageImageUrl" && field.type === "image"));
   assert.equal(websiteFields.some((field) => ["mascotImageUrl", "rosterTitle", "rosterSubtitle"].includes(field.key)), false);
   assert.ok(websiteFields.some((field) => field.key === "panelBorderColor" && field.type === "color"));
@@ -121,6 +122,7 @@ test("seed migrates the two real channels into one workspace and removes local d
   assert.ok(websiteFields.some((field) => field.key === "panelShape" && field.options.includes("直角")));
   assert.ok(websiteFields.some((field) => field.key === "employeeAvatarShape" && field.options.includes("圆角方形")));
   assert.equal(websiteFields.some((field) => ["companyName", "companyDescription", "heroButtonUrl", "launcherLabel", "launcherPositionX", "launcherPositionY"].includes(field.key)), false);
+  assert.equal(miniappFields.some((field) => ["assistantMascotImageUrl", "assistantScenePosterUrl"].includes(field.key)), false);
   assert.equal(websiteFields.some((field) => field.key === "position"), false);
   assert.equal(accounts.data.items.some((item) => item.id === "fake-demo"), false);
   assert.ok(accounts.data.items.filter((item) => item.personId).every((item) => item.person?.name === "向小顶"));
@@ -462,6 +464,10 @@ test("channel draft is private until publish and preview is schema-versioned", a
   assert.equal(draft.data.channel.config.assistantSceneVideoUrl, "/console/assets/ddeer-office-greeting-rig-v3.mp4");
   assert.equal(draft.data.channel.config.assistantScenePosterUrl, "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg");
   assert.equal(draft.data.channel.config.assistantSceneImageUrl, "/console/assets/ddeer-transparent.png");
+  const defaultCardCover = await fetch(`${app.baseUrl}/console/assets/xiaoding-card-hero-v1.webp`);
+  assert.equal(defaultCardCover.status, 200);
+  assert.match(defaultCardCover.headers.get("content-type"), /image\/webp/);
+  assert.ok((await defaultCardCover.arrayBuffer()).byteLength > 0);
   const assistantVideo = await fetch(`${app.baseUrl}${draft.data.channel.config.assistantSceneVideoUrl}`);
   assert.equal(assistantVideo.status, 200);
   assert.match(assistantVideo.headers.get("content-type"), /video\/mp4/);

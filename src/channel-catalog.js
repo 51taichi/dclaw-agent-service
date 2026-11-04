@@ -2,9 +2,7 @@ const assistantFields = [
   { key: "assistantName", label: "公司助手名称", type: "text", default: "D仔", colorKey: "assistantNameColor", colorDefault: "#29466f" },
   { key: "assistantBrandText", label: "助手页品牌文字", type: "text", default: "DClaw", colorKey: "assistantBrandColor", colorDefault: "#244f92" },
   { key: "assistantAvatarUrl", label: "助手头像", type: "image", default: "/console/assets/ddeer.png" },
-  { key: "assistantMascotImageUrl", label: "公仔形象", type: "image", default: "/console/assets/ddeer-transparent.png" },
   { key: "assistantSceneVideoUrl", label: "公仔动画视频", type: "video", default: "/console/assets/ddeer-office-greeting-rig-v3.mp4" },
-  { key: "assistantScenePosterUrl", label: "公仔动画封面", type: "image", default: "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg" },
   { key: "assistantGreeting", label: "助手欢迎语", type: "text", default: "你好，我是D仔，很高兴为你服务", colorKey: "assistantGreetingColor", colorDefault: "#315078" },
   { key: "assistantPrompt", label: "快捷项目提示", type: "text", default: "你可以这样对我说：", colorKey: "assistantPromptColor", colorDefault: "#60718d" },
   { key: "assistantTopics", label: "环绕快捷话题", type: "list", default: ["集团业务介绍", "课程与服务", "合作咨询", "联系我们"], colorKey: "assistantTopicsColor", colorDefault: "#426086" },
@@ -66,7 +64,10 @@ const catalog = [
     name: "智能体名片",
     description: "生成响应式名片 H5 地址和二维码，后续可由微信小程序 web-view 承载。",
     delivery: "public-url",
-    channelFields: assistantFields,
+    channelFields: [
+      { key: "coverUrl", label: "名片默认顶部背景图", type: "image", default: "/console/assets/xiaoding-card-hero-v1.webp", fullWidth: true },
+      ...assistantFields
+    ],
     personFields: profileFields,
     deploymentFields: [
       { key: "coverUrl", label: "顶部背景图", type: "image", default: "/console/assets/moosee-work-serious-scene.png" },

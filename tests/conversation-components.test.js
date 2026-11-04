@@ -28,6 +28,34 @@ test("business cards no longer inject a lead form by default", () => {
   assert.doesNotMatch(previewSource, /leadFormEnabled|renderConversationComponent\("lead-form"\)|data-more-action="contact"/);
 });
 
+test("web business cards omit the miniapp-only phone action", () => {
+  const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
+  assert.doesNotMatch(previewSource, /href="tel:|<span>打电话<\/span>/);
+  assert.match(previewSource, /data-more-action="image"/);
+  assert.match(previewSource, /data-more-action="file"/);
+});
+
+test("profile avatars open the same lightbox treatment as contact QR codes", () => {
+  const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
+  const previewStyles = readFileSync(new URL("../public/channel-preview/styles.css", import.meta.url), "utf8");
+  const clientSource = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
+  assert.match(previewSource, /data-avatar-open/);
+  assert.match(previewSource, /data-avatar-lightbox/);
+  assert.match(previewSource, /class="qr-lightbox avatar-lightbox"/);
+  assert.match(previewStyles, /\.avatar-lightbox section > img/);
+  assert.match(clientSource, /@tap="avatarOpen = true"/);
+  assert.match(clientSource, /v-if="avatarOpen" class="qr-lightbox avatar-lightbox"/);
+});
+
+test("business card face toggle defaults below the contact QR area", () => {
+  const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
+  const previewStyles = readFileSync(new URL("../public/channel-preview/styles.css", import.meta.url), "utf8");
+  const adminStyles = readFileSync(new URL("../public/admin/styles.css", import.meta.url), "utf8");
+  assert.match(previewSource, /const DEFAULT_FACE_TRIGGER_TOP = 218;/);
+  assert.match(previewStyles, /\.card-face-trigger\s*\{[^}]*top:\s*218px/);
+  assert.match(adminStyles, /\.map-front-flip-entry\s*\{[^}]*top:\s*196px/);
+});
+
 test("reused conversations advance the outbox cursor before sending a new message", () => {
   const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
   const clientSource = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
@@ -126,6 +154,7 @@ test("agent responses render as plain answer cards and message defaults to custo
   assert.match(answer, /data-response-action="copy"/);
   assert.match(answer, /aria-label="重新生成回复"/);
   assert.match(answer, /aria-pressed="false"/);
+  assert.doesNotMatch(answer, /data-response-action="share"|aria-label="分享回复"/);
   assert.equal(miniappCard.match(/本服务为AI生成内容，结果仅供参考/g)?.length, 2);
   assert.match(miniappCard, /class="ai-page-disclosure front-disclosure" role="note">本服务为AI生成内容，结果仅供参考<\/text>\s*<scroll-view class="conversation-scroll"/);
   assert.match(miniappCard, /class="voice-hint" role="note">本服务为AI生成内容，结果仅供参考/);
@@ -143,6 +172,18 @@ test("suggested questions have a clear prompt label", () => {
   assert.match(componentStyles, /\.dclaw-suggestion-group \.question-list\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(componentStyles, /\.dclaw-suggestion-group \.question-list button\s*\{[^}]*white-space:\s*normal/);
   assert.doesNotMatch(componentStyles, /\.dclaw-suggestion-group \.question-list\s*\{[^}]*overflow-x:\s*auto/);
+});
+
+test("business card cover inherits the miniapp channel default across web and miniapp clients", () => {
+  const miniapp = getChannelType("miniapp");
+  const coverField = miniapp.channelFields.find((field) => field.key === "coverUrl");
+  const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
+  const clientSource = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
+  assert.equal(coverField?.type, "image");
+  assert.equal(coverField?.default, "/console/assets/xiaoding-card-hero-v1.webp");
+  assert.equal(miniapp.channelFields.some((field) => ["assistantMascotImageUrl", "assistantScenePosterUrl"].includes(field.key)), false);
+  assert.match(previewSource, /personCover \|\| channel\.coverUrl \|\| DEFAULT_COVER/);
+  assert.match(clientSource, /channel\.value\.coverUrl \|\| DEFAULTS\.cover/);
 });
 
 test("choice components require an explicit reusable submit button", () => {
