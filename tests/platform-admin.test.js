@@ -309,6 +309,12 @@ test("Agent catalog supplies one required default with optional channel and pers
   assert.equal(personAgent.data.concurrencyLimit, 0);
   assert.equal(personAgent.data.billingLabel, "");
 
+  const invalidAgent = await request(app.baseUrl, "/api/admin/agents", { method: "POST", body: {
+    id: "dingmai_agent_kf", name: "无效配置 ID"
+  } });
+  assert.equal(invalidAgent.response.status, 400);
+  assert.match(invalidAgent.data.error, /配置 ID.*小写字母.*连字符/);
+
   const defaults = await request(app.baseUrl, "/api/admin/agent-defaults", { method: "PUT", body: {
     defaultAgentConfigId: "person-agent"
   } });

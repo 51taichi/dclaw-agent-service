@@ -206,7 +206,7 @@
             <div class="agent-library-layout">
               <div id="agentConfigList" class="agent-card-grid"></div>
               <form id="agentConfigForm" class="admin-form">
-                <label><span><svg><use href="#i-hash"/></svg>配置 ID</span><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" /></label>
+                <label><span><svg><use href="#i-hash"/></svg>配置 ID</span><span class="field-control-with-rule"><input name="id" required pattern="[a-z][a-z0-9-]{2,79}" placeholder="例如：dingmai-agent-kf" title="3-80 位，以小写字母开头，仅支持小写字母、数字和连字符 -" /><small>3-80 位，以小写字母开头，仅支持小写字母、数字和连字符 -</small></span></label>
                 <label><span><svg><use href="#i-edit"/></svg>配置名称</span><input name="name" required /></label>
                 <label><span><svg><use href="#i-globe"/></svg>Base URL / 接口</span><input name="agentApiUrl" type="url" placeholder="https://dclaw.example.com" /></label>
                 <label><span><svg><use href="#i-bot"/></svg>Agent ID（Public ID）</span><input name="agentId" placeholder="support_agent" /></label>

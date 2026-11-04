@@ -338,7 +338,7 @@ export class Store {
   }
 
   createAgentConfig(input) {
-    const id = identifier(input.id);
+    const id = agentConfigIdentifier(input.id);
     const name = requiredText(input.name, "Agent config name", 120);
     this.db.prepare(`INSERT INTO agent_configs (id, name, agent_api_url, agent_api_key, agent_id, concurrency_limit, billing_label) VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .run(id, name, cleanText(input.agentApiUrl, "", 2000), cleanText(input.agentApiKey, "", 2000), cleanText(input.agentId, "", 200), 0, "");
@@ -1501,6 +1501,14 @@ function requiredText(value, label, max) {
 function identifier(value) {
   const result = cleanText(value, "", 80);
   if (!/^[a-z][a-z0-9-]{2,79}$/.test(result)) throw new TypeError("Invalid identifier");
+  return result;
+}
+
+function agentConfigIdentifier(value) {
+  const result = cleanText(value, "", 80);
+  if (!/^[a-z][a-z0-9-]{2,79}$/.test(result)) {
+    throw new TypeError("配置 ID 需为 3-80 位，以小写字母开头，仅支持小写字母、数字和连字符 -");
+  }
   return result;
 }
 

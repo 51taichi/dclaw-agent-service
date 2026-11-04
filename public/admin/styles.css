@@ -78,6 +78,10 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .admin-form input, .admin-form select, .admin-form textarea, .dynamic-fields input, .dynamic-fields select, .dynamic-fields textarea, .binding-card input, .person-binding-card select { min-width: 0; width: 100%; padding: 10px 12px; border: 0; outline: 0; background: #fff; color: #202842; font: inherit; resize: vertical; }
 .admin-form input, .admin-form select, .dynamic-fields input, .dynamic-fields select, .binding-card input, .person-binding-card select { min-height: 42px; }
 .admin-form input[type="color"], .dynamic-fields input[type="color"] { padding: 6px 12px; }
+.field-control-with-rule { display: grid; min-width: 0; background: #fff; }
+.field-control-with-rule small { padding: 0 12px 9px; color: #6d7890; font-size: 11px; line-height: 1.45; }
+.field-control-with-rule input:invalid:not(:placeholder-shown) { color: #bd2534; }
+.field-control-with-rule:has(input:invalid:not(:placeholder-shown)) small { color: #bd2534; }
 .wide { grid-column: 1 / -1; }
 .form-footer { min-height: 48px; padding-top: 6px; }
 .toggle-line { display: flex; align-items: center; gap: 8px; color: #35405a; font-weight: 700; }
