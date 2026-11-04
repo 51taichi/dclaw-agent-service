@@ -140,7 +140,7 @@ const MULTI_CHOICE_DEMO = {
 
 export const COMPONENT_DEMOS = Object.freeze([
   { type: "assistant-response", name: "回答卡片", props: { content: "您好，我是向小顶，很高兴认识您。\n\n我会结合集团业务资料，为您提供清晰、准确的解答。" } },
-  { type: "suggestion-chips", name: "快捷问题", props: { items: ["你是谁", "怎么合作", "查看服务案例"] } },
+  { type: "suggestion-chips", name: "快捷问题", props: { items: ["你们公司是怎样开展与渠道合作的？", "你们公司主要有哪些服务？", "能提供哪些合作支持？", "介绍一下公司整体情况"] } },
   {
     type: "single-choice",
     name: "单选回答",

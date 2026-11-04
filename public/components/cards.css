@@ -11,12 +11,11 @@
 @keyframes dclaw-spin { to { transform: rotate(360deg); } }
 .question-list, .dclaw-suggestion-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
 .question-list button, .quick-question { padding: 7px 10px; border: 1px solid #aebfe0; border-radius: 6px; background: #fff; color: #244f91; font-size: 11px; }
-.dclaw-suggestion-group { display: flex; align-items: center; gap: 8px; min-width: 0; margin-bottom: 12px; overflow: hidden; }
-.dclaw-suggestion-title { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; margin-left: 2px; color: #707b8e; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.dclaw-suggestion-group { display: flex; align-items: flex-start; gap: 8px; min-width: 0; margin-bottom: 12px; overflow: hidden; }
+.dclaw-suggestion-title { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; min-height: 31px; margin-left: 2px; color: #707b8e; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .dclaw-suggestion-title .ui-icon { width: 13px; height: 13px; color: #5279bc; stroke-width: 2; }
-.dclaw-suggestion-group .question-list { flex: 1 1 auto; flex-wrap: nowrap; min-width: 0; margin-bottom: 0; padding-bottom: 2px; overflow-x: auto; scrollbar-width: none; }
-.dclaw-suggestion-group .question-list::-webkit-scrollbar { display: none; }
-.dclaw-suggestion-group .question-list button { flex: 0 0 auto; white-space: nowrap; }
+.dclaw-suggestion-group .question-list { display: grid; flex: 1 1 auto; grid-template-columns: repeat(2,minmax(0,1fr)); min-width: 0; margin-bottom: 0; }
+.dclaw-suggestion-group .question-list button { width: 100%; min-width: 0; line-height: 1.35; overflow-wrap: anywhere; text-align: left; white-space: normal; }
 .dclaw-choice-card { padding: 12px; }
 .dclaw-choice-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
 .dclaw-choice-title strong { color: #20283a; font-size: 13px; }

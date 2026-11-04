@@ -135,9 +135,14 @@ test("agent responses render as plain answer cards and message defaults to custo
 
 test("suggested questions have a clear prompt label", () => {
   const suggestions = renderConversationComponent("suggestion-chips", { items: ["你是谁", "怎么合作"] });
+  const componentStyles = readFileSync(new URL("../public/components/cards.css", import.meta.url), "utf8");
   assert.match(suggestions, /dclaw-suggestion-title/);
   assert.match(suggestions, />快捷提问<\/span>/);
   assert.match(suggestions, /data-question="你是谁"/);
+  assert.match(componentStyles, /\.dclaw-suggestion-group \.question-list\s*\{[^}]*display:\s*grid/);
+  assert.match(componentStyles, /\.dclaw-suggestion-group \.question-list\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(componentStyles, /\.dclaw-suggestion-group \.question-list button\s*\{[^}]*white-space:\s*normal/);
+  assert.doesNotMatch(componentStyles, /\.dclaw-suggestion-group \.question-list\s*\{[^}]*overflow-x:\s*auto/);
 });
 
 test("choice components require an explicit reusable submit button", () => {
