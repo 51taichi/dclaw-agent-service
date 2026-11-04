@@ -241,6 +241,7 @@ async function readSse(response) {
         throw error;
       }
       if (parsed?.object === "content" && typeof parsed.text === "string") {
+        if (isInternalRuntimeStatus(parsed.text)) return;
         if (parsed.delta === true) deltaText += parsed.text;
         else if (parsed.status === "completed") completedText = parsed.text;
         return;
@@ -250,10 +251,11 @@ async function readSse(response) {
         if (outputText) finalText = outputText;
         return;
       }
-      deltaText += extractText(parsed);
+      const extracted = extractText(parsed);
+      if (!isInternalRuntimeStatus(extracted)) deltaText += extracted;
     } catch (error) {
       if (error?.message === "智能体响应流返回错误") throw error;
-      deltaText += data;
+      if (!isInternalRuntimeStatus(data)) deltaText += data;
     }
   };
   while (true) {
@@ -280,7 +282,7 @@ function extractOutputText(output) {
   for (const item of output) {
     if (!Array.isArray(item?.content)) continue;
     for (const content of item.content) {
-      if (typeof content?.text === "string" && content.text.trim()) return content.text;
+      if (typeof content?.text === "string" && content.text.trim() && !isInternalRuntimeStatus(content.text)) return content.text;
     }
   }
   return "";
@@ -295,6 +297,7 @@ export function parseAgentResponse(raw, { flowContext = null, tagContext = null,
   if (value?.data && typeof value.data === "object") value = value.data;
   const reply = String(value?.reply ?? value?.message ?? value?.content ?? "").trim();
   const mayBeSilent = Boolean(flowContext?.terminal && flowContext?.currentNode?.silentReply?.enabled);
+  if (isInternalRuntimeStatus(reply)) throw new Error("智能体响应只包含内部运行状态，没有可发送给客户的回复");
   if (!reply && !mayBeSilent) throw new Error("智能体响应中没有可发送的回复内容");
   if (reply.length > 20_000) throw new Error("智能体回复不能超过 20000 个字符");
   const rawAlert = value?.attentionAlert || value?.attention;
@@ -322,6 +325,13 @@ export function parseAgentResponse(raw, { flowContext = null, tagContext = null,
     source: "agent",
     responseId: value?.response_id || randomUUID()
   };
+}
+
+function isInternalRuntimeStatus(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return /\bContext compaction\s+(?:started|completed|in[ -]?progress)\b/iu.test(text)
+    || (/\bContext Status\s*:/iu.test(text) && /\bmsgs?\s*->\s*compact\(/iu.test(text));
 }
 
 function normalizeAttachments(value) {

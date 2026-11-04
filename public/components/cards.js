@@ -88,7 +88,7 @@ export function renderConversationComponent(type, props = {}) {
     return `<article class="component-card resource-card dclaw-card dclaw-resource-card" data-component="resource-list"><div class="component-title"><span>${escapeHtml(props.title || "资料中心")}</span><small>${items.length} 项</small></div>${items.map((item) => `<a class="resource-row" href="${safeUrl(item.url)}" target="_blank" rel="noopener"><span class="resource-type">${escapeHtml(item.type || "资料")}</span><strong>${escapeHtml(item.name || item.title)}</strong><span class="resource-open">↗</span></a>`).join("")}</article>`;
   }
   if (type === "lead-form") {
-    return `<form class="component-card lead-card dclaw-card dclaw-lead-card" data-component="lead-form" data-lead-form><div class="component-title"><span>${escapeHtml(props.title || "保持联系")}</span><small>${escapeHtml(props.subtitle || "我们将尽快联系您")}</small></div><div class="dclaw-lead-fields"><label>怎么称呼您<input name="name" required placeholder="${escapeHtml(props.namePlaceholder || "请输入姓名")}"/></label><label>怎么联系到您<input name="contact" required placeholder="${escapeHtml(props.contactPlaceholder || "请输入手机号或微信号")}"/></label></div><footer>${renderConversationComponent("action-button", { label: props.submitLabel || "提交", action: "submit-lead", buttonType: "submit" })}</footer></form>`;
+    return `<form class="component-card lead-card dclaw-card dclaw-lead-card" data-component="lead-form" data-lead-form><div class="component-title dclaw-lead-title"><span>${escapeHtml(props.title || "保持联系")}</span><small>${escapeHtml(props.subtitle || "我们将尽快联系您")}</small></div><div class="dclaw-lead-fields"><label>怎么称呼您<input name="name" required placeholder="${escapeHtml(props.namePlaceholder || "请输入姓名")}"/></label><label>怎么联系到您<input name="contact" required placeholder="${escapeHtml(props.contactPlaceholder || "请输入手机号或微信号")}"/></label></div><footer>${renderConversationComponent("action-button", { label: props.submitLabel || "提交", action: "submit-lead", buttonType: "submit" })}</footer></form>`;
   }
   if (type === "message") {
     const customer = props.role !== "agent";
@@ -158,7 +158,7 @@ export const COMPONENT_DEMOS = Object.freeze([
   },
   { type: "action-button", name: "操作按钮", props: { label: "提交回答", action: "demo-submit" } },
   { type: "resource-list", name: "资料列表", props: { items: [{ type: "PDF", name: "集团服务介绍", url: "#" }, { type: "案例", name: "AIGC 项目案例集", url: "#" }] } },
-  { type: "lead-form", name: "留资表单", props: {} },
+  { type: "lead-form", name: "留资表单", props: { title: "留下联系方式，我按您学校情况给方案", subtitle: "填写手机号或微信号，也可在这里补充学校名称、专业方向与毕业生规模", submitLabel: "提交，等我联系您" } },
   { type: "message", name: "客户消息", props: { content: "我想咨询企业智能化方案。" } },
   { type: "voice-message", name: "语音消息", variants: [{ role: "agent", duration: 8 }, { role: "customer", duration: 12 }] },
   { type: "attachment", name: "附件卡片", variants: [{ attachment: { type: "card", title: "顶脉教育集团服务方案", subtitle: "企业智能化服务与落地案例", name: "查看完整方案", url: "#", pictureUrl: "/console/assets/moosee-work-serious-scene.png" } }, { attachment: { type: "file", name: "项目需求清单.pdf", url: "#" } }] }

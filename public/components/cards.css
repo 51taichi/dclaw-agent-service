@@ -51,6 +51,9 @@
 .component-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .component-title > span { font-weight: 900; }
 .component-title small { color: #7b8596; font-size: 10px; }
+.dclaw-lead-title { display: grid; justify-content: stretch; gap: 4px; margin-bottom: 14px; }
+.dclaw-lead-title > span { color: #20283a; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.dclaw-lead-title small { display: block; color: #748095; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .resource-row { display: grid; grid-template-columns: 38px minmax(0,1fr) 30px; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid #edf0f4; color: inherit; text-decoration: none; }
 .resource-row strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .resource-type { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 5px; background: #e7f0ff; color: #1f5ca8; font-size: 9px; font-weight: 900; }
@@ -58,6 +61,7 @@
 .lead-card label { display: block; color: #3d485f; font-size: 12px; font-weight: 700; }
 .lead-card input { width: 100%; margin-top: 5px; padding: 10px 0; border: 0; border-bottom: 1px solid #dce1ea; outline: 0; }
 .dclaw-lead-card footer { display: flex; justify-content: flex-end; margin-top: 10px; }
+.dclaw-lead-card footer .dclaw-action-button { max-width: 100%; white-space: nowrap; }
 .dclaw-lead-card.is-submitted { border-color: #dfe2e7; background: #f6f7f9; box-shadow: none; }
 .dclaw-lead-card.is-submitted label,
 .dclaw-lead-card.is-submitted input { color: #7f8793; }

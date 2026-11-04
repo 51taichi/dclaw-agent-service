@@ -42,7 +42,7 @@
   </view>
 
   <view v-else-if="item.type === 'lead-form'" class="component-card lead-card" :class="{ submitted: item.submitted }">
-    <view class="component-title"><text>{{ item.title || '保持联系' }}</text><text class="muted">{{ item.subtitle || '我们将尽快联系您' }}</text></view>
+    <view class="component-title lead-title"><text>{{ item.title || '保持联系' }}</text><text class="muted lead-subtitle">{{ item.subtitle || '我们将尽快联系您' }}</text></view>
     <view class="lead-fields">
       <view class="lead-field"><text>怎么称呼您</text><input class="lead-input" v-model="lead.name" :disabled="item.submitted" :placeholder="item.namePlaceholder || '请输入姓名'" /></view>
       <view class="lead-field"><text>怎么联系到您</text><input class="lead-input" v-model="lead.contact" :disabled="item.submitted" :placeholder="item.contactPlaceholder || '请输入手机号或微信号'" /></view>
@@ -153,6 +153,8 @@ function maskContact(value) {
 .primary-button { width: auto; min-width: 176rpx; min-height: 60rpx; margin: 0; padding: 10rpx 24rpx; border-radius: 14rpx; background: #3864f4; color: #fff; font-size: 23rpx; font-weight: 700; line-height: 40rpx; }
 .primary-button.is-disabled { background: #dfe4ed; color: #8a94a6; }
 .lead-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 20rpx; }
+.lead-title { align-items: flex-start; flex-direction: column; justify-content: flex-start; gap: 8rpx; margin-bottom: 24rpx; line-height: 1.4; text-align: left; }
+.lead-subtitle { margin-top: 0; line-height: 1.5; overflow-wrap: anywhere; text-align: left; }
 .lead-field { color: #3d485f; font-size: 22rpx; font-weight: 700; }
 .lead-input { height: 72rpx; margin-top: 8rpx; border-bottom: 1rpx solid #dce1ea; font-size: 22rpx; font-weight: 400; }
 .lead-card.submitted { border-color: #dfe2e7; background: #f6f7f9; box-shadow: none; }
@@ -193,6 +195,7 @@ function maskContact(value) {
   .choice-footer { margin-top: 9px; }
   .primary-button { min-width: 88px; min-height: 32px; padding: 6px 12px; border-radius: 7px; font-size: 12px; line-height: 20px; }
   .lead-fields { gap: 12px; }
+  .lead-title { gap: 4px; margin-bottom: 14px; }
   .lead-field { font-size: 12px; }
   .lead-input { height: 38px; margin-top: 5px; border-bottom-width: 1px; font-size: 11px; }
   .resource-row { grid-template-columns: 38px minmax(0,1fr) 30px; gap: 8px; padding: 10px 0; border-top-width: 1px; }

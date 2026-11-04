@@ -316,6 +316,44 @@ test("Agent Gateway uses the completed SSE body instead of concatenating duplica
   assert.equal(outbox.data.items[0].content, "收到");
 });
 
+test("Agent Gateway filters context-compaction status and retries for a customer reply", async (t) => {
+  let calls = 0;
+  const agentFetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      const status = "🔄 Context compaction started. Context Status: 📝 112.6k / 131.1k (86%) 💬 42 msgs -> compact(40) + keep(2)";
+      return new Response(`data: ${JSON.stringify({ object: "content", status: "completed", text: status })}\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" }
+      });
+    }
+    return new Response(JSON.stringify({
+      reply: "我们主要提供智能名片与官网客服服务。",
+      tagEvaluation: [],
+      tagDecision: { add: [], remove: [] },
+      attentionAlert: { required: false }
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const app = await fixture(agentFetch);
+  t.after(() => app.close());
+  await jsonRequest(app.baseUrl, "/api/accounts/website-default", {
+    method: "PUT",
+    body: { agentApiUrl: "https://agent.example.test/openapi/chat", agentApiKey: "secret", agentId: "sales-agent" }
+  });
+  const schema = await jsonRequest(app.baseUrl, "/api/tag-schemas/website-default");
+  await jsonRequest(app.baseUrl, "/api/tag-schemas/website-default", {
+    method: "PUT",
+    body: { schema: { ...schema.data.schema, dateTag: { enabled: false }, groups: [] } }
+  });
+
+  const received = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/events", { method: "POST", body: inbound() });
+  assert.equal(received.data.items[0].handledBy, "agent");
+  assert.equal(calls, 2);
+  const outbox = await jsonRequest(app.baseUrl, "/api/channels/website/website-default/conversations/session-1/outbox?after=0");
+  assert.equal(outbox.data.items[0].content, "我们主要提供智能名片与官网客服服务。");
+  assert.doesNotMatch(outbox.data.items[0].content, /Context compaction/);
+});
+
 test("Agent Gateway retries a contract-invalid response with validation feedback", async (t) => {
   const calls = [];
   const agentFetch = async (_url, options) => {

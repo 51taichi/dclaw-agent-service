@@ -241,6 +241,7 @@ test("lead-form attachments use the shared interactive lead component", () => {
   const miniappCard = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
   assert.match(markup, /data-component="lead-form"/);
   assert.match(markup, /data-action="submit-lead"/);
+  assert.match(markup, /component-title dclaw-lead-title/);
   assert.match(miniappCard, /\["single-choice", "multi-choice", "lead-form"\]/);
   assert.match(miniappCard, /displayText: "已提交联系信息"/);
 });
