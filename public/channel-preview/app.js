@@ -223,7 +223,7 @@ function cardPreview(data) {
   const websiteContact = config.website ? { label: "官网", value: config.website.replace(/^https?:\/\//, "").replace(/\/$/, ""), icon: "globe" } : null;
   const primaryContacts = (config.qrCodeUrl
     ? [websiteContact, emailContact]
-    : [phoneContact, config.wechat ? { label: "微信", value: config.wechat, icon: "message" } : null, emailContact]
+    : [phoneContact, emailContact]
   ).filter(Boolean);
   const secondaryContacts = (config.qrCodeUrl
     ? [addressContact, phoneContact]

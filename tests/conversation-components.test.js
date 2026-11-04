@@ -193,6 +193,18 @@ test("business card cover inherits the miniapp channel default across web and mi
   assert.doesNotMatch(clientSource, /LEGACY_DEFAULT_COVER/);
 });
 
+test("business card contact fields use address instead of a redundant wechat number", () => {
+  const miniapp = getChannelType("miniapp");
+  const profileKeys = miniapp.personFields.map((field) => field.key);
+  const deploymentKeys = miniapp.deploymentFields.map((field) => field.key);
+  const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
+  assert.equal(profileKeys.includes("wechat"), false);
+  assert.equal(deploymentKeys.includes("wechat"), false);
+  assert.equal(profileKeys.indexOf("address"), profileKeys.indexOf("phone") + 1);
+  assert.equal(deploymentKeys.indexOf("address"), deploymentKeys.indexOf("phone") + 1);
+  assert.doesNotMatch(previewSource, /config\.wechat/);
+});
+
 test("choice components require an explicit reusable submit button", () => {
   const single = renderConversationComponent("single-choice", { options: [{ label: "方案 A", value: "a" }, { label: "方案 B", value: "b" }] });
   const multiple = renderConversationComponent("multi-choice", { options: ["业务咨询", "案例资料"] });
