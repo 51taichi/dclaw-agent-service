@@ -307,7 +307,15 @@ function cardPreview(data) {
         </section>
         <section class="assistant-conversation message-stream" data-assistant-conversation aria-live="polite"></section>
         ${voiceEnabled ? `<footer class="assistant-voice-dock">
-          <button type="button" class="assistant-voice-button" data-assistant-voice data-label="${escapeHtml(assistantVoiceLabel)}">${icon("mic")}<strong>${escapeHtml(assistantVoiceLabel)}</strong><span class="assistant-keyboard">${icon("keyboard")}</span></button>
+          <div class="assistant-voice-control" data-assistant-voice-control>
+            <button type="button" class="assistant-voice-button" data-assistant-voice data-label="${escapeHtml(assistantVoiceLabel)}">${icon("mic")}<strong>${escapeHtml(assistantVoiceLabel)}</strong></button>
+            <button type="button" class="assistant-input-toggle assistant-keyboard" data-assistant-keyboard title="切换文字输入" aria-label="切换文字输入">${icon("keyboard")}</button>
+          </div>
+          <div class="assistant-text-composer" data-assistant-text-composer hidden>
+            <input type="text" data-assistant-message-input placeholder="发消息..." aria-label="发送给${escapeHtml(assistantName)}的消息"/>
+            <button type="button" class="assistant-input-toggle" data-assistant-mic title="切换语音输入" aria-label="切换语音输入">${icon("mic")}</button>
+            <button type="button" class="assistant-text-send" data-assistant-message-send title="发送" aria-label="发送消息" disabled>${icon("send")}</button>
+          </div>
           <small>${escapeHtml(assistantVoiceHint)}</small>
         </footer>` : ""}
       </main>
@@ -349,6 +357,12 @@ function bindCardPreview(data) {
   const companyConversation = root.querySelector("[data-assistant-conversation]");
   const companySpeech = root.querySelector("[data-company-speech]");
   const companyVoice = root.querySelector("[data-assistant-voice]");
+  const companyVoiceControl = root.querySelector("[data-assistant-voice-control]");
+  const companyKeyboard = root.querySelector("[data-assistant-keyboard]");
+  const companyTextComposer = root.querySelector("[data-assistant-text-composer]");
+  const companyTextInput = root.querySelector("[data-assistant-message-input]");
+  const companyTextSend = root.querySelector("[data-assistant-message-send]");
+  const companyMic = root.querySelector("[data-assistant-mic]");
   const companySceneVideo = root.querySelector("[data-assistant-scene-video]");
   const current = identity(data);
   const channel = data.channel.config || {};
@@ -735,10 +749,25 @@ function bindCardPreview(data) {
     pointerStartY = event.clientY;
     const trigger = surface === "company" ? companyVoice : voiceHold;
     trigger?.setPointerCapture?.(event.pointerId);
+    trigger?.classList.add("is-pending");
+    if (surface === "company") {
+      companyVoice.querySelector("strong").textContent = "正在请求麦克风权限...";
+      companySpeech.textContent = "请允许麦克风权限，我才能听到你说话。";
+    } else if (voiceHold) {
+      voiceHold.textContent = "正在请求麦克风权限...";
+    }
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      trigger?.classList.remove("is-pending");
       if (!pointerDown) {
         mediaStream.getTracks().forEach((track) => track.stop());
+        if (surface === "company") {
+          companyVoice.querySelector("strong").textContent = companyVoice.dataset.label;
+          companySpeech.textContent = assistantGreeting;
+        } else if (voiceHold) {
+          voiceHold.textContent = "按住说话";
+        }
+        showToast("麦克风已授权，请重新按住说话");
         return;
       }
       const chunks = [];
@@ -768,22 +797,31 @@ function bindCardPreview(data) {
       }
       recordingTimer = setInterval(updateRecordingTime, 250);
       updateRecordingTime();
-    } catch {
+    } catch (error) {
       pointerDown = false;
-      showToast("需要允许麦克风权限才能录音");
+      trigger?.classList.remove("is-pending");
+      if (surface === "company") {
+        companyVoice.querySelector("strong").textContent = companyVoice.dataset.label;
+        companySpeech.textContent = assistantGreeting;
+      } else if (voiceHold) {
+        voiceHold.textContent = "按住说话";
+      }
+      const denied = error?.name === "NotAllowedError" || error?.name === "SecurityError";
+      showToast(denied ? "请在浏览器地址栏开启麦克风权限后重试" : "需要允许麦克风权限才能录音");
     }
   }
 
   function finishRecording(cancel = false) {
     pointerDown = false;
+    const activeRecorder = recorder?.state === "recording";
     recordingCanceled = cancel || recordingCanceled;
     clearInterval(recordingTimer);
     recordingStatus.hidden = true;
     composerDock.classList.remove("is-recording");
     companyVoice?.classList.remove("is-listening");
     if (companyVoice) companyVoice.querySelector("strong").textContent = companyVoice.dataset.label;
-    if (recordingSurface === "company") companySpeech.textContent = recordingCanceled ? assistantGreeting : "收到，我正在为你整理答案。";
-    if (recorder?.state === "recording") recorder.stop();
+    if (recordingSurface === "company" && activeRecorder) companySpeech.textContent = recordingCanceled ? assistantGreeting : "收到，我正在为你整理答案。";
+    if (activeRecorder) recorder.stop();
   }
 
   function moveRecording(event, surface = "front") {
@@ -854,6 +892,26 @@ function bindCardPreview(data) {
     }
     scrollCompanyToLatest();
   }
+
+  function setCompanyInputMode(mode) {
+    if (!companyVoiceControl || !companyTextComposer) return;
+    const textMode = mode === "text";
+    companyVoiceControl.hidden = textMode;
+    companyTextComposer.hidden = !textMode;
+    if (textMode) companyTextInput?.focus();
+  }
+
+  function syncCompanySendState() {
+    if (companyTextSend) companyTextSend.disabled = !companyTextInput?.value.trim();
+  }
+
+  async function sendCompanyText() {
+    const value = companyTextInput?.value.trim();
+    if (!value) return;
+    companyTextInput.value = "";
+    syncCompanySendState();
+    await appendCompanyConversation(value);
+  }
   root.querySelectorAll("[data-assistant-prompt]").forEach((button) => button.addEventListener("click", () => {
     root.querySelectorAll("[data-assistant-prompt]").forEach((item) => item.classList.toggle("is-active", item === button));
     companySpeech.textContent = `想了解“${button.dataset.assistantPrompt}”？我来为你介绍。`;
@@ -871,6 +929,16 @@ function bindCardPreview(data) {
   companyVoice?.addEventListener("pointermove", (event) => moveRecording(event, "company"));
   companyVoice?.addEventListener("pointerup", () => finishRecording(recordingCanceled));
   companyVoice?.addEventListener("pointercancel", () => finishRecording(true));
+  companyKeyboard?.addEventListener("click", () => setCompanyInputMode("text"));
+  companyMic?.addEventListener("click", () => setCompanyInputMode("voice"));
+  companyTextInput?.addEventListener("input", syncCompanySendState);
+  companyTextInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      sendCompanyText();
+    }
+  });
+  companyTextSend?.addEventListener("click", sendCompanyText);
   setCardFace("front");
   root.querySelector("[data-qr-open]")?.addEventListener("click", () => {
     qrLightbox.hidden = false;
@@ -992,7 +1060,7 @@ function websitePreview(data, { embedSurface = false } = {}) {
       <div class="agent-roster" data-agent-roster>
         ${agents.length ? agents.map((agent) => `<button class="agent-option" data-agent-select="${escapeHtml(agent.id)}">${avatar(agent.avatar, agent.name, "roster-avatar")}<span><strong title="${escapeHtml(agent.name)}">${escapeHtml(agent.name)}</strong><small title="${escapeHtml(agent.title)}">${escapeHtml(agent.title)}</small></span><i><b></b>${escapeHtml(employeeStatusLabel)}</i></button>`).join("") : `<div class="empty-roster">暂未配置可用员工</div>`}
       </div>
-      <div class="widget-card-view" data-widget-card hidden><iframe data-widget-card-frame title="智能员工名片"></iframe></div>
+      <div class="widget-card-view" data-widget-card hidden><iframe data-widget-card-frame title="智能员工名片" allow="microphone; camera; clipboard-write"></iframe></div>
     </aside>
   </section>`;
 }

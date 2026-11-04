@@ -157,12 +157,22 @@ button { cursor: pointer; }
 .assistant-conversation { position: relative; z-index: 3; display: none; padding: 12px 14px 28px; background: #f5f6f8; }
 .company-assistant-page.is-conversation .assistant-conversation { display: grid; }
 .assistant-voice-dock { position: sticky; z-index: 19; bottom: 0; flex: 0 0 auto; margin-top: auto; padding: 10px 14px max(11px, env(safe-area-inset-bottom)); background: rgba(240,249,255,.76); box-shadow: 0 -8px 22px rgba(35,52,84,.08); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.assistant-voice-button { display: grid; grid-template-columns: 24px minmax(0,1fr) 24px; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 0 16px; border: 0; border-radius: 24px; background: linear-gradient(90deg, #1766da, #193cc9); color: var(--assistant-voice-label-color, #fff); box-shadow: 0 8px 20px rgba(28,75,188,.22); touch-action: none; user-select: none; }
+.assistant-voice-control { display: grid; grid-template-columns: minmax(0,1fr) 50px; min-height: 48px; overflow: hidden; border-radius: 24px; background: linear-gradient(90deg, #1766da, #193cc9); box-shadow: 0 8px 20px rgba(28,75,188,.22); }
+.assistant-voice-button { display: grid; grid-template-columns: 24px minmax(0,1fr); align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 0 4px 0 16px; border: 0; background: transparent; color: var(--assistant-voice-label-color, #fff); touch-action: none; user-select: none; }
 .assistant-voice-button > .ui-icon { width: 19px; height: 19px; }
 .assistant-voice-button strong { font-size: 14px; letter-spacing: 0; }
-.assistant-keyboard { display: grid; place-items: center; }
+.assistant-input-toggle { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #315b95; }
+.assistant-keyboard { align-self: center; width: 42px; height: 42px; color: var(--assistant-voice-label-color, #fff); }
 .assistant-keyboard .ui-icon { width: 20px; height: 20px; }
 .assistant-voice-button.is-listening { background: #1858c8; box-shadow: 0 0 0 5px rgba(30,103,218,.13), 0 8px 20px rgba(28,75,188,.22); }
+.assistant-voice-button.is-pending { background: #2454c7; box-shadow: 0 0 0 5px rgba(30,103,218,.1), 0 8px 20px rgba(28,75,188,.18); }
+.assistant-text-composer { display: grid; grid-template-columns: minmax(0,1fr) 42px 42px; align-items: center; gap: 2px; min-height: 48px; padding: 3px 4px 3px 16px; border: 1px solid rgba(82,119,171,.22); border-radius: 24px; background: rgba(255,255,255,.94); box-shadow: 0 8px 20px rgba(35,70,119,.13); }
+.assistant-text-composer input { min-width: 0; height: 40px; padding: 0; border: 0; outline: 0; background: transparent; color: #243247; font-size: 14px; }
+.assistant-text-composer input::placeholder { color: #9aa7b8; }
+.assistant-text-send { display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 0; border-radius: 50%; background: #1766da; color: #fff; transition: opacity 160ms ease, transform 160ms ease; }
+.assistant-text-send .ui-icon, .assistant-input-toggle .ui-icon { width: 20px; height: 20px; }
+.assistant-text-send:disabled { opacity: .36; cursor: default; }
+.assistant-text-send:not(:disabled):active { transform: scale(.94); }
 .assistant-voice-dock > small { display: block; margin-top: 7px; color: var(--assistant-voice-hint-color, #a2a7b1); font-size: 8px; text-align: center; }
 @keyframes speech-pop { 50% { transform: scale(1.04); } }
 
