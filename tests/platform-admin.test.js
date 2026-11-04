@@ -211,6 +211,7 @@ test("public miniapp home resolves its workspace by AppID and lists only publish
   assert.equal(home.data.cards.length, 1);
   assert.equal(home.data.cards[0].person.name, "向小顶");
   assert.equal(home.data.cards[0].publicSlug, "dingmai-assistant");
+  assert.equal(home.data.cards[0].profile.coverUrl, "/console/assets/moosee-work-serious-scene.png");
   assert.equal("companyContext" in home.data.workspace, false);
   assert.equal("persona" in home.data.cards[0].person, false);
 });

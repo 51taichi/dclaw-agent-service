@@ -146,7 +146,6 @@ const DEFAULTS = {
   video: "/console/assets/ddeer-office-greeting-rig-v3.mp4",
   poster: "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg"
 };
-const LEGACY_DEFAULT_COVER = "/console/assets/moosee-work-serious-scene.png";
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 const options = reactive({ slug: "", deployment: "" });
 const data = ref(null);
@@ -207,7 +206,7 @@ const profile = computed(() => ({
   avatar: asset(config.value.avatarUrl || data.value?.person?.avatarUrl || data.value?.deployment?.avatarUrl || DEFAULTS.avatar)
 }));
 const cleanWebsite = computed(() => String(config.value.website || "").replace(/^https?:\/\//, "").replace(/\/$/, ""));
-const coverUrl = computed(() => config.value.coverUrl && config.value.coverUrl !== LEGACY_DEFAULT_COVER ? config.value.coverUrl : channel.value.coverUrl || DEFAULTS.cover);
+const coverUrl = computed(() => config.value.coverUrl || channel.value.coverUrl || DEFAULTS.cover);
 const heroStyle = computed(() => `background-image:linear-gradient(180deg,rgba(4,12,31,.1),rgba(4,12,31,.88)),url('${asset(coverUrl.value)}')`);
 const faceSwitchStyle = computed(() => `top:${Math.round(faceSwitchRatio.value * 1000) / 10}%;`);
 const voiceEnabled = computed(() => channel.value.voiceEnabled !== false);

@@ -617,9 +617,7 @@ export class Store {
         },
         profile: {
           companyName: payload.deployment.config.companyName || workspace.name,
-          coverUrl: payload.deployment.config.coverUrl && payload.deployment.config.coverUrl !== "/console/assets/moosee-work-serious-scene.png"
-            ? payload.deployment.config.coverUrl
-            : payload.channel.config.coverUrl || "/console/assets/xiaoding-card-hero-v1.webp",
+          coverUrl: payload.deployment.config.coverUrl || payload.channel.config.coverUrl || "/console/assets/xiaoding-card-hero-v1.webp",
           biography: payload.deployment.config.biography || ""
         }
       }));

@@ -643,9 +643,7 @@ function syncFieldMapValues(provider) {
   els.mapBackPersonName.textContent = person.name || "张三";
   if (person.avatarUrl) els.mapBackPersonAvatar.src = person.avatarUrl;
   else els.mapBackPersonAvatar.removeAttribute("src");
-  const legacyCover = "/console/assets/moosee-work-serious-scene.png";
-  const personCover = person.profile?.coverUrl && person.profile.coverUrl !== legacyCover ? person.profile.coverUrl : "";
-  const cover = personCover || values.coverUrl || "/console/assets/xiaoding-card-hero-v1.webp";
+  const cover = person.profile?.coverUrl || values.coverUrl || "/console/assets/xiaoding-card-hero-v1.webp";
   els.mapPersonHero.style.setProperty("--map-person-cover", `url("${String(cover).replace(/["\\]/g, "")}")`);
   els.mapFrontAssistantName.textContent = values.assistantName || "D仔";
   if (values.assistantAvatarUrl) els.mapFrontAssistantAvatar.src = values.assistantAvatarUrl;

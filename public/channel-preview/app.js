@@ -6,7 +6,6 @@ const DEFAULT_MASCOT_SCENE = "/console/assets/ddeer-transparent.png";
 const DEFAULT_ASSISTANT_SCENE_VIDEO = "/console/assets/ddeer-office-greeting-rig-v3.mp4";
 const DEFAULT_ASSISTANT_SCENE_POSTER = "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg";
 const DEFAULT_COVER = "/console/assets/xiaoding-card-hero-v1.webp";
-const LEGACY_DEFAULT_COVER = "/console/assets/moosee-work-serious-scene.png";
 const DEFAULT_ASSISTANT_TOPICS = ["集团业务介绍", "课程与服务", "合作咨询", "联系我们"];
 const DEFAULT_ASSISTANT_PRIMARY_ITEMS = ["了解集团服务", "查看课程体系", "领取合作资料"];
 const DEFAULT_ASSISTANT_RECOMMENDED_ITEMS = ["热门方案推荐", "企业合作咨询", "预约专属服务"];
@@ -233,8 +232,7 @@ function cardPreview(data) {
   const contacts = [...primaryContacts, ...secondaryContacts];
   const completeContactLayout = primaryContacts.length === 2 && secondaryContacts.length === 2 && Boolean(config.qrCodeUrl);
   const renderContactRow = (items, className) => items.length ? `<div class="contact-row ${className} contact-count-${items.length}">${items.map((item) => `<span class="contact-item" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}：${escapeHtml(item.value)}">${icon(item.icon)}<strong>${escapeHtml(item.value)}</strong></span>`).join("")}</div>` : "";
-  const personCover = config.coverUrl && config.coverUrl !== LEGACY_DEFAULT_COVER ? config.coverUrl : "";
-  const coverUrl = personCover || channel.coverUrl || DEFAULT_COVER;
+  const coverUrl = config.coverUrl || channel.coverUrl || DEFAULT_COVER;
   return `<section class="card-flip-stage" data-card-flip-stage style="--assistant-name-color:${safeColor(channel.assistantNameColor, "#29466f")};--assistant-brand-color:${safeColor(channel.assistantBrandColor, "#254e96")};--assistant-greeting-color:${safeColor(channel.assistantGreetingColor, "#315078")};--assistant-prompt-color:${safeColor(channel.assistantPromptColor, "#60718d")};--assistant-topics-color:${safeColor(channel.assistantTopicsColor, "#426086")};--assistant-primary-title-color:${safeColor(channel.assistantPrimaryTitleColor, "#ffffff")};--assistant-primary-items-color:${safeColor(channel.assistantPrimaryItemsColor, "#28344b")};--assistant-recommended-title-color:${safeColor(channel.assistantRecommendedTitleColor, "#ffffff")};--assistant-recommended-items-color:${safeColor(channel.assistantRecommendedItemsColor, "#28344b")};--assistant-voice-label-color:${safeColor(channel.assistantVoiceLabelColor, "#ffffff")};--assistant-voice-hint-color:${safeColor(channel.assistantVoiceHintColor, "#a2a7b1")}">
     <div class="card-flip-shell" data-card-flip-shell>
     <section class="phone card-channel card-face card-face-front is-expanded" data-card-shell data-card-front>

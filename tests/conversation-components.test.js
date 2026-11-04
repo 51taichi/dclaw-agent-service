@@ -187,8 +187,10 @@ test("business card cover inherits the miniapp channel default across web and mi
   assert.equal(coverField?.type, "image");
   assert.equal(coverField?.default, "/console/assets/xiaoding-card-hero-v1.webp");
   assert.equal(miniapp.channelFields.some((field) => ["assistantMascotImageUrl", "assistantScenePosterUrl"].includes(field.key)), false);
-  assert.match(previewSource, /personCover \|\| channel\.coverUrl \|\| DEFAULT_COVER/);
-  assert.match(clientSource, /channel\.value\.coverUrl \|\| DEFAULTS\.cover/);
+  assert.match(previewSource, /config\.coverUrl \|\| channel\.coverUrl \|\| DEFAULT_COVER/);
+  assert.match(clientSource, /config\.value\.coverUrl \|\| channel\.value\.coverUrl \|\| DEFAULTS\.cover/);
+  assert.doesNotMatch(previewSource, /LEGACY_DEFAULT_COVER/);
+  assert.doesNotMatch(clientSource, /LEGACY_DEFAULT_COVER/);
 });
 
 test("choice components require an explicit reusable submit button", () => {
