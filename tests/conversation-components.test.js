@@ -100,6 +100,10 @@ test("miniapp opens on a workspace roster and navigates to independently shareab
   assert.match(cardSource, /onShareAppMessage\(\(\) =>/);
   assert.match(cardSource, /onShareTimeline\(\(\) =>/);
   assert.match(cardSource, /path: slug \? `\/pages\/card\/index\?slug=\$\{encodeURIComponent\(slug\)\}`/);
+  assert.match(cardSource, /canvas-id="share-card-canvas"/);
+  assert.match(cardSource, /async function prepareShareCard\(\)/);
+  assert.match(cardSource, /destWidth: 1000/);
+  assert.match(cardSource, /shareCardImage\.value \? \{ imageUrl: shareCardImage\.value \}/);
   assert.doesNotMatch(cardSource, /imageUrl: profile\.value\.avatar/);
   assert.match(productionBuildSource, /VITE_DEFAULT_API_BASE: apiBase/);
   assert.match(productionBuildSource, /dist\/production\/mp-weixin-\$\{appId\}/);

@@ -134,11 +134,14 @@
       </view>
       <!-- #endif -->
     </view>
+    <!-- #ifdef MP-WEIXIN -->
+    <canvas id="share-card-canvas" canvas-id="share-card-canvas" class="share-card-canvas" />
+    <!-- #endif -->
   </view>
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref } from "vue";
+import { computed, getCurrentInstance, nextTick, reactive, ref } from "vue";
 import { onLoad, onReady, onShareAppMessage, onShareTimeline } from "@dcloudio/uni-app";
 import AppIcon from "../../components/AppIcon.vue";
 import ConversationItem from "../../components/conversation/ConversationItem.vue";
@@ -153,6 +156,10 @@ const DEFAULTS = {
   poster: "/console/assets/ddeer-office-greeting-rig-poster-v3.jpg"
 };
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+const SHARE_CANVAS_ID = "share-card-canvas";
+const SHARE_CARD_WIDTH = 500;
+const SHARE_CARD_HEIGHT = 400;
+const componentInstance = getCurrentInstance();
 const options = reactive({ slug: "", deployment: "" });
 const data = ref(null);
 const loading = ref(true);
@@ -166,6 +173,7 @@ const inputMode = ref("text");
 const frontMessages = ref([]);
 const companyMessages = ref([]);
 const preparedAssets = reactive({});
+const shareCardImage = ref("");
 const frontScrollTarget = ref("");
 const backScrollTarget = ref("");
 const outboxAfter = ref(0);
@@ -261,7 +269,8 @@ onShareAppMessage(() => {
   const slug = sharePublicSlug();
   return {
     title: `${profile.value.name} · ${companyName.value}`,
-    path: slug ? `/pages/card/index?slug=${encodeURIComponent(slug)}` : "/pages/home/index"
+    path: slug ? `/pages/card/index?slug=${encodeURIComponent(slug)}` : "/pages/home/index",
+    ...(shareCardImage.value ? { imageUrl: shareCardImage.value } : {})
   };
 });
 
@@ -269,7 +278,8 @@ onShareTimeline(() => {
   const slug = sharePublicSlug();
   return {
     title: `${profile.value.name} · ${companyName.value}`,
-    query: slug ? `slug=${encodeURIComponent(slug)}` : ""
+    query: slug ? `slug=${encodeURIComponent(slug)}` : "",
+    ...(shareCardImage.value ? { imageUrl: shareCardImage.value } : {})
   };
 });
 
@@ -378,6 +388,158 @@ async function preparePageImages() {
   await Promise.all([...new Set(values)].map(async (value) => { preparedAssets[value] = await prepareImageAsset(value); }));
 }
 
+function imageInfo(src) {
+  return new Promise((resolve, reject) => {
+    if (!src || typeof uni.getImageInfo !== "function") return reject(new Error("图片不可用"));
+    uni.getImageInfo({ src, success: resolve, fail: reject });
+  });
+}
+
+function drawCoverImage(context, src, info, x, y, width, height) {
+  const originalWidth = Number(info?.width || width);
+  const originalHeight = Number(info?.height || height);
+  const sourceRatio = originalWidth / originalHeight;
+  const targetRatio = width / height;
+  let sourceX = 0;
+  let sourceY = 0;
+  let sourceWidth = originalWidth;
+  let sourceHeight = originalHeight;
+  if (sourceRatio > targetRatio) {
+    sourceWidth = sourceHeight * targetRatio;
+    sourceX = (originalWidth - sourceWidth) / 2;
+  } else if (sourceRatio < targetRatio) {
+    sourceHeight = sourceWidth / targetRatio;
+    sourceY = (originalHeight - sourceHeight) / 2;
+  }
+  context.drawImage(src, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+}
+
+function roundedRect(context, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
+}
+
+function fitCanvasText(context, value, maxWidth) {
+  const text = String(value || "").trim();
+  if (!text || context.measureText(text).width <= maxWidth) return text;
+  let start = 0;
+  let end = text.length;
+  while (start < end) {
+    const middle = Math.ceil((start + end) / 2);
+    if (context.measureText(`${text.slice(0, middle)}…`).width <= maxWidth) start = middle;
+    else end = middle - 1;
+  }
+  return start > 0 ? `${text.slice(0, start)}…` : "";
+}
+
+function canvasToShareImage() {
+  return new Promise((resolve, reject) => {
+    uni.canvasToTempFilePath({
+      canvasId: SHARE_CANVAS_ID,
+      width: SHARE_CARD_WIDTH,
+      height: SHARE_CARD_HEIGHT,
+      destWidth: 1000,
+      destHeight: 800,
+      fileType: "jpg",
+      quality: 0.92,
+      success: (result) => resolve(result.tempFilePath),
+      fail: reject
+    }, componentInstance?.proxy);
+  });
+}
+
+async function prepareShareCard() {
+  // #ifdef MP-WEIXIN
+  try {
+    await nextTick();
+    const cover = asset(coverUrl.value);
+    const avatar = profile.value.avatar;
+    const qrCode = config.value.qrCodeUrl ? asset(config.value.qrCodeUrl) : "";
+    const [coverInfo, avatarInfo, qrInfo] = await Promise.all([
+      imageInfo(cover),
+      imageInfo(avatar),
+      qrCode ? imageInfo(qrCode).catch(() => null) : Promise.resolve(null)
+    ]);
+    const context = uni.createCanvasContext(SHARE_CANVAS_ID, componentInstance?.proxy);
+    drawCoverImage(context, cover, coverInfo, 0, 0, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT);
+
+    const overlay = context.createLinearGradient(0, 0, 0, SHARE_CARD_HEIGHT);
+    overlay.addColorStop(0, "rgba(4,12,31,0.16)");
+    overlay.addColorStop(0.48, "rgba(4,12,31,0.55)");
+    overlay.addColorStop(1, "rgba(4,12,31,0.94)");
+    context.setFillStyle(overlay);
+    context.fillRect(0, 0, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT);
+
+    context.setFillStyle("rgba(255,255,255,0.92)");
+    context.setFontSize(18);
+    context.fillText(fitCanvasText(context, companyName.value, 444), 28, 38);
+
+    context.save();
+    context.beginPath();
+    context.arc(72, 124, 45, 0, Math.PI * 2);
+    context.clip();
+    drawCoverImage(context, avatar, avatarInfo, 27, 79, 90, 90);
+    context.restore();
+    context.setStrokeStyle("rgba(255,255,255,0.9)");
+    context.setLineWidth(3);
+    context.beginPath();
+    context.arc(72, 124, 46, 0, Math.PI * 2);
+    context.stroke();
+
+    context.setFillStyle("#ffffff");
+    context.setFontSize(32);
+    context.fillText(fitCanvasText(context, profile.value.name, 338), 136, 120);
+    context.setFillStyle("#35d889");
+    context.setFontSize(16);
+    context.fillText("在线", 136, 148);
+    context.setFillStyle("rgba(255,255,255,0.9)");
+    context.setFontSize(18);
+    context.fillText(fitCanvasText(context, `${profile.value.title} · ${companyName.value}`, 290), 184, 148);
+
+    roundedRect(context, 26, 224, 448, 134, 12);
+    context.setFillStyle("rgba(7,16,34,0.62)");
+    context.fill();
+    context.setStrokeStyle("rgba(255,255,255,0.25)");
+    context.setLineWidth(1);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(26, 291);
+    context.lineTo(474, 291);
+    context.moveTo(250, 224);
+    context.lineTo(250, 358);
+    context.stroke();
+
+    context.setFillStyle("#ffffff");
+    context.setFontSize(15);
+    context.fillText(fitCanvasText(context, cleanWebsite.value ? `官网  ${cleanWebsite.value}` : "", 194), 44, 265);
+    context.fillText(fitCanvasText(context, config.value.address ? `地址  ${config.value.address}` : "", 194), 44, 332);
+    context.fillText(fitCanvasText(context, config.value.email ? `邮箱  ${config.value.email}` : "", qrInfo ? 148 : 194), 268, 265);
+    context.fillText(fitCanvasText(context, config.value.phone ? `电话  ${config.value.phone}` : "", qrInfo ? 148 : 194), 268, 332);
+    if (qrInfo) {
+      roundedRect(context, 422, 300, 45, 45, 4);
+      context.setFillStyle("#ffffff");
+      context.fill();
+      context.drawImage(qrCode, 426, 304, 37, 37);
+    }
+
+    await new Promise((resolve) => context.draw(false, resolve));
+    shareCardImage.value = await canvasToShareImage();
+  } catch {
+    shareCardImage.value = "";
+  }
+  // #endif
+}
+
 async function loadChannel() {
   loading.value = true;
   error.value = "";
@@ -387,6 +549,7 @@ async function loadChannel() {
     outboxReady = primeOutboxCursor(data.value?.endpoints?.publicOutbox, conversationId, outboxAfter).catch((syncError) => syncError);
     companyOutboxReady = primeOutboxCursor(data.value?.endpoints?.assistantOutbox, companyConversationId, companyOutboxAfter).catch((syncError) => syncError);
     await preparePageImages();
+    await prepareShareCard();
     const welcome = config.value.welcomeMessage || `您好，我是${profile.value.name}，很高兴认识您。`;
     const biography = config.value.biography || `我是${profile.value.name}，将结合${companyName.value}的业务资料，为您提供清晰、准确的解答。`;
     frontMessages.value = [
@@ -662,6 +825,7 @@ function setTextInputMode() {
 <style scoped>
 .page-shell, .card-stage, .face { width: 100%; height: 100%; min-height: 0; }
 .page-shell { background: #eef1f5; }
+.share-card-canvas { position: fixed; top: 0; left: -10000px; width: 500px; height: 400px; pointer-events: none; }
 .card-stage { position: relative; max-width: 840rpx; margin: 0 auto; overflow: hidden; background: #f5f6f8; }
 .face { position: absolute; inset: 0; display: flex; flex-direction: column; background: #f5f6f8; opacity: 1; transform: rotateY(0); transition: opacity .22s ease, transform .35s ease; }
 .face.hidden { z-index: -1; opacity: 0; pointer-events: none; transform: rotateY(180deg); }
