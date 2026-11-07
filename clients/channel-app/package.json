@@ -32,6 +32,7 @@
     "build:mp-harmony": "uni build -p mp-harmony",
     "build:mp-weixin": "uni build -p mp-weixin",
     "build:mp-weixin:lan": "node scripts/build-mp-weixin-lan.mjs",
+    "build:mp-weixin:production": "node scripts/build-mp-weixin-production.mjs",
     "open:mp-weixin": "npm run build:mp-weixin && /Applications/wechatwebdevtools.app/Contents/MacOS/cli open --project \"$PWD/dist/build/mp-weixin\"",
     "build:mp-xhs": "uni build -p mp-xhs",
     "build:quickapp-webview": "uni build -p quickapp-webview",

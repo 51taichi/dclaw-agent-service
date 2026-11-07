@@ -51,11 +51,6 @@
     /* 小程序特有相关 */
     "mp-weixin" : {
         "appid" : "wx48fa13a3cc0dcf72",
-        "permission" : {
-            "scope.record" : {
-                "desc" : "用于智能名片中的语音输入和对话"
-            }
-        },
         "setting" : {
             "urlCheck" : false,
             "es6" : true,

@@ -88,13 +88,23 @@ test("miniapp opens on a workspace roster and navigates to independently shareab
   const pages = readFileSync(new URL("../clients/channel-app/src/pages.json", import.meta.url), "utf8");
   const homeSource = readFileSync(new URL("../clients/channel-app/src/pages/home/index.vue", import.meta.url), "utf8");
   const cardSource = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
+  const productionBuildSource = readFileSync(new URL("../clients/channel-app/scripts/build-mp-weixin-production.mjs", import.meta.url), "utf8");
   assert.ok(pages.indexOf('"pages/home/index"') < pages.indexOf('"pages/card/index"'));
   assert.match(homeSource, /currentMiniappAppId\(\)/);
   assert.match(homeSource, /\/api\/public\/miniapps\/\$\{encodeURIComponent\(appId\.value\)\}/);
   assert.match(homeSource, /uni\.navigateTo\(\{ url: `\/pages\/card\/index\?slug=/);
   assert.match(cardSource, /uni\.reLaunch\(\{ url: "\/pages\/home\/index" \}\)/);
   assert.doesNotMatch(cardSource, /query\.slug \|\| "dingmai-assistant"/);
-  assert.match(cardSource, /imageUrl: profile\.value\.avatar/);
+  assert.match(cardSource, /open-type="share"/);
+  assert.match(cardSource, /uni\.showShareMenu\?\.\(\{ menus: \["shareAppMessage", "shareTimeline"\] \}\)/);
+  assert.match(cardSource, /onShareAppMessage\(\(\) =>/);
+  assert.match(cardSource, /onShareTimeline\(\(\) =>/);
+  assert.match(cardSource, /path: slug \? `\/pages\/card\/index\?slug=\$\{encodeURIComponent\(slug\)\}`/);
+  assert.doesNotMatch(cardSource, /imageUrl: profile\.value\.avatar/);
+  assert.match(productionBuildSource, /VITE_DEFAULT_API_BASE: apiBase/);
+  assert.match(productionBuildSource, /dist\/production\/mp-weixin-\$\{appId\}/);
+  assert.match(productionBuildSource, /projectConfig\.miniprogramRoot = "\.\/"/);
+  assert.match(productionBuildSource, /pathName: "pages\/home\/index"/);
 });
 
 test("website custom frame keeps a fixed transparent skin while the employee list grows independently", () => {

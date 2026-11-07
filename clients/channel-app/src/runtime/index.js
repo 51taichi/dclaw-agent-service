@@ -1,6 +1,7 @@
 const PLATFORM = process.env.UNI_PLATFORM || "h5";
 const configuredBase = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
-export const API_BASE = configuredBase || (PLATFORM === "mp-weixin" ? "http://127.0.0.1:4313" : "");
+const defaultBase = String(import.meta.env.VITE_DEFAULT_API_BASE || (PLATFORM === "mp-weixin" ? "http://127.0.0.1:4313" : "")).replace(/\/$/, "");
+export const API_BASE = configuredBase || defaultBase;
 const bundledMiniappImages = {
   "/console/assets/bot-avatar.png": "/static/brand/bot-avatar.png",
   "/console/assets/ddeer.png": "/static/brand/ddeer.png",

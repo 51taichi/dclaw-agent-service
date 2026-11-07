@@ -8,6 +8,9 @@
         <view class="hero" :class="{ compact: !heroExpanded }" :style="heroStyle">
           <view class="miniapp-chrome">
             <button class="back-button" aria-label="返回名片首页" @tap="goBack"><text>‹</text><text class="back-button-label">返回</text></button>
+            <!-- #ifdef MP-WEIXIN -->
+            <button class="share-button" open-type="share" aria-label="分享个人名片"><AppIcon name="share" tone="blue" :size="20" /></button>
+            <!-- #endif -->
           </view>
           <view class="identity">
             <button class="profile-avatar-trigger" aria-label="放大头像" @tap="avatarOpen = true"><image class="profile-avatar" :src="profile.avatar" mode="aspectFill" /></button>
@@ -88,6 +91,9 @@
               <view class="scene-overlay">
                 <view class="miniapp-chrome">
                   <button class="back-button" aria-label="返回个人名片" @tap="face = 'front'"><text>‹</text><text class="back-button-label">返回</text></button>
+                  <!-- #ifdef MP-WEIXIN -->
+                  <button class="share-button" open-type="share" aria-label="分享个人名片"><AppIcon name="share" tone="blue" :size="20" /></button>
+                  <!-- #endif -->
                 </view>
                 <text class="scene-brand">{{ assistant.brand }}</text>
                 <view class="speech"><text>{{ assistant.greeting }}</text></view>
@@ -133,7 +139,7 @@
 
 <script setup>
 import { computed, nextTick, reactive, ref } from "vue";
-import { onLoad, onReady, onShareAppMessage } from "@dcloudio/uni-app";
+import { onLoad, onReady, onShareAppMessage, onShareTimeline } from "@dcloudio/uni-app";
 import AppIcon from "../../components/AppIcon.vue";
 import ConversationItem from "../../components/conversation/ConversationItem.vue";
 import { copyText, createId, createVoiceRecorder, localizedErrorMessage, persistentId, prepareImageAsset, request, requestRecordPermission, resolveAssetUrl, showToast, uploadBinary } from "../../runtime/index.js";
@@ -239,6 +245,7 @@ onLoad((query = {}) => {
     return;
   }
   // #ifdef MP-WEIXIN
+  uni.showShareMenu?.({ menus: ["shareAppMessage", "shareTimeline"] });
   wechatLoginVisible.value = !wechatNickname.value && uni.getStorageSync(WECHAT_LOGIN_SKIPPED_KEY) !== true;
   // #endif
   loadChannel();
@@ -246,11 +253,25 @@ onLoad((query = {}) => {
 
 onReady(measureStage);
 
-onShareAppMessage(() => ({
-  title: `${profile.value.name} · ${companyName.value}`,
-  path: `/pages/card/index?slug=${encodeURIComponent(options.slug)}`,
-  imageUrl: profile.value.avatar
-}));
+function sharePublicSlug() {
+  return String(options.slug || data.value?.deployment?.publicSlug || "").trim();
+}
+
+onShareAppMessage(() => {
+  const slug = sharePublicSlug();
+  return {
+    title: `${profile.value.name} · ${companyName.value}`,
+    path: slug ? `/pages/card/index?slug=${encodeURIComponent(slug)}` : "/pages/home/index"
+  };
+});
+
+onShareTimeline(() => {
+  const slug = sharePublicSlug();
+  return {
+    title: `${profile.value.name} · ${companyName.value}`,
+    query: slug ? `slug=${encodeURIComponent(slug)}` : ""
+  };
+});
 
 function asset(value) { return preparedAssets[value] || resolveAssetUrl(value); }
 function message(type, payload = {}) { return { id: createId(), type, ...payload }; }
@@ -652,6 +673,8 @@ function setTextInputMode() {
 .back-button { display: flex; align-items: center; justify-content: center; gap: 6rpx; width: 132rpx; height: 72rpx; margin: 0; padding: 0; border: 2rpx solid rgba(255,255,255,.62); border-radius: 36rpx; background: rgba(9,19,38,.56); color: #fff; box-shadow: 0 10rpx 32rpx rgba(4,10,24,.22); font-size: 58rpx; font-weight: 300; line-height: 1; }
 .back-button::after { border: 0; }
 .back-button-label { font-size: 24rpx; font-weight: 700; }
+.share-button { display: flex; align-items: center; justify-content: center; width: 72rpx; height: 72rpx; margin: 0; padding: 0; border: 2rpx solid rgba(255,255,255,.78); border-radius: 50%; background: rgba(255,255,255,.94); box-shadow: 0 10rpx 32rpx rgba(4,10,24,.22); line-height: 1; }
+.share-button::after { border: 0; }
 .identity { display: flex; align-items: center; gap: 22rpx; margin-top: 10rpx; }
 .compact-identity { position: absolute; right: 90rpx; bottom: 54rpx; left: 32rpx; display: flex; align-items: center; gap: 18rpx; opacity: 0; pointer-events: none; transform: translateY(12rpx); transition: opacity .18s ease, transform .18s ease; }
 .compact-avatar { width: 84rpx; height: 84rpx; border: 4rpx solid rgba(255,255,255,.82); border-radius: 50%; background: #fff; }
@@ -758,6 +781,7 @@ function setTextInputMode() {
   .miniapp-chrome { top: 14px; right: 14px; left: 14px; font-size: 12px; }
   .back-button { gap: 3px; width: 66px; height: 36px; border-width: 1px; border-radius: 18px; font-size: 29px; }
   .back-button-label { font-size: 12px; }
+  .share-button { width: 36px; height: 36px; border-width: 1px; }
   .identity { gap: 12px; margin-top: 0; }
   .profile-avatar { width: 64px; height: 64px; border-width: 2px; }
   .identity-copy { gap: 4px; }
