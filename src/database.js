@@ -247,6 +247,7 @@ function migrate(db) {
       title TEXT NOT NULL DEFAULT '',
       avatar_url TEXT NOT NULL DEFAULT '',
       enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
       persona_json TEXT NOT NULL DEFAULT '{}',
       profile_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (${nowSql}),
@@ -392,6 +393,7 @@ function migrate(db) {
   ensureColumn(db, "people", "config_account_id", "TEXT");
   ensureColumn(db, "people", "profile_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "people", "agent_config_id", "TEXT");
+  ensureColumn(db, "people", "sort_order", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "workspace_channels", "assistant_account_id", "TEXT");
   ensureColumn(db, "workspace_channels", "assistant_agent_config_id", "TEXT");
   ensureColumn(db, "workspaces", "admin_password_hash", "TEXT NOT NULL DEFAULT ''");

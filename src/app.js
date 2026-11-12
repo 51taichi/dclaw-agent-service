@@ -118,6 +118,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
   app.get("/api/admin/workspaces/:workspaceId/people", (req, res) => res.json({ items: store.listPeople(req.params.workspaceId) }));
   app.post("/api/admin/workspaces/:workspaceId/people", (req, res) => res.status(201).json(store.createPerson(req.params.workspaceId, req.body || {})));
+  app.put("/api/admin/workspaces/:workspaceId/people/order", (req, res) => res.json({ items: store.reorderPeople(req.params.workspaceId, req.body?.personIds) }));
   app.put("/api/admin/people/:personId", (req, res) => respondFound(res, store.updatePerson(req.params.personId, req.body || {})));
   app.get("/api/admin/workspaces/:workspaceId/channels", (req, res) => res.json({ items: store.listWorkspaceChannels(req.params.workspaceId) }));
   app.get("/api/admin/workspaces/:workspaceId/miniapp", (req, res) => res.json({ config: workspaceMiniapps.get(req.params.workspaceId) }));

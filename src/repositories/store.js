@@ -206,7 +206,7 @@ export class Store {
     return this.db.prepare(`
       SELECT p.*,
         (SELECT COUNT(*) FROM channel_deployments d WHERE d.person_id = p.id) AS deployment_count
-      FROM people p WHERE p.workspace_id = ? ORDER BY p.created_at, p.id
+      FROM people p WHERE p.workspace_id = ? ORDER BY p.sort_order, p.created_at, p.id
     `).all(workspaceId).map(personView);
   }
 
@@ -219,9 +219,34 @@ export class Store {
     if (!this.getWorkspace(workspaceId)) throw new TypeError("工作区不存在");
     const id = identifier(input.id);
     const agentConfigId = this.agentConfigReference(input.agentConfigId);
-    this.db.prepare(`INSERT INTO people (id, workspace_id, name, title, avatar_url, enabled, persona_json, profile_json, agent_config_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, workspaceId, requiredText(input.name, "智能员工名称", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, JSON.stringify(objectValue(input.persona)), JSON.stringify(objectValue(input.profile)), agentConfigId);
+    const sortOrder = Number(this.db.prepare("SELECT COALESCE(MAX(sort_order), -10) + 10 AS value FROM people WHERE workspace_id = ?").get(workspaceId)?.value || 0);
+    this.db.prepare(`INSERT INTO people (id, workspace_id, name, title, avatar_url, enabled, sort_order, persona_json, profile_json, agent_config_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, workspaceId, requiredText(input.name, "智能员工名称", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, sortOrder, JSON.stringify(objectValue(input.persona)), JSON.stringify(objectValue(input.profile)), agentConfigId);
     return this.getPerson(id);
+  }
+
+  reorderPeople(workspaceId, personIds) {
+    const people = this.listPeople(workspaceId);
+    const ids = Array.isArray(personIds) ? personIds.map((item) => String(item || "").trim()) : [];
+    if (ids.length !== people.length || new Set(ids).size !== ids.length || people.some((person) => !ids.includes(person.id))) {
+      throw new TypeError("员工排序必须包含当前工作区的全部智能员工");
+    }
+    const timestamp = isoNow();
+    const updatePerson = this.db.prepare("UPDATE people SET sort_order = ?, updated_at = ? WHERE workspace_id = ? AND id = ?");
+    const updateDeployments = this.db.prepare("UPDATE channel_deployments SET sort_order = ?, updated_at = ? WHERE person_id = ?");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      ids.forEach((id, index) => {
+        const sortOrder = index * 10;
+        updatePerson.run(sortOrder, timestamp, workspaceId, id);
+        updateDeployments.run(sortOrder, timestamp, id);
+      });
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return this.listPeople(workspaceId);
   }
 
   updatePerson(id, input) {
@@ -1320,6 +1345,7 @@ function personView(row) {
     title: row.title,
     avatarUrl: row.avatar_url,
     enabled: Boolean(row.enabled),
+    sortOrder: Number(row.sort_order || 0),
     persona: json(row.persona_json),
     profile: json(row.profile_json),
     agentConfigId: row.agent_config_id || "",

@@ -271,7 +271,8 @@ function renderWorkspaceForm() {
 
 function renderPeople() {
   els.personList.innerHTML = state.people.map((person) => `
-    <article class="entity-row ${person.id === state.person?.id && !state.creatingPerson ? "active" : ""}">
+    <article class="entity-row person-sort-row ${person.id === state.person?.id && !state.creatingPerson ? "active" : ""}" data-person-row="${escapeHtml(person.id)}">
+      <button type="button" class="person-drag-handle" draggable="true" data-person-drag="${escapeHtml(person.id)}" aria-label="调整${escapeHtml(person.name)}的顺序" title="拖动排序，或使用上下方向键"><svg><use href="#i-grip"/></svg></button>
       <button class="entity-select" data-person-id="${escapeHtml(person.id)}">
         ${person.avatarUrl ? `<img src="${escapeHtml(person.avatarUrl)}" alt="" />` : `<span class="avatar-fallback">${escapeHtml(person.name.slice(0, 1))}</span>`}
         <span><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.title || "未设置职务")} · ${person.deploymentCount} 个端口</small></span>
@@ -282,6 +283,46 @@ function renderPeople() {
     </article>`).join("") || '<div class="list-empty">还没有智能员工</div>';
   renderPersonForm();
   renderPersonChannels();
+}
+
+function clearPersonDropState() {
+  els.personList.querySelectorAll(".is-dragging, .drop-before, .drop-after").forEach((row) => row.classList.remove("is-dragging", "drop-before", "drop-after"));
+}
+
+async function persistPersonOrder(nextPeople) {
+  state.people = nextPeople;
+  renderPeople();
+  const result = await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}/people/order`, {
+    method: "PUT",
+    body: { personIds: nextPeople.map((person) => person.id) }
+  });
+  state.people = result.items;
+  state.person = state.people.find((person) => person.id === state.person?.id) || state.people[0] || null;
+  renderPeople();
+  toast("智能员工顺序已更新");
+}
+
+async function movePerson(personId, targetId, placeAfter = false) {
+  if (!personId || personId === targetId) return;
+  const nextPeople = [...state.people];
+  const sourceIndex = nextPeople.findIndex((person) => person.id === personId);
+  if (sourceIndex < 0) return;
+  const [person] = nextPeople.splice(sourceIndex, 1);
+  let targetIndex = nextPeople.findIndex((item) => item.id === targetId);
+  if (targetIndex < 0) return;
+  if (placeAfter) targetIndex += 1;
+  nextPeople.splice(targetIndex, 0, person);
+  await persistPersonOrder(nextPeople);
+}
+
+async function movePersonByOffset(personId, offset) {
+  const sourceIndex = state.people.findIndex((person) => person.id === personId);
+  const targetIndex = sourceIndex + offset;
+  if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= state.people.length) return;
+  const nextPeople = [...state.people];
+  const [person] = nextPeople.splice(sourceIndex, 1);
+  nextPeople.splice(targetIndex, 0, person);
+  await persistPersonOrder(nextPeople);
 }
 
 function renderPersonForm() {
@@ -982,6 +1023,48 @@ function bindEvents() {
   els.workspaceList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-workspace-toggle]"); if (!toggle) return; toggleWorkspace(toggle.dataset.workspaceToggle, toggle.checked).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.personList.addEventListener("click", (event) => { const button = event.target.closest("[data-person-id]"); if (!button) return; state.person = state.people.find((item) => item.id === button.dataset.personId); state.creatingPerson = false; renderPeople(); });
   els.personList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-person-toggle]"); if (!toggle) return; toggleAdminItem("people", toggle.dataset.personToggle, toggle.checked, `/api/admin/people/${encodeURIComponent(toggle.dataset.personToggle)}`, (item) => item.name).then(() => { toggle.closest("label").title = `${toggle.checked ? "停用" : "启用"}${state.people.find((item) => item.id === toggle.dataset.personToggle)?.name || "人物"}`; }).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
+  let draggedPersonId = "";
+  els.personList.addEventListener("dragstart", (event) => {
+    const handle = event.target.closest("[data-person-drag]");
+    if (!handle) return;
+    draggedPersonId = handle.dataset.personDrag;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", draggedPersonId);
+    handle.closest("[data-person-row]").classList.add("is-dragging");
+  });
+  els.personList.addEventListener("dragover", (event) => {
+    const row = event.target.closest("[data-person-row]");
+    if (!draggedPersonId || !row || row.dataset.personRow === draggedPersonId) return;
+    event.preventDefault();
+    clearPersonDropState();
+    els.personList.querySelector(`[data-person-row="${CSS.escape(draggedPersonId)}"]`)?.classList.add("is-dragging");
+    const placeAfter = event.clientY > row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+    row.classList.add(placeAfter ? "drop-after" : "drop-before");
+    event.dataTransfer.dropEffect = "move";
+  });
+  els.personList.addEventListener("drop", (event) => {
+    const row = event.target.closest("[data-person-row]");
+    if (!draggedPersonId || !row) return;
+    event.preventDefault();
+    const placeAfter = row.classList.contains("drop-after");
+    const sourceId = draggedPersonId;
+    draggedPersonId = "";
+    clearPersonDropState();
+    movePerson(sourceId, row.dataset.personRow, placeAfter).catch(async (error) => {
+      await loadWorkspaceContext().catch(() => {});
+      handleError(error);
+    });
+  });
+  els.personList.addEventListener("dragend", () => { draggedPersonId = ""; clearPersonDropState(); });
+  els.personList.addEventListener("keydown", (event) => {
+    const handle = event.target.closest("[data-person-drag]");
+    if (!handle || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    movePersonByOffset(handle.dataset.personDrag, event.key === "ArrowUp" ? -1 : 1).catch(async (error) => {
+      await loadWorkspaceContext().catch(() => {});
+      handleError(error);
+    });
+  });
   els.personChannelList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-person-channel-toggle]"); if (!toggle) return; togglePersonChannel(toggle.dataset.personChannelToggle, toggle.checked).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.newWorkspace.addEventListener("click", startWorkspace);
   els.newPerson.addEventListener("click", () => { state.creatingPerson = true; state.person = null; renderPeople(); els.personForm.elements.id.focus(); });

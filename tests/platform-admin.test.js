@@ -679,6 +679,36 @@ test("new people can be deployed to an existing website channel", async (t) => {
   assert.deepEqual(refreshedPerson.config.suggestedQuestions, ["有哪些服务？", "如何合作？"]);
 });
 
+test("smart employee order persists and controls channel rosters", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  await request(app.baseUrl, "/api/admin/workspaces/dingmai/people", { method: "POST", body: {
+    id: "sales-li", name: "李明", title: "商务负责人"
+  } });
+  await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments", { method: "POST", body: {
+    id: "dingmai-web-li", workspaceChannelId: "dingmai-website", personId: "sales-li", publicSlug: "dingmai-li", sortOrder: 20
+  } });
+
+  const reordered = await request(app.baseUrl, "/api/admin/workspaces/dingmai/people/order", {
+    method: "PUT",
+    body: { personIds: ["sales-li", "dingmai-assistant"] }
+  });
+  assert.equal(reordered.response.status, 200);
+  assert.deepEqual(reordered.data.items.map((person) => person.id), ["sales-li", "dingmai-assistant"]);
+  assert.deepEqual(reordered.data.items.map((person) => person.sortOrder), [0, 10]);
+
+  const preview = await request(app.baseUrl, "/api/admin/deployments/dingmai-web-li/preview");
+  assert.deepEqual(preview.data.deployments.map((item) => item.person.id), ["sales-li", "dingmai-assistant"]);
+
+  const invalid = await request(app.baseUrl, "/api/admin/workspaces/dingmai/people/order", {
+    method: "PUT",
+    body: { personIds: ["dingmai-assistant"] }
+  });
+  assert.equal(invalid.response.status, 400);
+  assert.match(invalid.data.error, /全部智能员工/);
+});
+
 test("one person shares flow and tag configuration across channel deployments", async (t) => {
   const app = await fixture();
   t.after(() => app.close());

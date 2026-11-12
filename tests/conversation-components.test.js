@@ -95,7 +95,7 @@ test("miniapp opens on a workspace roster and navigates to independently shareab
   assert.match(homeSource, /uni\.navigateTo\(\{ url: `\/pages\/card\/index\?slug=/);
   assert.match(cardSource, /uni\.reLaunch\(\{ url: "\/pages\/home\/index" \}\)/);
   assert.doesNotMatch(cardSource, /query\.slug \|\| "dingmai-assistant"/);
-  assert.match(cardSource, /open-type="share"/);
+  assert.doesNotMatch(cardSource, /class="share-button"/);
   assert.match(cardSource, /uni\.showShareMenu\?\.\(\{ menus: \["shareAppMessage", "shareTimeline"\] \}\)/);
   assert.match(cardSource, /onShareAppMessage\(\(\) =>/);
   assert.match(cardSource, /onShareTimeline\(\(\) =>/);
