@@ -855,13 +855,48 @@ async function savePerson(event) {
   toast("智能员工已保存");
 }
 
+function confirmPersonDeletion(person) {
+  document.querySelector("#deletePersonDialog")?.remove();
+  return new Promise((resolve) => {
+    const deploymentNotice = person.deploymentCount
+      ? `同时删除 ${person.deploymentCount} 个渠道入口及其历史会话。`
+      : "该员工当前没有已开通的渠道入口。";
+    const dialog = document.createElement("div");
+    dialog.id = "deletePersonDialog";
+    dialog.className = "deploy-dialog-backdrop";
+    dialog.innerHTML = `<section class="deploy-dialog person-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="deletePersonTitle" aria-describedby="deletePersonDescription">
+      <header><span><svg><use href="#i-trash"/></svg><strong id="deletePersonTitle">删除智能员工</strong></span><button type="button" data-person-delete-cancel aria-label="关闭">×</button></header>
+      <div class="person-delete-dialog-body">
+        <span class="person-delete-dialog-icon"><svg><use href="#i-trash"/></svg></span>
+        <div><strong>确认删除“${escapeHtml(person.name)}”吗？</strong><p id="deletePersonDescription">${escapeHtml(deploymentNotice)}</p><p class="person-delete-dialog-warning">删除后无法恢复，请谨慎操作。</p></div>
+      </div>
+      <footer><button class="secondary" type="button" data-person-delete-cancel>取消</button><button class="danger" type="button" data-person-delete-confirm><svg><use href="#i-trash"/></svg>确认删除</button></footer>
+    </section>`;
+    let settled = false;
+    const finish = (confirmed) => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", handleKeydown);
+      dialog.remove();
+      resolve(confirmed);
+    };
+    const handleKeydown = (event) => {
+      if (event.key === "Escape") finish(false);
+    };
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog || event.target.closest("[data-person-delete-cancel]")) finish(false);
+      if (event.target.closest("[data-person-delete-confirm]")) finish(true);
+    });
+    document.addEventListener("keydown", handleKeydown);
+    document.body.append(dialog);
+    dialog.querySelector("[data-person-delete-cancel]")?.focus();
+  });
+}
+
 async function deletePerson() {
   const person = state.person;
   if (!person || state.creatingPerson) return;
-  const deploymentNotice = person.deploymentCount
-    ? `\n将同时删除 ${person.deploymentCount} 个渠道入口及其历史会话。`
-    : "";
-  if (!window.confirm(`确认删除智能员工“${person.name}”吗？${deploymentNotice}\n该操作无法撤销。`)) return;
+  if (!await confirmPersonDeletion(person)) return;
   await api(`/api/admin/people/${encodeURIComponent(person.id)}`, { method: "DELETE" });
   state.person = null;
   await loadWorkspaceContext();

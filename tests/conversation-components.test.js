@@ -355,10 +355,17 @@ test("channel publishing and miniapp credential saving stay visible near their s
 test("smart employee editor exposes a guarded delete action", () => {
   const adminHtml = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
+  const adminStyles = readFileSync(new URL("../public/admin/styles.css", import.meta.url), "utf8");
   assert.match(adminHtml, /id="deletePerson"[^>]*>.*i-trash.*删除员工/s);
   assert.match(adminSource, /els\.deletePerson\.hidden = !person/);
-  assert.match(adminSource, /window\.confirm\(`确认删除智能员工/);
+  assert.match(adminSource, /function confirmPersonDeletion\(person\)/);
+  assert.match(adminSource, /role="alertdialog"/);
+  assert.match(adminSource, /data-person-delete-confirm/);
+  assert.match(adminSource, /if \(!await confirmPersonDeletion\(person\)\) return;/);
+  assert.doesNotMatch(adminSource, /window\.confirm\(`确认删除智能员工/);
   assert.match(adminSource, /api\(`\/api\/admin\/people\/\$\{encodeURIComponent\(person\.id\)\}`.*, \{ method: "DELETE" \}/s);
+  assert.match(adminStyles, /\.person-delete-dialog-body/);
+  assert.doesNotMatch(adminSource, /class="deploy-dialog confirm-dialog"/);
 });
 
 test("smart employee list supports drag and explicit up-down ordering", () => {
