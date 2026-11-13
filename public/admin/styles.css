@@ -49,11 +49,16 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .row-switch input:checked + span::after { transform: translateX(16px); }
 .row-switch:focus-within { outline: 2px solid rgba(49, 52, 231, .25); outline-offset: 1px; }
 .entity-row { display: grid; grid-template-columns: minmax(0, 1fr) 54px; align-items: center; gap: 8px; width: 100%; min-height: 58px; padding: 5px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #202842; transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
-.person-sort-row { position: relative; grid-template-columns: 22px minmax(0, 1fr) 54px; gap: 5px; }
+.person-sort-row { position: relative; grid-template-columns: 22px minmax(0, 1fr) 54px 28px; gap: 5px; }
 .person-drag-handle { display: grid; place-items: center; width: 22px; height: 40px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #929caf; box-shadow: none; cursor: grab; touch-action: none; }
 .person-drag-handle:hover, .person-drag-handle:focus-visible { background: #e8edfb; color: #4056df; transform: none; }
 .person-drag-handle:active { cursor: grabbing; }
 .person-drag-handle svg { width: 17px; height: 17px; fill: currentColor; stroke: none; }
+.person-order-actions { display: grid; gap: 3px; width: 28px; }
+.person-order-actions button { display: grid; place-items: center; width: 28px; height: 22px; padding: 0; border: 1px solid #d7deec; border-radius: 4px; background: #fff; color: #586780; box-shadow: none; }
+.person-order-actions button:hover:not(:disabled), .person-order-actions button:focus-visible { border-color: #9cacf0; background: #eef2ff; color: #3349c7; transform: none; }
+.person-order-actions button:disabled { border-color: #e4e8f0; background: #f5f7fa; color: #b8c0cf; cursor: not-allowed; opacity: .72; }
+.person-order-actions svg { width: 15px; height: 15px; }
 .person-sort-row.is-dragging { opacity: .48; }
 .person-sort-row.drop-before::before, .person-sort-row.drop-after::after { position: absolute; right: 4px; left: 4px; z-index: 2; height: 2px; border-radius: 2px; background: #4056df; box-shadow: 0 0 0 2px rgba(64, 86, 223, .12); content: ""; }
 .person-sort-row.drop-before::before { top: -5px; }
@@ -140,8 +145,8 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .media-config-field.is-uploading .asset-file-button::after { position: absolute; color: #3144b8; content: "上传中..."; }
 .split-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; }
 .split-layout > aside { padding-right: 15px; border-right: 1px solid #e2e6ef; }
-.people-grid { display: grid; grid-template-columns: 230px minmax(520px, 1fr); gap: 16px; align-items: start; }
-.people-grid > aside:first-child { padding-right: 12px; border-right: 1px solid #e2e6ef; }
+.people-grid { display: grid; grid-template-columns: 294px minmax(520px, 1fr); gap: 24px; align-items: start; }
+.people-grid > aside:first-child { padding-right: 16px; border-right: 1px solid #e2e6ef; }
 .editor-surface { min-width: 0; }
 .person-channel-section { margin-top: 6px; padding-top: 16px; border-top: 1px solid #dce1ec; }
 .person-channel-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -455,7 +460,8 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .deploy-dialog > footer svg { width: 15px; height: 15px; }
 
 @media (max-width: 1240px) {
-  .channel-grid, .people-grid { grid-template-columns: 230px minmax(0, 1fr); }
+  .channel-grid { grid-template-columns: 230px minmax(0, 1fr); }
+  .people-grid { grid-template-columns: 278px minmax(0, 1fr); gap: 20px; }
   .config-editor-layout, .config-editor-layout.is-miniapp { grid-template-columns: 1fr; }
   .field-map-pane { position: static; }
   .website-field-map { max-width: 980px; margin: 0 auto; }

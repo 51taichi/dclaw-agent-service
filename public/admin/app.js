@@ -270,7 +270,7 @@ function renderWorkspaceForm() {
 }
 
 function renderPeople() {
-  els.personList.innerHTML = state.people.map((person) => `
+  els.personList.innerHTML = state.people.map((person, index) => `
     <article class="entity-row person-sort-row ${person.id === state.person?.id && !state.creatingPerson ? "active" : ""}" data-person-row="${escapeHtml(person.id)}">
       <button type="button" class="person-drag-handle" draggable="true" data-person-drag="${escapeHtml(person.id)}" aria-label="调整${escapeHtml(person.name)}的顺序" title="拖动排序，或使用上下方向键"><svg><use href="#i-grip"/></svg></button>
       <button class="entity-select" data-person-id="${escapeHtml(person.id)}">
@@ -280,6 +280,10 @@ function renderPeople() {
       <label class="row-switch" title="${person.enabled ? "停用" : "启用"}${escapeHtml(person.name)}">
         <input type="checkbox" data-person-toggle="${escapeHtml(person.id)}" ${person.enabled ? "checked" : ""}/><span></span>
       </label>
+      <div class="person-order-actions" aria-label="调整${escapeHtml(person.name)}的顺序">
+        <button type="button" data-person-move="up" data-person-order-id="${escapeHtml(person.id)}" aria-label="上移${escapeHtml(person.name)}" title="上移" ${index === 0 ? "disabled" : ""}><svg><use href="#i-chevron-up"/></svg></button>
+        <button type="button" data-person-move="down" data-person-order-id="${escapeHtml(person.id)}" aria-label="下移${escapeHtml(person.name)}" title="下移" ${index === state.people.length - 1 ? "disabled" : ""}><svg><use href="#i-chevron-down"/></svg></button>
+      </div>
     </article>`).join("") || '<div class="list-empty">还没有智能员工</div>';
   renderPersonForm();
   renderPersonChannels();
@@ -1035,7 +1039,23 @@ function bindEvents() {
   document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => activateTab(button.dataset.tab)));
   els.workspaceList.addEventListener("click", (event) => { const button = event.target.closest("[data-workspace-id]"); if (!button) return; state.workspace = state.workspaces.find((item) => item.id === button.dataset.workspaceId); loadWorkspaceContext().catch(handleError); });
   els.workspaceList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-workspace-toggle]"); if (!toggle) return; toggleWorkspace(toggle.dataset.workspaceToggle, toggle.checked).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
-  els.personList.addEventListener("click", (event) => { const button = event.target.closest("[data-person-id]"); if (!button) return; state.person = state.people.find((item) => item.id === button.dataset.personId); state.creatingPerson = false; renderPeople(); });
+  els.personList.addEventListener("click", (event) => {
+    const moveButton = event.target.closest("[data-person-move]");
+    if (moveButton) {
+      if (moveButton.disabled) return;
+      const offset = moveButton.dataset.personMove === "up" ? -1 : 1;
+      movePersonByOffset(moveButton.dataset.personOrderId, offset).catch(async (error) => {
+        await loadWorkspaceContext().catch(() => {});
+        handleError(error);
+      });
+      return;
+    }
+    const button = event.target.closest("[data-person-id]");
+    if (!button) return;
+    state.person = state.people.find((item) => item.id === button.dataset.personId);
+    state.creatingPerson = false;
+    renderPeople();
+  });
   els.personList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-person-toggle]"); if (!toggle) return; toggleAdminItem("people", toggle.dataset.personToggle, toggle.checked, `/api/admin/people/${encodeURIComponent(toggle.dataset.personToggle)}`, (item) => item.name).then(() => { toggle.closest("label").title = `${toggle.checked ? "停用" : "启用"}${state.people.find((item) => item.id === toggle.dataset.personToggle)?.name || "人物"}`; }).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   let draggedPersonId = "";
   els.personList.addEventListener("dragstart", (event) => {

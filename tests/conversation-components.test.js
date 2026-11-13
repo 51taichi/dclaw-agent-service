@@ -360,3 +360,17 @@ test("smart employee editor exposes a guarded delete action", () => {
   assert.match(adminSource, /window\.confirm\(`确认删除智能员工/);
   assert.match(adminSource, /api\(`\/api\/admin\/people\/\$\{encodeURIComponent\(person\.id\)\}`.*, \{ method: "DELETE" \}/s);
 });
+
+test("smart employee list supports drag and explicit up-down ordering", () => {
+  const adminHtml = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
+  const adminStyles = readFileSync(new URL("../public/admin/styles.css", import.meta.url), "utf8");
+  assert.match(adminHtml, /id="i-chevron-up"/);
+  assert.match(adminHtml, /id="i-chevron-down"/);
+  assert.match(adminSource, /data-person-drag="\$\{escapeHtml\(person\.id\)\}"/);
+  assert.match(adminSource, /data-person-move="up"[\s\S]*?index === 0 \? "disabled"/);
+  assert.match(adminSource, /data-person-move="down"[\s\S]*?index === state\.people\.length - 1 \? "disabled"/);
+  assert.match(adminSource, /movePersonByOffset\(moveButton\.dataset\.personOrderId, offset\)/);
+  assert.match(adminStyles, /\.person-order-actions/);
+  assert.match(adminStyles, /\.people-grid \{[^}]*grid-template-columns: 294px minmax\(520px, 1fr\);[^}]*gap: 24px/);
+});
