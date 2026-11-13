@@ -203,15 +203,20 @@ test("public miniapp home resolves its workspace by AppID and lists only publish
   const unavailable = await request(app.baseUrl, "/api/public/miniapps/wx48fa13a3cc0dcf72");
   assert.equal(unavailable.response.status, 404);
 
+  const miniappChannel = await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp", { method: "PUT", body: {
+    config: { coverUrl: "/uploads/workspace-card-cover.webp" }
+  } });
+  assert.equal(miniappChannel.response.status, 200);
   await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp/publish", { method: "POST" });
   const home = await request(app.baseUrl, "/api/public/miniapps/wx48fa13a3cc0dcf72");
   assert.equal(home.response.status, 200);
   assert.equal(home.data.workspace.id, "dingmai");
   assert.equal(home.data.workspace.name, "顶脉教育集团");
+  assert.equal(home.data.workspace.coverUrl, "/uploads/workspace-card-cover.webp");
   assert.equal(home.data.cards.length, 1);
   assert.equal(home.data.cards[0].person.name, "向小顶");
   assert.equal(home.data.cards[0].publicSlug, "dingmai-assistant");
-  assert.equal(home.data.cards[0].profile.coverUrl, "/console/assets/xiaoding-card-hero-v1.webp");
+  assert.equal(home.data.cards[0].profile.coverUrl, "/uploads/workspace-card-cover.webp");
   assert.equal("companyContext" in home.data.workspace, false);
   assert.equal("persona" in home.data.cards[0].person, false);
 });

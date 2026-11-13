@@ -93,9 +93,16 @@ test("miniapp opens on a workspace roster and navigates to independently shareab
   assert.match(homeSource, /currentMiniappAppId\(\)/);
   assert.match(homeSource, /\/api\/public\/miniapps\/\$\{encodeURIComponent\(appId\.value\)\}/);
   assert.match(homeSource, /uni\.navigateTo\(\{ url: `\/pages\/card\/index\?slug=/);
+  assert.match(homeSource, /v-if="workspace\.coverUrl" class="home-header-cover" :src="asset\(workspace\.coverUrl\)" mode="aspectFill"/);
+  assert.match(homeSource, /data\.workspace\?\.coverUrl \|\| cards\.value\.find\(\(card\) => card\?\.profile\?\.coverUrl\)\?\.profile\?\.coverUrl/);
+  assert.match(homeSource, /wx\.getMenuButtonBoundingClientRect\?\.\(\)/);
+  assert.match(homeSource, /--home-brand-top:\$\{navigationMetrics\.contentTop\}px/);
   assert.match(cardSource, /uni\.reLaunch\(\{ url: "\/pages\/home\/index" \}\)/);
   assert.doesNotMatch(cardSource, /query\.slug \|\| "dingmai-assistant"/);
   assert.doesNotMatch(cardSource, /class="share-button"/);
+  assert.match(cardSource, /class="hero-cover" :src="asset\(coverUrl\)" mode="aspectFill"/);
+  assert.match(cardSource, /wx\.getMenuButtonBoundingClientRect\?\.\(\)/);
+  assert.match(cardSource, /--hero-content-top:\$\{navigationMetrics\.contentTop\}px/);
   assert.match(cardSource, /uni\.showShareMenu\?\.\(\{ menus: \["shareAppMessage", "shareTimeline"\] \}\)/);
   assert.match(cardSource, /onShareAppMessage\(\(\) =>/);
   assert.match(cardSource, /onShareTimeline\(\(\) =>/);

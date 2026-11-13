@@ -653,7 +653,8 @@ export class Store {
         slug: workspace.slug,
         name: workspace.name,
         accent: workspace.accent,
-        logoUrl: workspace.logoUrl
+        logoUrl: workspace.logoUrl,
+        coverUrl: channel.publishedConfig.coverUrl || "/console/assets/xiaoding-card-hero-v1.webp"
       },
       miniapp: { name: miniapp.name || workspace.name },
       cards

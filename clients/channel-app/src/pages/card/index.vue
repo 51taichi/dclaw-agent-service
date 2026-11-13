@@ -3,9 +3,11 @@
     <view v-if="loading" class="center-state"><text>正在加载名片...</text></view>
     <view v-else-if="error" class="center-state error-state"><text>{{ error }}</text><button class="retry-button" @tap="loadChannel">重新加载</button></view>
 
-    <view v-else class="card-stage">
+    <view v-else class="card-stage" :style="cardStageStyle">
       <view class="face front-face" :class="{ hidden: face !== 'front' }">
-        <view class="hero" :class="{ compact: !heroExpanded }" :style="heroStyle">
+        <view class="hero" :class="{ compact: !heroExpanded }">
+          <image class="hero-cover" :src="asset(coverUrl)" mode="aspectFill" />
+          <view class="hero-shade"></view>
           <view class="miniapp-chrome">
             <button class="back-button" aria-label="返回名片首页" @tap="goBack"><text>‹</text><text class="back-button-label">返回</text></button>
           </view>
@@ -215,7 +217,8 @@ const profile = computed(() => ({
 }));
 const cleanWebsite = computed(() => String(config.value.website || "").replace(/^https?:\/\//, "").replace(/\/$/, ""));
 const coverUrl = computed(() => config.value.coverUrl || channel.value.coverUrl || DEFAULTS.cover);
-const heroStyle = computed(() => `background-image:linear-gradient(180deg,rgba(4,12,31,.1),rgba(4,12,31,.88)),url('${asset(coverUrl.value)}')`);
+const navigationMetrics = readNavigationMetrics();
+const cardStageStyle = `--status-bar-height:${navigationMetrics.statusBarHeight}px;--nav-top:${navigationMetrics.navTop}px;--hero-content-top:${navigationMetrics.contentTop}px;`;
 const faceSwitchStyle = computed(() => `top:${Math.round(faceSwitchRatio.value * 1000) / 10}%;`);
 const voiceEnabled = computed(() => channel.value.voiceEnabled !== false);
 const assistant = computed(() => {
@@ -278,6 +281,20 @@ onShareTimeline(() => {
 });
 
 function asset(value) { return preparedAssets[value] || resolveAssetUrl(value); }
+function readNavigationMetrics() {
+  let statusBarHeight = 0;
+  try {
+    statusBarHeight = Math.max(0, Number(uni.getSystemInfoSync?.()?.statusBarHeight || 0));
+  } catch {}
+  let navTop = statusBarHeight + 6;
+  let navBottom = navTop + 36;
+  try {
+    const menuButton = typeof wx === "undefined" ? null : wx.getMenuButtonBoundingClientRect?.();
+    if (Number(menuButton?.top) >= statusBarHeight) navTop = Number(menuButton.top);
+    if (Number(menuButton?.bottom) > navTop) navBottom = Number(menuButton.bottom);
+  } catch {}
+  return { statusBarHeight, navTop, contentTop: navBottom + 16 };
+}
 function message(type, payload = {}) { return { id: createId(), type, ...payload }; }
 function conversationDisplayName(company) { return wechatNickname.value || (company ? "公司名片访客" : "名片访客"); }
 function goBack() {
@@ -825,14 +842,17 @@ function setTextInputMode() {
 .face.hidden { z-index: -1; opacity: 0; pointer-events: none; transform: rotateY(180deg); }
 .center-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24rpx; height: 100%; color: #687386; font-size: 26rpx; }
 .retry-button { width: auto; padding: 8rpx 24rpx; background: #3864f4; color: #fff; font-size: 24rpx; }
-.hero { position: relative; flex: 0 0 510rpx; padding: calc(var(--status-bar-height) + 122rpx) 34rpx 30rpx; overflow: hidden; background-color: #101827; background-position: center; background-size: cover; color: #fff; box-sizing: border-box; transition: flex-basis .24s ease, padding .24s ease; }
+.hero { position: relative; flex: 0 0 510rpx; padding: var(--hero-content-top, 122rpx) 34rpx 30rpx; overflow: hidden; background-color: #101827; color: #fff; box-sizing: border-box; transition: flex-basis .24s ease, padding .24s ease; }
+.hero-cover, .hero-shade { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.hero-cover { z-index: 0; }
+.hero-shade { z-index: 1; background: linear-gradient(180deg,rgba(4,12,31,.1),rgba(4,12,31,.88)); }
 .hero::before { position: absolute; z-index: 2; right: 0; bottom: 18rpx; left: 0; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,.84) 0 calc(50% - 42rpx), transparent calc(50% - 42rpx) calc(50% + 42rpx), rgba(255,255,255,.84) calc(50% + 42rpx)); content: ""; pointer-events: none; }
-.miniapp-chrome { position: absolute; top: calc(var(--status-bar-height) + 12rpx); right: 22rpx; left: 22rpx; z-index: 3; display: flex; align-items: center; justify-content: space-between; color: #fff; font-size: 24rpx; }
+.miniapp-chrome { position: absolute; top: var(--nav-top, 12rpx); right: 22rpx; left: 22rpx; z-index: 3; display: flex; align-items: center; justify-content: space-between; color: #fff; font-size: 24rpx; }
 .back-button { display: flex; align-items: center; justify-content: center; gap: 6rpx; width: 132rpx; height: 72rpx; margin: 0; padding: 0; border: 2rpx solid rgba(255,255,255,.62); border-radius: 36rpx; background: rgba(9,19,38,.56); color: #fff; box-shadow: 0 10rpx 32rpx rgba(4,10,24,.22); font-size: 58rpx; font-weight: 300; line-height: 1; }
 .back-button::after { border: 0; }
 .back-button-label { font-size: 24rpx; font-weight: 700; }
-.identity { display: flex; align-items: center; gap: 22rpx; margin-top: 10rpx; }
-.compact-identity { position: absolute; right: 90rpx; bottom: 54rpx; left: 32rpx; display: flex; align-items: center; gap: 18rpx; opacity: 0; pointer-events: none; transform: translateY(12rpx); transition: opacity .18s ease, transform .18s ease; }
+.identity { position: relative; z-index: 2; display: flex; align-items: center; gap: 22rpx; margin-top: 10rpx; }
+.compact-identity { position: absolute; z-index: 2; right: 90rpx; bottom: 54rpx; left: 32rpx; display: flex; align-items: center; gap: 18rpx; opacity: 0; pointer-events: none; transform: translateY(12rpx); transition: opacity .18s ease, transform .18s ease; }
 .compact-avatar { width: 84rpx; height: 84rpx; border: 4rpx solid rgba(255,255,255,.82); border-radius: 50%; background: #fff; }
 .profile-avatar { width: 108rpx; height: 108rpx; border: 4rpx solid rgba(255,255,255,.82); border-radius: 50%; background: #fff; }
 .profile-avatar-trigger { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: auto; height: auto; margin: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; line-height: 0; }
@@ -841,7 +861,7 @@ function setTextInputMode() {
 .name-row { display: flex; align-items: center; gap: 12rpx; font-size: 32rpx; font-weight: 800; }
 .online { padding: 3rpx 10rpx; border-radius: 6rpx; background: rgba(35,207,124,.9); font-size: 18rpx; }
 .identity-meta { font-size: 23rpx; }
-.contact-panel { margin-top: 30rpx; overflow: hidden; border: 1rpx solid rgba(255,255,255,.2); border-radius: 12rpx; background: rgba(9,17,31,.22); }
+.contact-panel { position: relative; z-index: 2; margin-top: 30rpx; overflow: hidden; border: 1rpx solid rgba(255,255,255,.2); border-radius: 12rpx; background: rgba(9,17,31,.22); }
 .contact-row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)) 58rpx; align-items: center; min-height: 62rpx; }
 .contact-row.first-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
 .contact-row.first-row { border-bottom: 1rpx solid rgba(255,255,255,.2); }

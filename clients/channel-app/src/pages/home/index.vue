@@ -1,7 +1,8 @@
 <template>
-  <view class="home-page">
+  <view class="home-page" :style="homeStyle">
     <view class="home-header" :style="headerStyle">
-      <view class="safe-area"></view>
+      <image v-if="workspace.coverUrl" class="home-header-cover" :src="asset(workspace.coverUrl)" mode="aspectFill" />
+      <view class="home-header-shade"></view>
       <view class="brand-row">
         <image v-if="workspace.logoUrl" class="company-logo" :src="asset(workspace.logoUrl)" mode="aspectFit" />
         <view v-else class="company-mark">{{ companyInitial }}</view>
@@ -47,7 +48,7 @@ import { computed, ref } from "vue";
 import { onLoad, onPullDownRefresh, onShareAppMessage } from "@dcloudio/uni-app";
 import { currentMiniappAppId, localizedErrorMessage, request, resolveAssetUrl } from "../../runtime/index.js";
 
-const workspace = ref({ name: "", logoUrl: "", accent: "#2457d6" });
+const workspace = ref({ name: "", logoUrl: "", coverUrl: "", accent: "#2457d6" });
 const cards = ref([]);
 const loading = ref(true);
 const error = ref("");
@@ -55,6 +56,8 @@ const appId = ref("");
 
 const companyInitial = computed(() => String(workspace.value.name || "名").slice(0, 1));
 const headerStyle = computed(() => `--workspace-accent:${safeColor(workspace.value.accent)}`);
+const navigationMetrics = readNavigationMetrics();
+const homeStyle = `--home-brand-top:${navigationMetrics.contentTop}px;`;
 
 onLoad((query = {}) => {
   appId.value = String(query.appId || currentMiniappAppId()).trim();
@@ -79,14 +82,31 @@ function safeColor(value) {
   return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? value : "#2457d6";
 }
 
+function readNavigationMetrics() {
+  let statusBarHeight = 0;
+  try {
+    statusBarHeight = Math.max(0, Number(uni.getSystemInfoSync?.()?.statusBarHeight || 0));
+  } catch {}
+  let navTop = statusBarHeight + 6;
+  try {
+    const menuButton = typeof wx === "undefined" ? null : wx.getMenuButtonBoundingClientRect?.();
+    if (Number(menuButton?.top) >= statusBarHeight) navTop = Number(menuButton.top);
+  } catch {}
+  return { contentTop: navTop + 4 };
+}
+
 async function loadHome() {
   loading.value = true;
   error.value = "";
   try {
     if (!appId.value) throw new Error("无法识别当前小程序");
     const data = await request(`/api/public/miniapps/${encodeURIComponent(appId.value)}`);
-    workspace.value = data.workspace || workspace.value;
     cards.value = Array.isArray(data.cards) ? data.cards : [];
+    workspace.value = {
+      ...workspace.value,
+      ...(data.workspace || {}),
+      coverUrl: data.workspace?.coverUrl || cards.value.find((card) => card?.profile?.coverUrl)?.profile?.coverUrl || ""
+    };
   } catch (loadError) {
     error.value = localizedErrorMessage(loadError, "名片列表加载失败");
   } finally {
@@ -102,9 +122,11 @@ function openCard(publicSlug) {
 
 <style scoped>
 .home-page { min-height: 100vh; background: #f3f5f8; color: #20283a; }
-.home-header { min-height: 164px; padding: 0 22px 26px; background: linear-gradient(145deg, #17243b 0%, var(--workspace-accent) 72%, #168b7a 135%); box-sizing: border-box; }
-.safe-area { height: calc(env(safe-area-inset-top) + 18px); }
-.brand-row { display: flex; align-items: center; gap: 14px; }
+.home-header { position: relative; min-height: 164px; padding: var(--home-brand-top, 52px) 22px 26px; overflow: hidden; background: linear-gradient(145deg, #17243b 0%, var(--workspace-accent) 72%, #168b7a 135%); box-sizing: border-box; }
+.home-header-cover, .home-header-shade { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.home-header-cover { z-index: 0; }
+.home-header-shade { z-index: 1; background: linear-gradient(145deg, rgba(12, 25, 49, .56), rgba(12, 37, 91, .28) 72%, rgba(9, 67, 62, .34)); }
+.brand-row { position: relative; z-index: 2; display: flex; align-items: center; gap: 14px; }
 .company-logo, .company-mark { width: 58px; height: 58px; flex: 0 0 auto; border-radius: 8px; background: #fff; }
 .company-logo { padding: 7px; box-sizing: border-box; }
 .company-mark { display: flex; align-items: center; justify-content: center; color: var(--workspace-accent); font-size: 27px; font-weight: 800; }
