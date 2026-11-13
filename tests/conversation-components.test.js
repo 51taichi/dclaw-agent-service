@@ -196,10 +196,14 @@ test("suggested questions have a clear prompt label", () => {
 test("business card cover inherits the miniapp channel default across web and miniapp clients", () => {
   const miniapp = getChannelType("miniapp");
   const coverField = miniapp.channelFields.find((field) => field.key === "coverUrl");
+  const personCoverField = miniapp.personFields.find((field) => field.key === "coverUrl");
+  const deploymentCoverField = miniapp.deploymentFields.find((field) => field.key === "coverUrl");
   const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
   const clientSource = readFileSync(new URL("../clients/channel-app/src/pages/card/index.vue", import.meta.url), "utf8");
   assert.equal(coverField?.type, "image");
   assert.equal(coverField?.default, "/console/assets/xiaoding-card-hero-v1.webp");
+  assert.equal(personCoverField?.default, "");
+  assert.equal(deploymentCoverField?.default, "");
   assert.equal(miniapp.channelFields.some((field) => ["assistantMascotImageUrl", "assistantScenePosterUrl"].includes(field.key)), false);
   assert.match(previewSource, /config\.coverUrl \|\| channel\.coverUrl \|\| DEFAULT_COVER/);
   assert.match(clientSource, /config\.value\.coverUrl \|\| channel\.value\.coverUrl \|\| DEFAULTS\.cover/);

@@ -221,7 +221,7 @@ export class Store {
     const agentConfigId = this.agentConfigReference(input.agentConfigId);
     const sortOrder = Number(this.db.prepare("SELECT COALESCE(MAX(sort_order), -10) + 10 AS value FROM people WHERE workspace_id = ?").get(workspaceId)?.value || 0);
     this.db.prepare(`INSERT INTO people (id, workspace_id, name, title, avatar_url, enabled, sort_order, persona_json, profile_json, agent_config_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, workspaceId, requiredText(input.name, "智能员工名称", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, sortOrder, JSON.stringify(objectValue(input.persona)), JSON.stringify(objectValue(input.profile)), agentConfigId);
+      .run(id, workspaceId, requiredText(input.name, "智能员工名称", 120), cleanText(input.title, "", 160), cleanText(input.avatarUrl, "", 2000), input.enabled === false ? 0 : 1, sortOrder, JSON.stringify(objectValue(input.persona)), JSON.stringify(normalizePersonProfile(input.profile)), agentConfigId);
     return this.getPerson(id);
   }
 
@@ -255,7 +255,7 @@ export class Store {
     const agentConfigId = input.agentConfigId === undefined ? existing.agentConfigId : this.agentConfigReference(input.agentConfigId);
     const timestamp = isoNow();
     this.db.prepare(`UPDATE people SET name = ?, title = ?, avatar_url = ?, enabled = ?, persona_json = ?, profile_json = ?, agent_config_id = ?, updated_at = ? WHERE id = ?`)
-      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.title, existing.title, 160), cleanText(input.avatarUrl, existing.avatarUrl, 2000), input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), JSON.stringify(input.persona === undefined ? existing.persona : objectValue(input.persona)), JSON.stringify(input.profile === undefined ? existing.profile : objectValue(input.profile)), agentConfigId, timestamp, id);
+      .run(cleanText(input.name, existing.name, 120) || existing.name, cleanText(input.title, existing.title, 160), cleanText(input.avatarUrl, existing.avatarUrl, 2000), input.enabled === undefined ? Number(existing.enabled) : (input.enabled ? 1 : 0), JSON.stringify(input.persona === undefined ? existing.persona : objectValue(input.persona)), JSON.stringify(input.profile === undefined ? existing.profile : normalizePersonProfile(input.profile)), agentConfigId, timestamp, id);
     this.db.prepare(`UPDATE channel_deployments
       SET published_config_json = (SELECT profile_json FROM people WHERE people.id = channel_deployments.person_id),
           published_version = CASE WHEN published_version < 1 THEN 1 ELSE published_version + 1 END,
@@ -1610,6 +1610,12 @@ function isHttpUrl(value) {
 
 function objectValue(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function normalizePersonProfile(value) {
+  const profile = { ...objectValue(value) };
+  if (!cleanText(profile.coverUrl, "", 2000)) delete profile.coverUrl;
+  return profile;
 }
 
 function safeInteger(value) {

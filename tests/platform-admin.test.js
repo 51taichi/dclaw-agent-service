@@ -211,7 +211,7 @@ test("public miniapp home resolves its workspace by AppID and lists only publish
   assert.equal(home.data.cards.length, 1);
   assert.equal(home.data.cards[0].person.name, "向小顶");
   assert.equal(home.data.cards[0].publicSlug, "dingmai-assistant");
-  assert.equal(home.data.cards[0].profile.coverUrl, "/console/assets/moosee-work-serious-scene.png");
+  assert.equal(home.data.cards[0].profile.coverUrl, "/console/assets/xiaoding-card-hero-v1.webp");
   assert.equal("companyContext" in home.data.workspace, false);
   assert.equal("persona" in home.data.cards[0].person, false);
 });
@@ -503,7 +503,7 @@ test("channel draft is private until publish and preview is schema-versioned", a
   assert.equal(websiteDraft.data.cardPresentation.config.assistantName, "D仔");
   assert.equal(websiteDraft.data.cardPresentation.config.assistantSceneVideoUrl, "/console/assets/ddeer-office-greeting-rig-v3.mp4");
   assert.equal("cardConfig" in websiteDraft.data.deployment, false);
-  assert.equal(websiteDraft.data.deployment.config.coverUrl, "/console/assets/moosee-work-serious-scene.png");
+  assert.equal(websiteDraft.data.deployment.config.coverUrl, undefined);
   assert.equal(websiteDraft.data.deployments[0].config.companyName, "顶脉教育集团");
 
   const channelPreview = await request(app.baseUrl, "/api/admin/channels/dingmai-miniapp/preview");
@@ -653,9 +653,10 @@ test("new people can be deployed to an existing website channel", async (t) => {
     name: "李明",
     title: "商务负责人",
     persona: { personality: "稳重" },
-    profile: { phone: "13800000000", suggestedQuestions: ["如何合作？"] }
+    profile: { coverUrl: "", phone: "13800000000", suggestedQuestions: ["如何合作？"] }
   } });
   assert.equal(person.response.status, 201);
+  assert.equal(Object.hasOwn(person.data.profile, "coverUrl"), false);
   const deployment = await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments", { method: "POST", body: { id: "dingmai-web-li", workspaceChannelId: "dingmai-website", personId: "sales-li", publicSlug: "dingmai-li", sortOrder: 20, config: { welcomeMessage: "您好，我是李明" } } });
   assert.equal(deployment.response.status, 201);
   assert.equal(deployment.data.provider, "website");

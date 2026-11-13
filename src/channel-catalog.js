@@ -17,7 +17,7 @@ const assistantFields = [
 ];
 
 const profileFields = [
-  { key: "coverUrl", label: "顶部背景图", type: "image", default: "/console/assets/moosee-work-serious-scene.png" },
+  { key: "coverUrl", label: "顶部背景图", type: "image", default: "" },
   { key: "companyName", label: "公司名称", type: "text", default: "" },
   { key: "phone", label: "联系电话", type: "text", default: "" },
   { key: "address", label: "联系地址", type: "text", default: "" },
@@ -69,7 +69,7 @@ const catalog = [
     ],
     personFields: profileFields,
     deploymentFields: [
-      { key: "coverUrl", label: "顶部背景图", type: "image", default: "/console/assets/moosee-work-serious-scene.png" },
+      { key: "coverUrl", label: "顶部背景图", type: "image", default: "" },
       { key: "displayName", label: "渠道展示名称", type: "text", default: "" },
       { key: "title", label: "渠道展示职务", type: "text", default: "" },
       { key: "avatarUrl", label: "渠道头像", type: "image", default: "" },
