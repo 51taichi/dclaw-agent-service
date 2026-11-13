@@ -267,6 +267,28 @@ export class Store {
     return this.getPerson(id);
   }
 
+  deletePerson(id) {
+    const existing = this.getPerson(id);
+    if (!existing) return false;
+    const accountIds = this.db.prepare("SELECT id FROM channel_accounts WHERE person_id = ?").all(id).map((row) => row.id);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM agent_bindings WHERE scope_type = 'person' AND scope_id = ?").run(id);
+      this.db.prepare("DELETE FROM agent_usage_logs WHERE person_id = ?").run(id);
+      for (const accountId of accountIds) {
+        this.db.prepare("DELETE FROM processed_events WHERE account_id = ?").run(accountId);
+        this.db.prepare("DELETE FROM audit_logs WHERE account_id = ?").run(accountId);
+      }
+      this.db.prepare("DELETE FROM channel_accounts WHERE person_id = ?").run(id);
+      this.db.prepare("DELETE FROM people WHERE id = ?").run(id);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return true;
+  }
+
   listWorkspaceChannels(workspaceId) {
     return this.db.prepare(`
       SELECT c.*, (SELECT COUNT(*) FROM channel_deployments d WHERE d.workspace_channel_id = c.id) AS deployment_count

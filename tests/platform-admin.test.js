@@ -715,6 +715,30 @@ test("smart employee order persists and controls channel rosters", async (t) => 
   assert.match(invalid.data.error, /全部智能员工/);
 });
 
+test("deleting a smart employee removes its channel accounts and deployments", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  await request(app.baseUrl, "/api/admin/workspaces/dingmai/people", { method: "POST", body: {
+    id: "sales-li", name: "李明", title: "商务负责人"
+  } });
+  await request(app.baseUrl, "/api/admin/workspaces/dingmai/deployments", { method: "POST", body: {
+    id: "dingmai-web-li", accountId: "dingmai-web-li", workspaceChannelId: "dingmai-website", personId: "sales-li", publicSlug: "dingmai-li"
+  } });
+
+  const deleted = await request(app.baseUrl, "/api/admin/people/sales-li", { method: "DELETE" });
+  assert.equal(deleted.response.status, 204);
+  assert.equal(app.store.getPerson("sales-li"), null);
+  assert.equal(app.store.getAccount("dingmai-web-li"), null);
+  assert.equal(app.store.getDeployment("dingmai-web-li"), null);
+  const people = await request(app.baseUrl, "/api/admin/workspaces/dingmai/people");
+  assert.deepEqual(people.data.items.map((person) => person.id), ["dingmai-assistant"]);
+
+  const missing = await request(app.baseUrl, "/api/admin/people/sales-li", { method: "DELETE" });
+  assert.equal(missing.response.status, 404);
+  assert.match(missing.data.error, /智能员工不存在/);
+});
+
 test("one person shares flow and tag configuration across channel deployments", async (t) => {
   const app = await fixture();
   t.after(() => app.close());

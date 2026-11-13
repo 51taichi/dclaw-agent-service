@@ -120,6 +120,10 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.post("/api/admin/workspaces/:workspaceId/people", (req, res) => res.status(201).json(store.createPerson(req.params.workspaceId, req.body || {})));
   app.put("/api/admin/workspaces/:workspaceId/people/order", (req, res) => res.json({ items: store.reorderPeople(req.params.workspaceId, req.body?.personIds) }));
   app.put("/api/admin/people/:personId", (req, res) => respondFound(res, store.updatePerson(req.params.personId, req.body || {})));
+  app.delete("/api/admin/people/:personId", (req, res) => {
+    if (!store.deletePerson(req.params.personId)) return res.status(404).json({ error: "智能员工不存在" });
+    res.status(204).end();
+  });
   app.get("/api/admin/workspaces/:workspaceId/channels", (req, res) => res.json({ items: store.listWorkspaceChannels(req.params.workspaceId) }));
   app.get("/api/admin/workspaces/:workspaceId/miniapp", (req, res) => res.json({ config: workspaceMiniapps.get(req.params.workspaceId) }));
   app.put("/api/admin/workspaces/:workspaceId/miniapp", (req, res) => respondFound(res, workspaceMiniapps.save(req.params.workspaceId, req.body || {})));

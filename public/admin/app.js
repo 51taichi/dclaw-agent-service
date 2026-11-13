@@ -343,6 +343,7 @@ function renderPersonForm() {
   delete form.elements.agentConfigId.dataset.overrideValue;
   renderAgentBindingSelect(form, "agentConfigId", agentOverrideEnabled, person?.agentConfigId || "");
   renderDynamicFields(els.personProfileFields, personProfileFields(), person?.profile || {});
+  els.deletePerson.hidden = !person;
 }
 
 function personProfileFields() {
@@ -850,6 +851,19 @@ async function savePerson(event) {
   toast("智能员工已保存");
 }
 
+async function deletePerson() {
+  const person = state.person;
+  if (!person || state.creatingPerson) return;
+  const deploymentNotice = person.deploymentCount
+    ? `\n将同时删除 ${person.deploymentCount} 个渠道入口及其历史会话。`
+    : "";
+  if (!window.confirm(`确认删除智能员工“${person.name}”吗？${deploymentNotice}\n该操作无法撤销。`)) return;
+  await api(`/api/admin/people/${encodeURIComponent(person.id)}`, { method: "DELETE" });
+  state.person = null;
+  await loadWorkspaceContext();
+  toast(`智能员工“${person.name}”已删除`);
+}
+
 async function saveProviderConfig(event, provider) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1139,6 +1153,7 @@ function bindEvents() {
   els.personForm.addEventListener("click", handleMediaClear);
   els.workspaceForm.addEventListener("submit", (event) => saveWorkspace(event).catch(handleError));
   els.personForm.addEventListener("submit", (event) => savePerson(event).catch(handleError));
+  els.deletePerson.addEventListener("click", () => deletePerson().catch(handleError));
   document.querySelectorAll("[data-publish-provider]").forEach((button) => button.addEventListener("click", () => publishProviderConfig(button.dataset.publishProvider).catch(handleError)));
   document.querySelectorAll("[data-deploy-provider='website']").forEach((button) => button.addEventListener("click", openWebsiteDeployDialog));
   document.querySelectorAll("[data-preview-provider]").forEach((button) => button.addEventListener("click", () => {

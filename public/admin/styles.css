@@ -397,6 +397,7 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .agent-card-stats strong { margin-top: 3px; color: #35405a; font-size: 12px; }
 .agent-library-layout #agentConfigForm { padding-top: 20px; border-top: 1px solid #dce1ec; }
 .agent-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.person-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .secondary.danger { border-color: #efc4c0; color: #b83d32; }
 
 .workspace-miniapp-card { display: grid; gap: 14px; padding: 15px; border: 1px solid #dce1ec; border-radius: 7px; background: #f8f9fc; }

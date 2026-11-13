@@ -351,3 +351,12 @@ test("channel publishing and miniapp credential saving stay visible near their s
   assert.match(adminSource, /async function publishProviderConfig\(provider\)/);
   assert.match(adminSource, /await persistProviderConfig\(provider, form\)/);
 });
+
+test("smart employee editor exposes a guarded delete action", () => {
+  const adminHtml = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
+  assert.match(adminHtml, /id="deletePerson"[^>]*>.*i-trash.*删除员工/s);
+  assert.match(adminSource, /els\.deletePerson\.hidden = !person/);
+  assert.match(adminSource, /window\.confirm\(`确认删除智能员工/);
+  assert.match(adminSource, /api\(`\/api\/admin\/people\/\$\{encodeURIComponent\(person\.id\)\}`.*, \{ method: "DELETE" \}/s);
+});
