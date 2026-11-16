@@ -1086,11 +1086,11 @@ export class Store {
     }));
   }
 
-  publicConversationHistory(accountId, externalConversationId, limit = 200) {
+  publicConversationHistory(accountId, externalConversationId, limit = 50) {
     const conversation = this.db.prepare("SELECT id FROM conversations WHERE account_id = ? AND external_conversation_id = ?")
       .get(String(accountId || ""), String(externalConversationId || ""));
     if (!conversation) return [];
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 500));
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 500));
     return this.db.prepare(`
       SELECT * FROM (
         SELECT * FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?

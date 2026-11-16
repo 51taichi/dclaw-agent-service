@@ -171,6 +171,33 @@ test("wechat login resolves a merged legacy conversation through its identity al
   assert.equal(app.store.listMessages(adopted.id)[0].content, "合并后保留的历史消息");
 });
 
+test("miniapp history restores only the most recent 50 messages", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+  const externalConversationId = "wechat:recent-history:person";
+  for (let index = 1; index <= 60; index += 1) {
+    app.store.recordInbound({
+      provider: "miniapp",
+      accountId: "miniapp-default",
+      eventId: `history-event-${index}`,
+      occurredAt: new Date().toISOString(),
+      externalConversationId,
+      externalUserId: "wechat:recent-history",
+      displayName: "微信客户小王",
+      externalMessageId: `history-message-${index}`,
+      messageType: "text",
+      text: `历史消息 ${index}`,
+      attachments: [],
+      metadata: {}
+    });
+  }
+
+  const items = app.store.publicConversationHistory("miniapp-default", externalConversationId);
+  assert.equal(items.length, 50);
+  assert.equal(items[0].content, "历史消息 11");
+  assert.equal(items.at(-1).content, "历史消息 60");
+});
+
 test("wechat profile update rejects an invalid session", async (t) => {
   const app = await fixture();
   t.after(() => app.close());
