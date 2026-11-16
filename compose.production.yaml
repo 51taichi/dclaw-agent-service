@@ -1,6 +1,41 @@
 name: dclaw-agent-production
 
 services:
+  asr:
+    build:
+      context: ./asr
+      dockerfile: Dockerfile
+    image: dclaw-asr:production
+    container_name: dclaw-asr
+    init: true
+    restart: unless-stopped
+    environment:
+      ASR_MODEL: ${SPEECH_MODEL:-small}
+      ASR_DEVICE: cpu
+      ASR_COMPUTE_TYPE: int8
+      ASR_CPU_THREADS: ${DCLAW_ASR_CPU_THREADS:-2}
+      ASR_BEAM_SIZE: ${DCLAW_ASR_BEAM_SIZE:-5}
+      ASR_DOWNLOAD_ROOT: /models/faster-whisper
+      HF_HOME: /models/huggingface
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
+    volumes:
+      - ${DCLAW_ASR_MODEL_DIR:-../asr-models}:/models
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cpus: ${DCLAW_ASR_CPUS:-2.0}
+    mem_limit: ${DCLAW_ASR_MEMORY_LIMIT:-3g}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10m
+
   agent-service:
     build:
       context: .
@@ -17,6 +52,14 @@ services:
       PORT: 4310
       DATABASE_PATH: /app/data/dclaw-agent.sqlite
       PUBLIC_BASE_URL: ${DCLAW_AGENT_PUBLIC_BASE_URL:-https://agent.deepmega.cn}
+      SPEECH_API_URL: ${SPEECH_API_URL:-http://asr:8000/v1/audio/transcriptions}
+      SPEECH_API_KEY: ${SPEECH_API_KEY:-}
+      SPEECH_MODEL: ${SPEECH_MODEL:-small}
+      SPEECH_LANGUAGE: ${SPEECH_LANGUAGE:-zh}
+      SPEECH_TIMEOUT_MS: ${SPEECH_TIMEOUT_MS:-60000}
+    depends_on:
+      asr:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${DCLAW_AGENT_PORT:-14313}:4310"
     volumes:

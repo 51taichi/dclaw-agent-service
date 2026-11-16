@@ -30,6 +30,28 @@ test("speech transcriber sends an OpenAI-compatible multipart request", async ()
   assert.equal(captured.options.body.get("file").name, "voice.webm");
 });
 
+test("local ASR is wired into local and production Compose without exposing production ports", () => {
+  const localCompose = fs.readFileSync(new URL("../compose.yaml", import.meta.url), "utf8");
+  const productionCompose = fs.readFileSync(new URL("../compose.production.yaml", import.meta.url), "utf8");
+  const asrSource = fs.readFileSync(new URL("../asr/app.py", import.meta.url), "utf8");
+  const asrDockerfile = fs.readFileSync(new URL("../asr/Dockerfile", import.meta.url), "utf8");
+
+  for (const compose of [localCompose, productionCompose]) {
+    assert.match(compose, /^  asr:\n/m);
+    assert.match(compose, /SPEECH_API_URL: \$\{SPEECH_API_URL:-http:\/\/asr:8000\/v1\/audio\/transcriptions\}/);
+    assert.match(compose, /condition: service_healthy/);
+    assert.match(compose, /ASR_COMPUTE_TYPE: int8/);
+    assert.match(compose, /mem_limit: \$\{DCLAW_ASR_MEMORY_LIMIT:-3g\}/);
+  }
+  assert.match(localCompose, /127\.0\.0\.1:\$\{DCLAW_ASR_PORT:-18000\}:8000/);
+  assert.doesNotMatch(productionCompose, /DCLAW_ASR_PORT/);
+  assert.match(productionCompose, /DCLAW_ASR_MODEL_DIR/);
+  assert.match(asrSource, /@app\.post\("\/v1\/audio\/transcriptions"\)/);
+  assert.match(asrSource, /app\.state\.transcription_lock/);
+  assert.match(asrSource, /vad_filter=True/);
+  assert.match(asrDockerfile, /USER asr/);
+});
+
 test("draft preview uploads audio and sends its transcription to the Agent pipeline", async (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "dclaw-speech-preview-"));
   const calls = [];

@@ -5,3 +5,5 @@ coverage/
 .DS_Store
 *.log
 screenshots/
+__pycache__/
+*.pyc

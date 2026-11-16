@@ -58,7 +58,26 @@ WECHAT_SESSION_TTL_DAYS=30
 
 ### 语音转文字
 
-名片录音会先上传到 Agent Service，再通过兼容标准 multipart 转写协议的语音服务生成文字，最后把文字和原始音频附件一起交给 Agent。配置以下环境变量后重启服务：
+名片录音会先上传到 Agent Service，再通过兼容标准 multipart 转写协议的语音服务生成文字，最后把文字和原始音频附件一起交给 Agent。
+
+Docker Compose 默认启动本地 `dclaw-asr` 服务，使用 Faster-Whisper `small`、CPU INT8 和单任务队列。模型缓存在独立数据卷中，只在首次启动时下载；小程序、名片页面和 Agent 协议都无需调整：
+
+```bash
+docker compose up --build -d
+docker compose logs -f asr
+curl http://127.0.0.1:18000/health
+```
+
+现有 4 核、14GB、无 GPU 的生产服务器默认限制 ASR 使用 2 核和 3GB 内存。可以通过以下变量调整，但不建议在该服务器运行 `large` 模型：
+
+```bash
+SPEECH_MODEL=small
+DCLAW_ASR_CPU_THREADS=2
+DCLAW_ASR_CPUS=2.0
+DCLAW_ASR_MEMORY_LIMIT=3g
+```
+
+直接使用 `npm start` 或改用第三方转写服务时，配置以下环境变量：
 
 ```bash
 SPEECH_API_URL=https://your-speech-provider.example/v1/audio/transcriptions
@@ -67,7 +86,7 @@ SPEECH_MODEL=your-model
 SPEECH_LANGUAGE=zh
 ```
 
-`SPEECH_API_KEY` 对无需鉴权的本地服务可留空。没有配置转写服务时，录音仍可上传，但 Agent 只能收到语音时长占位信息，无法理解录音内容。
+`SPEECH_API_KEY` 对本地服务可留空。没有配置转写服务时，录音仍可上传，但 Agent 只能收到语音时长占位信息，无法理解录音内容。
 
 ## Docker 本地测试
 
@@ -106,6 +125,7 @@ git clone https://github.com/51taichi/dclaw-agent-service.git /opt/dclaw-agent-s
 cd /opt/dclaw-agent-service/source
 cp .env.example .env
 install -d -o 1000 -g 1000 /opt/dclaw-agent-service/data
+install -d -o 10001 -g 10001 /opt/dclaw-agent-service/asr-models
 docker compose -f compose.production.yaml up -d --build
 ```
 
@@ -115,6 +135,7 @@ docker compose -f compose.production.yaml up -d --build
 DCLAW_AGENT_PORT=14313
 DCLAW_AGENT_PUBLIC_BASE_URL=https://agent.deepmega.cn
 DCLAW_AGENT_DATA_DIR=/opt/dclaw-agent-service/data
+DCLAW_ASR_MODEL_DIR=/opt/dclaw-agent-service/asr-models
 ```
 
 后续发布代码时执行：
