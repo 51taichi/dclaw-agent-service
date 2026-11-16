@@ -337,6 +337,17 @@ test("admin workspace title stays on one line and uses the company name instead 
   assert.doesNotMatch(adminMarkup, /id="workspaceSlug"/);
 });
 
+test("workspace console opens through the shared authenticated launch handoff", () => {
+  const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
+  const adminMarkup = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const consoleSource = readFileSync(new URL("../public/console/app.js", import.meta.url), "utf8");
+  assert.match(adminSource, /api\/admin\/workspaces\/\$\{encodeURIComponent\(state\.workspace\.id\)\}\/console-launch/);
+  assert.match(adminSource, /window\.open\(data\.launchUrl, "_blank", "noopener,noreferrer"\)/);
+  assert.match(adminMarkup, /<button id="openWorkspaceConsole"[^>]*type="button"/);
+  assert.doesNotMatch(adminMarkup, /id="openWorkspaceConsole"[^>]*target="_blank"/);
+  assert.match(consoleSource, /"X-DClaw-Workspace": workspaceScope\(\)/);
+});
+
 test("admin browser and header use the website card management title", () => {
   const adminMarkup = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   assert.match(adminMarkup, /<title>官网名片智能体管理后台<\/title>/);

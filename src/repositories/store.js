@@ -120,9 +120,14 @@ export class Store {
 
   getAdminSession(tokenHash) {
     this.db.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").run(isoNow());
-    const row = this.db.prepare(`SELECT session.*, workspace.name AS workspace_name, workspace.slug AS workspace_slug
+    const row = this.db.prepare(`SELECT session.*, workspace.name AS workspace_name, workspace.slug AS workspace_slug,
+        workspace.enabled AS workspace_enabled
       FROM admin_sessions session LEFT JOIN workspaces workspace ON workspace.id = session.workspace_id
       WHERE session.token_hash = ? AND session.expires_at > ?`).get(tokenHash, isoNow());
+    if (row?.scope_type === "workspace" && !row.workspace_enabled) {
+      this.deleteAdminSession(tokenHash);
+      return null;
+    }
     return row ? {
       scopeType: row.scope_type,
       workspaceId: row.workspace_id || null,
@@ -138,6 +143,48 @@ export class Store {
 
   deleteWorkspaceAdminSessions(workspaceId) {
     this.db.prepare("DELETE FROM admin_sessions WHERE scope_type = 'workspace' AND workspace_id = ?").run(workspaceId);
+  }
+
+  createWorkspaceConsoleLaunchTicket({ tokenHash, workspaceId, expiresAt }) {
+    this.db.prepare("DELETE FROM workspace_console_launch_tickets WHERE expires_at <= ?").run(isoNow());
+    this.db.prepare(`INSERT INTO workspace_console_launch_tickets
+      (token_hash, workspace_id, expires_at) VALUES (?, ?, ?)`)
+      .run(tokenHash, workspaceId, expiresAt);
+  }
+
+  redeemWorkspaceConsoleLaunchTicket(tokenHash) {
+    const redeemedAt = isoNow();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.db.prepare(`SELECT ticket.*, workspace.enabled AS workspace_enabled,
+          workspace.name AS workspace_name, workspace.slug AS workspace_slug
+        FROM workspace_console_launch_tickets ticket JOIN workspaces workspace ON workspace.id = ticket.workspace_id
+        WHERE ticket.token_hash = ?`).get(tokenHash);
+      if (!row || row.expires_at <= redeemedAt || !row.workspace_enabled) {
+        if (row) this.db.prepare("DELETE FROM workspace_console_launch_tickets WHERE token_hash = ?").run(tokenHash);
+        this.db.exec("COMMIT");
+        return null;
+      }
+      this.db.prepare(`UPDATE workspace_console_launch_tickets
+        SET redemption_count = redemption_count + 1,
+            first_redeemed_at = COALESCE(first_redeemed_at, ?)
+        WHERE token_hash = ?`).run(redeemedAt, tokenHash);
+      this.db.exec("COMMIT");
+      return {
+        workspaceId: row.workspace_id,
+        workspaceName: row.workspace_name,
+        workspaceSlug: row.workspace_slug,
+        expiresAt: row.expires_at,
+        redemptionCount: Number(row.redemption_count || 0) + 1
+      };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  deleteWorkspaceConsoleLaunchTickets(workspaceId) {
+    this.db.prepare("DELETE FROM workspace_console_launch_tickets WHERE workspace_id = ?").run(workspaceId);
   }
 
   createPreviewLaunchTicket({ tokenHash, workspaceId, resourceType, resourceId, launchPath, expiresAt }) {

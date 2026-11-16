@@ -230,7 +230,6 @@ function renderAll() {
   els.workspaceTitle.textContent = `工作区 / ${state.workspace.name}`;
   els.workspaceStatus.textContent = state.workspace.enabled ? "运行中" : "已停用";
   els.workspaceStatus.className = `pill ${state.workspace.enabled ? "ok" : "off"}`;
-  els.openWorkspaceConsole.href = `/console/?workspace=${encodeURIComponent(state.workspace.id)}`;
   renderWorkspaceList();
   renderWorkspaceForm();
   renderPeople();
@@ -265,7 +264,6 @@ function renderWorkspaceForm() {
   setField(form, "industry", workspace?.companyContext?.industry || "");
   setField(form, "description", workspace?.companyContext?.description || "");
   els.openWorkspaceConsole.hidden = !workspace;
-  if (workspace) els.openWorkspaceConsole.href = `/console/?workspace=${encodeURIComponent(workspace.id)}`;
 }
 
 function renderPeople() {
@@ -717,6 +715,12 @@ async function openDraftPreview(provider) {
   window.open(data.launchUrl, "_blank", "noopener,noreferrer");
 }
 
+async function openWorkspaceConsole() {
+  if (!state.workspace) return;
+  const data = await api(`/api/admin/workspaces/${encodeURIComponent(state.workspace.id)}/console-launch`, { method: "POST" });
+  window.open(data.launchUrl, "_blank", "noopener,noreferrer");
+}
+
 function websiteDeployment() {
   const channel = channelFor("website");
   return channel?.publishedVersion > 0 && state.deployments.find((item) => item.workspaceChannelId === channel.id && item.enabled && item.publicSlug);
@@ -1141,6 +1145,7 @@ function bindEvents() {
   });
   els.personChannelList.addEventListener("change", (event) => { const toggle = event.target.closest("[data-person-channel-toggle]"); if (!toggle) return; togglePersonChannel(toggle.dataset.personChannelToggle, toggle.checked).catch((error) => { toggle.checked = !toggle.checked; handleError(error); }); });
   els.newWorkspace.addEventListener("click", startWorkspace);
+  els.openWorkspaceConsole.addEventListener("click", () => openWorkspaceConsole().catch(handleError));
   els.newPerson.addEventListener("click", () => { state.creatingPerson = true; state.person = null; renderPeople(); els.personForm.elements.id.focus(); });
   els.newAgentConfig.addEventListener("click", () => { state.creatingAgentConfig = true; state.agentConfig = null; renderAgentLibrary(); els.agentConfigForm.elements.id.focus(); });
   els.agentConfigList.addEventListener("click", (event) => { const button = event.target.closest("[data-agent-config-id]"); if (!button) return; state.agentConfig = state.agentConfigs.find((item) => item.id === button.dataset.agentConfigId); state.creatingAgentConfig = false; renderAgentLibrary(); });

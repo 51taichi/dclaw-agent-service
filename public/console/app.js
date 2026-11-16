@@ -29,6 +29,10 @@ const MANUAL_REPLY_EMOJIS = ["😊", "👌", "👍", "🙏", "😄", "🎉", "�
 const MANUAL_REPLY_MAX_ATTACHMENTS = 5;
 let alertsLoaded = false;
 
+function workspaceScope() {
+  return new URLSearchParams(location.search).get("workspace") || "";
+}
+
 function localizedErrorMessage(value, fallback = "操作失败，请稍后重试") {
   const message = String(value || "").trim();
   return /[\u3400-\u9fff]/.test(message) ? message : fallback;
@@ -37,7 +41,7 @@ function localizedErrorMessage(value, fallback = "操作失败，请稍后重试
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: { "Content-Type": "application/json", "X-DClaw-Workspace": workspaceScope(), ...options.headers },
     body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body
   });
   if (!response.ok) {
@@ -90,8 +94,10 @@ const tagEditor = createTagEditor({
 });
 
 async function bootstrap() {
-  const workspaceId = new URLSearchParams(location.search).get("workspace") || "";
-  const sessionResponse = await fetch(`/api/admin/auth/session${workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : ""}`);
+  const workspaceId = workspaceScope();
+  const sessionResponse = await fetch(`/api/admin/auth/session${workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : ""}`, {
+    headers: { "X-DClaw-Workspace": workspaceId }
+  });
   const session = await sessionResponse.json();
   if (!session.authenticated) {
     redirectToAdminLogin();
@@ -105,7 +111,7 @@ async function bootstrap() {
 }
 
 function redirectToAdminLogin() {
-  const workspaceId = new URLSearchParams(location.search).get("workspace") || "";
+  const workspaceId = workspaceScope();
   const params = new URLSearchParams();
   if (workspaceId) params.set("workspace", workspaceId);
   params.set("returnTo", `${location.pathname}${location.search}`);
@@ -114,7 +120,7 @@ function redirectToAdminLogin() {
 }
 
 async function loadAccounts(preferredId = state.account?.id) {
-  const workspaceId = new URLSearchParams(location.search).get("workspace") || "";
+  const workspaceId = workspaceScope();
   const data = await api(`/api/accounts${workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : ""}`);
   state.accounts = data.items;
   state.employees = groupEmployeeAccounts(state.accounts);
@@ -587,7 +593,7 @@ function clearManualReplyFiles() {
 async function uploadManualReplyFile(file) {
   const response = await fetch("/api/admin/media", {
     method: "POST",
-    headers: { "Content-Type": file.type, "X-File-Name": encodeURIComponent(file.name) },
+    headers: { "Content-Type": file.type, "X-File-Name": encodeURIComponent(file.name), "X-DClaw-Workspace": workspaceScope() },
     body: file
   });
   const data = await response.json().catch(() => ({}));

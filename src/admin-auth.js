@@ -3,11 +3,14 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 const COOKIE_NAME = "dclaw_admin_session";
 const LEGACY_PREVIEW_COOKIE_NAME = "dclaw_preview_session";
 const PREVIEW_COOKIE_PREFIX = "dclaw_preview_session_";
+const WORKSPACE_CONSOLE_COOKIE_PREFIX = "dclaw_workspace_console_session_";
 const PASSWORD_MIN_LENGTH = 8;
 const PERMANENT_SESSION_EXPIRY = "9999-12-31T23:59:59.999Z";
 const PERSISTENT_COOKIE_MAX_AGE_MS = 400 * 24 * 60 * 60 * 1000;
 const PREVIEW_LAUNCH_TICKET_TTL_MS = 2 * 60 * 1000;
 const PREVIEW_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const WORKSPACE_CONSOLE_LAUNCH_TICKET_TTL_MS = 2 * 60 * 1000;
+const WORKSPACE_CONSOLE_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export class AdminAuth {
   constructor({ store, platformPassword = "", required = false, sessionTtlHours = 0 } = {}) {
@@ -24,11 +27,18 @@ export class AdminAuth {
     if (!this.required) return { authenticated: true, authRequired: false, role: "platform", workspaceId: null };
     const token = cookieValue(req, COOKIE_NAME);
     const row = token ? this.store.getAdminSession(tokenHash(token)) : null;
-    if (!row) return { authenticated: false, authRequired: true, role: null, workspaceId: requestedWorkspaceId || null };
-    if (requestedWorkspaceId && row.scopeType === "workspace" && row.workspaceId !== requestedWorkspaceId) {
-      return { authenticated: false, authRequired: true, role: null, workspaceId: requestedWorkspaceId };
+    if (row && (!requestedWorkspaceId || row.scopeType === "platform" || row.workspaceId === requestedWorkspaceId)) {
+      return sessionView(row, true);
     }
-    return sessionView(row, true);
+    if (requestedWorkspaceId) {
+      const workspace = this.store.getWorkspace(requestedWorkspaceId);
+      const consoleToken = workspace ? cookieValue(req, workspaceConsoleCookieName(workspace)) : "";
+      const consoleSession = consoleToken ? this.store.getAdminSession(tokenHash(consoleToken)) : null;
+      if (consoleSession?.scopeType === "workspace" && consoleSession.workspaceId === requestedWorkspaceId) {
+        return sessionView(consoleSession, true);
+      }
+    }
+    return { authenticated: false, authRequired: true, role: null, workspaceId: requestedWorkspaceId || null };
   }
 
   login(req, res, { workspaceId = "", password = "" } = {}) {
@@ -77,13 +87,17 @@ export class AdminAuth {
     if (token) this.store.deleteAdminSession(tokenHash(token));
     const previewCookies = cookieEntries(req).filter(([name]) => name === LEGACY_PREVIEW_COOKIE_NAME || name.startsWith(PREVIEW_COOKIE_PREFIX));
     for (const [, previewToken] of previewCookies) if (previewToken) this.store.deletePreviewSession(tokenHash(previewToken));
+    const consoleCookies = cookieEntries(req).filter(([name]) => name.startsWith(WORKSPACE_CONSOLE_COOKIE_PREFIX));
+    for (const [, consoleToken] of consoleCookies) if (consoleToken) this.store.deleteAdminSession(tokenHash(consoleToken));
     clearSessionCookie(req, res);
     for (const [name] of previewCookies) clearPreviewCookie(req, res, name);
     if (!previewCookies.some(([name]) => name === LEGACY_PREVIEW_COOKIE_NAME)) clearPreviewCookie(req, res, LEGACY_PREVIEW_COOKIE_NAME);
+    for (const [name] of consoleCookies) clearWorkspaceConsoleCookie(req, res, name);
   }
 
   requireSession(req, res, next) {
-    const session = this.session(req);
+    const requestedWorkspaceId = String(req.header("x-dclaw-workspace") || req.query.workspace || "").trim();
+    const session = this.session(req, requestedWorkspaceId);
     if (!session.authenticated) return res.status(401).json({ error: "请先登录管理后台", code: "ADMIN_LOGIN_REQUIRED" });
     req.adminSession = session;
     next();
@@ -111,6 +125,27 @@ export class AdminAuth {
     return { token, expiresAt };
   }
 
+  issueWorkspaceConsoleLaunch(session, workspaceId) {
+    if (!session?.authenticated) throw unauthorized("工作区访问权限无效");
+    const workspace = this.store.getWorkspace(String(workspaceId || ""));
+    if (!workspace || !workspace.enabled) throw notFound("工作区不存在或已停用");
+    if (session.role === "workspace" && workspace.id !== session.workspaceId) throw forbidden("无权打开其他工作区");
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + WORKSPACE_CONSOLE_LAUNCH_TICKET_TTL_MS).toISOString();
+    this.store.createWorkspaceConsoleLaunchTicket({ tokenHash: tokenHash(token), workspaceId: workspace.id, expiresAt });
+    return { token, expiresAt };
+  }
+
+  redeemWorkspaceConsoleLaunch(req, res, token) {
+    const ticket = this.store.redeemWorkspaceConsoleLaunchTicket(tokenHash(token));
+    if (!ticket) throw gone("工作区启动链接已过期，请从管理后台重新打开");
+    const sessionToken = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + WORKSPACE_CONSOLE_SESSION_TTL_MS).toISOString();
+    this.store.createAdminSession({ tokenHash: tokenHash(sessionToken), scopeType: "workspace", workspaceId: ticket.workspaceId, expiresAt });
+    setWorkspaceConsoleCookie(req, res, workspaceConsoleCookieName({ id: ticket.workspaceId, slug: ticket.workspaceSlug }), sessionToken, WORKSPACE_CONSOLE_SESSION_TTL_MS);
+    return { ...ticket, launchPath: `/console/?workspace=${encodeURIComponent(ticket.workspaceId)}`, expiresAt };
+  }
+
   redeemPreviewLaunch(req, res, token) {
     const ticket = this.store.redeemPreviewLaunchTicket(tokenHash(token));
     if (!ticket) throw gone("预览启动链接已过期，请从管理后台重新打开");
@@ -134,6 +169,7 @@ export class AdminAuth {
     this.store.setWorkspacePasswordHash(workspaceId, hashPassword(normalized));
     this.store.deleteWorkspaceAdminSessions(workspaceId);
     this.store.deleteWorkspacePreviewAccess(workspaceId);
+    this.store.deleteWorkspaceConsoleLaunchTickets(workspaceId);
   }
 
   validateWorkspacePassword(password) {
@@ -226,6 +262,11 @@ function previewCookieName(workspace) {
   return `${PREVIEW_COOKIE_PREFIX}${scope}`;
 }
 
+function workspaceConsoleCookieName(workspace) {
+  const scope = String(workspace?.slug || workspace?.id || "workspace").replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80);
+  return `${WORKSPACE_CONSOLE_COOKIE_PREFIX}${scope}`;
+}
+
 function setSessionCookie(req, res, token, maxAgeMs) {
   const secure = req.secure || String(req.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim() === "https";
   res.setHeader("Set-Cookie", `${COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(maxAgeMs / 1000)}${secure ? "; Secure" : ""}`);
@@ -244,6 +285,16 @@ function setPreviewCookie(req, res, name, token, maxAgeMs) {
 function clearPreviewCookie(req, res, name) {
   const secure = req.secure || String(req.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim() === "https";
   res.append("Set-Cookie", `${name}=; Path=/api/admin; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`);
+}
+
+function setWorkspaceConsoleCookie(req, res, name, token, maxAgeMs) {
+  const secure = req.secure || String(req.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim() === "https";
+  res.append("Set-Cookie", `${name}=${encodeURIComponent(token)}; Path=/api; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(maxAgeMs / 1000)}${secure ? "; Secure" : ""}`);
+}
+
+function clearWorkspaceConsoleCookie(req, res, name) {
+  const secure = req.secure || String(req.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim() === "https";
+  res.append("Set-Cookie", `${name}=; Path=/api; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`);
 }
 
 function sessionView(row, authRequired) {

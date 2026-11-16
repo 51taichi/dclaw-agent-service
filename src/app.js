@@ -94,6 +94,11 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
     res.redirect(303, launch.launchPath);
   });
+  app.get("/api/workspace-console-launch/:token", (req, res) => {
+    const launch = adminAuth.redeemWorkspaceConsoleLaunch(req, res, req.params.token);
+    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+    res.redirect(303, launch.launchPath);
+  });
   app.use((req, res, next) => {
     if (!isManagementApi(req.path)) return next();
     if (isPreviewApi(req.path) && adminAuth.authorizePreview(req)) return next();
@@ -113,6 +118,11 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     res.status(201).json(store.getWorkspace(workspace.id));
   });
   app.get("/api/admin/workspaces/:workspaceId", (req, res) => respondFound(res, store.getWorkspace(req.params.workspaceId)));
+  app.post("/api/admin/workspaces/:workspaceId/console-launch", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const launch = adminAuth.issueWorkspaceConsoleLaunch(req.adminSession, req.params.workspaceId);
+    res.json({ launchUrl: workspaceConsoleLaunchUrl(config.publicBaseUrl, req, launch.token), expiresAt: launch.expiresAt });
+  });
   app.put("/api/admin/workspaces/:workspaceId", (req, res) => {
     const body = req.body || {};
     if (body.adminPassword !== undefined && req.adminSession.role !== "platform") return res.status(403).json({ error: "只有平台管理员可以设置工作区密码" });
@@ -120,6 +130,11 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     const workspace = store.updateWorkspace(req.params.workspaceId, body);
     if (!workspace) return respondFound(res, null);
     if (body.adminPassword) adminAuth.setWorkspacePassword(req.params.workspaceId, body.adminPassword);
+    if (!workspace.enabled) {
+      store.deleteWorkspaceAdminSessions(workspace.id);
+      store.deleteWorkspacePreviewAccess(workspace.id);
+      store.deleteWorkspaceConsoleLaunchTickets(workspace.id);
+    }
     res.json(store.getWorkspace(req.params.workspaceId));
   });
   app.get("/api/admin/workspaces/:workspaceId/people", (req, res) => res.json({ items: store.listPeople(req.params.workspaceId) }));
@@ -390,6 +405,11 @@ function isPreviewApi(pathname) {
 function previewLaunchUrl(publicBaseUrl, req, token) {
   const fallback = `${req.protocol}://${req.get("host")}`;
   return new URL(`/api/preview-launch/${encodeURIComponent(token)}`, publicBaseUrl || fallback).toString();
+}
+
+function workspaceConsoleLaunchUrl(publicBaseUrl, req, token) {
+  const fallback = `${req.protocol}://${req.get("host")}`;
+  return new URL(`/api/workspace-console-launch/${encodeURIComponent(token)}`, publicBaseUrl || fallback).toString();
 }
 
 function workspaceScopeDenial(req, store) {

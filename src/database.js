@@ -259,6 +259,15 @@ function migrate(db) {
       created_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
+    CREATE TABLE IF NOT EXISTS workspace_console_launch_tickets (
+      token_hash TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      redemption_count INTEGER NOT NULL DEFAULT 0,
+      first_redeemed_at TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
     CREATE TABLE IF NOT EXISTS people (
       id TEXT PRIMARY KEY,
       workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -404,6 +413,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_preview_launch_tickets_expiry ON preview_launch_tickets(expires_at);
     CREATE INDEX IF NOT EXISTS idx_preview_sessions_expiry ON preview_sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_workspace_console_launch_tickets_expiry ON workspace_console_launch_tickets(expires_at);
   `);
 
   ensureColumn(db, "state_machine_configs", "enabled", "INTEGER NOT NULL DEFAULT 0");

@@ -96,10 +96,6 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .workspace-detail-pane { min-width: 0; }
 .workspace-form-actions { justify-content: flex-end; }
 .form-actions-end { justify-content: flex-end; }
-.workspace-form-actions a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; text-decoration: none; }
-.workspace-form-actions a.primary { border: 0; border-radius: 6px; background: linear-gradient(90deg, var(--accent), #2847f0 54%, var(--cyan)); color: #fff; box-shadow: 0 10px 24px rgba(42,48,216,.18); }
-.workspace-form-actions a.primary:hover { background: linear-gradient(90deg, var(--accent-dark), var(--accent), var(--cyan)); box-shadow: 0 12px 28px rgba(42,48,216,.22); }
-
 .admin-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .admin-form > label:not(.toggle-line), .dynamic-fields > label:not(.config-toggle), .binding-card > label:not(.toggle-line), .person-binding-card > label { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: stretch; min-width: 0; border: 1px solid #dce1ec; border-radius: 6px; overflow: hidden; background: #fff; }
 .admin-form label > span:first-child, .dynamic-fields label > span:first-child, .binding-fields label > span:first-child { display: flex; align-items: center; gap: 7px; padding: 0 11px; background: #f0f3fb; color: #39445d; font-size: 12px; font-weight: 800; white-space: nowrap; }
@@ -107,8 +103,8 @@ button, a.secondary, .asset-file-button { flex: 0 0 auto; white-space: nowrap; }
 .admin-form input, .admin-form select, .admin-form textarea, .dynamic-fields input, .dynamic-fields select, .dynamic-fields textarea, .binding-card input, .person-binding-card select { min-width: 0; width: 100%; padding: 10px 12px; border: 0; outline: 0; background: #fff; color: #202842; font: inherit; resize: vertical; }
 .admin-form input, .admin-form select, .dynamic-fields input, .dynamic-fields select, .binding-card input, .person-binding-card select { min-height: 42px; }
 .admin-form input[type="color"], .dynamic-fields input[type="color"] { padding: 6px 12px; }
-.field-control-with-rule { display: grid; min-width: 0; background: #fff; }
-.field-control-with-rule small { padding: 0 12px 9px; color: #6d7890; font-size: 11px; line-height: 1.45; }
+.field-control-with-rule { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-width: 0; min-height: 42px; background: #fff; }
+.field-control-with-rule small { padding: 0 12px 0 4px; color: #6d7890; font-size: 11px; line-height: 1.45; white-space: nowrap; }
 .field-control-with-rule input:invalid:not(:placeholder-shown) { color: #bd2534; }
 .field-control-with-rule:has(input:invalid:not(:placeholder-shown)) small { color: #bd2534; }
 .wide { grid-column: 1 / -1; }

@@ -218,3 +218,145 @@ test("channel preview launch redirects establish the same workspace session", as
   const sameWorkspaceChannel = await request(app, "/api/admin/channels/dingmai-miniapp/preview", { cookie: exchanged.cookie });
   assert.equal(sameWorkspaceChannel.response.status, 200);
 });
+
+test("workspace console launch creates a reusable isolated 30-day session", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
+  const issued = await request(app, "/api/admin/workspaces/dingmai/console-launch", {
+    method: "POST",
+    cookie: login.cookie
+  });
+  assert.equal(issued.response.status, 200);
+  assert.equal(issued.response.headers.get("cache-control"), "no-store");
+  const launchUrl = new URL(issued.data.launchUrl);
+  assert.equal(launchUrl.origin, app.baseUrl);
+  assert.match(launchUrl.pathname, /^\/api\/workspace-console-launch\/[A-Za-z0-9_-]{43}$/);
+  assert.equal(launchUrl.search, "");
+
+  const exchanged = await request(app, launchUrl.pathname, {
+    redirect: "manual",
+    headers: { "x-forwarded-proto": "https" }
+  });
+  assert.equal(exchanged.response.status, 303);
+  assert.equal(exchanged.response.headers.get("location"), "/console/?workspace=dingmai");
+  assert.equal(exchanged.response.headers.get("cache-control"), "no-store");
+  assert.equal(exchanged.response.headers.get("referrer-policy"), "no-referrer");
+  assert.match(exchanged.cookie, /^dclaw_workspace_console_session_dingmai=/);
+  assert.match(exchanged.setCookie, /Path=\/api/);
+  assert.match(exchanged.setCookie, /HttpOnly/);
+  assert.match(exchanged.setCookie, /SameSite=Lax/);
+  assert.match(exchanged.setCookie, /Max-Age=2592000/);
+  assert.match(exchanged.setCookie, /Secure/);
+
+  const reused = await request(app, launchUrl.pathname, { redirect: "manual" });
+  assert.equal(reused.response.status, 303);
+  assert.match(reused.cookie, /^dclaw_workspace_console_session_dingmai=/);
+  assert.notEqual(reused.cookie, exchanged.cookie);
+
+  const session = await request(app, "/api/admin/auth/session?workspace=dingmai", { cookie: exchanged.cookie });
+  assert.equal(session.data.authenticated, true);
+  assert.equal(session.data.role, "workspace");
+  assert.equal(session.data.workspaceId, "dingmai");
+
+  const ownAccounts = await request(app, "/api/accounts?workspace=dingmai", {
+    cookie: exchanged.cookie,
+    headers: { "x-dclaw-workspace": "dingmai" }
+  });
+  assert.equal(ownAccounts.response.status, 200);
+  assert.ok(ownAccounts.data.items.every((item) => item.workspaceId === "dingmai"));
+
+  app.store.createWorkspace({ id: "other-workspace", slug: "other-workspace", name: "其他工作区" });
+  const otherWorkspace = await request(app, "/api/admin/workspaces/other-workspace", {
+    cookie: exchanged.cookie,
+    headers: { "x-dclaw-workspace": "dingmai" }
+  });
+  assert.equal(otherWorkspace.response.status, 403);
+  const workspaceList = await request(app, "/api/admin/workspaces", {
+    cookie: exchanged.cookie,
+    headers: { "x-dclaw-workspace": "dingmai" }
+  });
+  assert.deepEqual(workspaceList.data.items.map((item) => item.id), ["dingmai"]);
+  const platformMutation = await request(app, "/api/admin/workspaces", {
+    method: "POST",
+    cookie: exchanged.cookie,
+    headers: { "x-dclaw-workspace": "dingmai" },
+    body: { id: "forbidden", slug: "forbidden", name: "无权限" }
+  });
+  assert.equal(platformMutation.response.status, 403);
+
+  app.db.prepare("UPDATE workspace_console_launch_tickets SET expires_at = ?").run("2000-01-01T00:00:00.000Z");
+  const expired = await request(app, launchUrl.pathname, { redirect: "manual" });
+  assert.equal(expired.response.status, 410);
+});
+
+test("workspace console launch tickets survive a service restart", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "dclaw-console-launch-persistence-"));
+  const databasePath = path.join(directory, "persistent.sqlite");
+  let launchPath = "";
+  const first = await fixture({ databasePath });
+  try {
+    const login = await request(first, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
+    const issued = await request(first, "/api/admin/workspaces/dingmai/console-launch", { method: "POST", cookie: login.cookie });
+    launchPath = new URL(issued.data.launchUrl).pathname;
+  } finally {
+    await first.close();
+  }
+
+  const second = await fixture({ databasePath });
+  try {
+    const exchanged = await request(second, launchPath, { redirect: "manual" });
+    assert.equal(exchanged.response.status, 303);
+    const session = await request(second, "/api/admin/auth/session?workspace=dingmai", { cookie: exchanged.cookie });
+    assert.equal(session.data.authenticated, true);
+    assert.equal(session.data.workspaceId, "dingmai");
+  } finally {
+    await second.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("workspace console access is invalidated by disablement and password changes", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+  const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
+
+  const firstIssue = await request(app, "/api/admin/workspaces/dingmai/console-launch", { method: "POST", cookie: login.cookie });
+  const firstPath = new URL(firstIssue.data.launchUrl).pathname;
+  const firstExchange = await request(app, firstPath, { redirect: "manual" });
+  await request(app, "/api/admin/workspaces/dingmai", { method: "PUT", cookie: login.cookie, body: { enabled: false } });
+  const disabledSession = await request(app, "/api/admin/auth/session?workspace=dingmai", { cookie: firstExchange.cookie });
+  assert.equal(disabledSession.data.authenticated, false);
+  assert.equal((await request(app, firstPath, { redirect: "manual" })).response.status, 410);
+
+  await request(app, "/api/admin/workspaces/dingmai", { method: "PUT", cookie: login.cookie, body: { enabled: true } });
+  const secondIssue = await request(app, "/api/admin/workspaces/dingmai/console-launch", { method: "POST", cookie: login.cookie });
+  const secondPath = new URL(secondIssue.data.launchUrl).pathname;
+  const secondExchange = await request(app, secondPath, { redirect: "manual" });
+  await request(app, "/api/admin/workspaces/dingmai", {
+    method: "PUT",
+    cookie: login.cookie,
+    body: { adminPassword: "replacement-password" }
+  });
+  const changedSession = await request(app, "/api/admin/auth/session?workspace=dingmai", { cookie: secondExchange.cookie });
+  assert.equal(changedSession.data.authenticated, false);
+  assert.equal((await request(app, secondPath, { redirect: "manual" })).response.status, 410);
+});
+
+test("deleting a workspace cascades its console tickets and sessions", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+  const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
+  app.store.createWorkspace({ id: "temporary-workspace", slug: "temporary-workspace", name: "临时工作区" });
+  const issued = await request(app, "/api/admin/workspaces/temporary-workspace/console-launch", { method: "POST", cookie: login.cookie });
+  const launchPath = new URL(issued.data.launchUrl).pathname;
+  const exchanged = await request(app, launchPath, { redirect: "manual" });
+
+  app.db.prepare("DELETE FROM workspaces WHERE id = ?").run("temporary-workspace");
+  assert.equal(app.db.prepare("SELECT COUNT(*) AS count FROM workspace_console_launch_tickets WHERE workspace_id = ?").get("temporary-workspace").count, 0);
+  assert.equal(app.db.prepare("SELECT COUNT(*) AS count FROM admin_sessions WHERE workspace_id = ?").get("temporary-workspace").count, 0);
+  const session = await request(app, "/api/admin/auth/session?workspace=temporary-workspace", { cookie: exchanged.cookie });
+  assert.equal(session.data.authenticated, false);
+  assert.equal((await request(app, launchPath, { redirect: "manual" })).response.status, 410);
+});
