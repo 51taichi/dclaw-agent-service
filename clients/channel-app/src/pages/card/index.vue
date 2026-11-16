@@ -47,13 +47,14 @@
         </view>
 
         <text class="ai-page-disclosure front-disclosure" role="note">本服务为AI生成内容，结果仅供参考</text>
-        <scroll-view class="conversation-scroll" scroll-y :scroll-into-view="frontScrollTarget" upper-threshold="40" @scrolltoupper="loadEarlierHistory('front')">
+        <scroll-view class="conversation-scroll" scroll-y :scroll-into-view="frontScrollTarget" upper-threshold="40" lower-threshold="40" @scroll="handleConversationScroll('front', $event)" @scrolltoupper="loadEarlierHistory('front')" @scrolltolower="markConversationBottom('front')">
           <view class="conversation-list">
             <view v-if="frontHistoryState.loading" class="history-loading">正在加载更早消息...</view>
             <view v-for="item in frontMessages" :id="historyAnchorId('front', item)" :key="item.id" class="history-item"><ConversationItem :item="item" @action="handleAction" @question="sendFrontText" @choice="submitFrontChoice" @lead="submitFrontLead" @open="openResource" /></view>
             <view id="front-bottom" class="scroll-anchor"></view>
           </view>
         </scroll-view>
+        <button v-if="!frontAtBottom && frontMessages.length" class="jump-latest-button" aria-label="回到最新消息" @tap="jumpToConversationBottom('front')"><AppIcon name="chevron-down" tone="blue" :size="20" /></button>
 
         <view class="composer" :class="{ 'is-recording': recording }">
           <view v-if="recording" class="recording-status" :class="{ 'will-cancel': recordingCanceled }"><view class="recording-dot"></view><text>{{ recordingCanceled ? '松开取消' : '松开发送，上滑取消' }}</text><text class="recording-time">00:{{ String(recordingSeconds).padStart(2, '0') }}</text></view>
@@ -85,7 +86,7 @@
           object-fit="cover"
         />
         <image v-else class="scene-image" :src="assistant.image" mode="aspectFit" />
-        <scroll-view class="assistant-scroll" scroll-y :scroll-into-view="backScrollTarget" upper-threshold="40" @scrolltoupper="loadEarlierHistory('back')">
+        <scroll-view class="assistant-scroll" scroll-y :scroll-into-view="backScrollTarget" upper-threshold="40" lower-threshold="40" @scroll="handleConversationScroll('back', $event)" @scrolltoupper="loadEarlierHistory('back')" @scrolltolower="markConversationBottom('back')">
           <view class="assistant-content">
             <view class="assistant-scene">
               <view class="scene-overlay">
@@ -110,6 +111,7 @@
             </view>
           </view>
         </scroll-view>
+        <button v-if="!companyAtBottom && companyMessages.length" class="jump-latest-button back-jump-latest" aria-label="回到最新消息" @tap="jumpToConversationBottom('back')"><AppIcon name="chevron-down" tone="blue" :size="20" /></button>
 
         <view v-if="voiceEnabled" class="voice-dock"><button class="voice-button" :class="{ active: recording && recordingFace === 'back' }" @touchstart.prevent="startRecording" @touchmove.stop.prevent="moveRecording" @touchend.prevent="finishRecording(false)" @touchcancel.prevent="finishRecording(true)" @mousedown.prevent="startRecording" @mouseup.prevent="finishRecording(false)" @mouseleave="finishRecording(true)"><AppIcon name="mic" tone="white" :size="20" /><text>{{ recording && recordingFace === 'back' ? (recordingCanceled ? '松开取消' : '松开发送，上滑取消') : assistant.voiceLabel }}</text><AppIcon name="keyboard" tone="white" :size="20" /></button><text class="voice-hint" role="note">本服务为AI生成内容，结果仅供参考</text></view>
       </view>
@@ -157,6 +159,7 @@ const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {},
 const SHARE_CANVAS_ID = "share-card-canvas";
 const SHARE_CARD_WIDTH = 500;
 const SHARE_CARD_HEIGHT = 400;
+const HISTORY_DEMO_ENABLED = String(import.meta.env.VITE_HISTORY_DEMO || "") === "1";
 const componentInstance = getCurrentInstance();
 const options = reactive({ slug: "", deployment: "" });
 const data = ref(null);
@@ -176,6 +179,8 @@ const preparedAssets = reactive({});
 const shareCardImage = ref("");
 const frontScrollTarget = ref("");
 const backScrollTarget = ref("");
+const frontAtBottom = ref(true);
+const companyAtBottom = ref(true);
 const outboxAfter = ref(0);
 const companyOutboxAfter = ref(0);
 const recording = ref(false);
@@ -212,6 +217,8 @@ let dragStartRatio = 0;
 let faceSwitchDragged = false;
 let outboxReady = Promise.resolve(null);
 let companyOutboxReady = Promise.resolve(null);
+let frontLastScrollTop = 0;
+let companyLastScrollTop = 0;
 
 const channel = computed(() => data.value?.channel?.config || {});
 const config = computed(() => data.value?.deployment?.config || {});
@@ -619,12 +626,16 @@ async function loadChannel() {
       ...(config.value.resources?.length ? [message("resource-list", { items: config.value.resources })] : [])
     ];
     companyMessages.value = assistantHistory.messages;
-    if (frontHistory.messages.length) scrollConversation(frontScrollTarget, "front-bottom");
   } catch (loadError) {
     error.value = localizedErrorMessage(loadError, "名片加载失败");
   } finally {
     loading.value = false;
-    nextTick(measureStage);
+    nextTick(() => {
+      measureStage();
+      if (frontMessages.value.some((item) => String(item.id || "").startsWith("history-"))) {
+        scrollConversation(frontScrollTarget, "front-bottom");
+      }
+    });
   }
 }
 
@@ -659,8 +670,30 @@ function toggleFace() {
 }
 
 function scrollConversation(targetRef, target) {
+  if (target === "front-bottom") frontAtBottom.value = true;
+  if (target === "back-bottom") companyAtBottom.value = true;
   targetRef.value = "";
   nextTick(() => { targetRef.value = target; });
+}
+
+function handleConversationScroll(surface, event) {
+  const scrollTop = Math.max(0, Number(event?.detail?.scrollTop || 0));
+  if (surface === "back") {
+    if (scrollTop < companyLastScrollTop - 1) companyAtBottom.value = false;
+    companyLastScrollTop = scrollTop;
+    return;
+  }
+  if (scrollTop < frontLastScrollTop - 1) frontAtBottom.value = false;
+  frontLastScrollTop = scrollTop;
+}
+
+function markConversationBottom(surface) {
+  if (surface === "back") companyAtBottom.value = true;
+  else frontAtBottom.value = true;
+}
+
+function jumpToConversationBottom(surface) {
+  scrollConversation(surface === "back" ? backScrollTarget : frontScrollTarget, surface === "back" ? "back-bottom" : "front-bottom");
 }
 
 function appendAgentReply(target, content, attachments = []) {
@@ -678,11 +711,16 @@ function historyEndpointUrl(endpoint, activeConversationId, before = null) {
 }
 
 async function restoreConversationHistory(endpoint, activeConversationId, before = null) {
-  const sessionToken = String(uni.getStorageSync(WECHAT_SESSION_STORAGE_KEY) || "");
-  if (!endpoint || !activeConversationId || !sessionToken) return emptyHistoryPage();
-  const history = await request(historyEndpointUrl(endpoint, activeConversationId, before), {
-    headers: { Authorization: `Bearer ${sessionToken}` }
-  });
+  let history;
+  if (HISTORY_DEMO_ENABLED) {
+    history = demoHistoryResponse(before);
+  } else {
+    const sessionToken = String(uni.getStorageSync(WECHAT_SESSION_STORAGE_KEY) || "");
+    if (!endpoint || !activeConversationId || !sessionToken) return emptyHistoryPage();
+    history = await request(historyEndpointUrl(endpoint, activeConversationId, before), {
+      headers: { Authorization: `Bearer ${sessionToken}` }
+    });
+  }
   const restored = [];
   for (const item of history.items || []) {
     if (item.direction === "inbound") {
@@ -698,6 +736,24 @@ async function restoreConversationHistory(endpoint, activeConversationId, before
     }
   }
   return { messages: restored, pageInfo: history.pageInfo || { hasMore: false, before: null } };
+}
+
+function demoHistoryResponse(before) {
+  const total = 120;
+  const upper = before ? Math.min(total, Number(before) - 1) : total;
+  const lower = Math.max(1, upper - 49);
+  const items = Array.from({ length: Math.max(0, upper - lower + 1) }, (_, index) => {
+    const id = lower + index;
+    const inbound = id % 2 === 1;
+    return {
+      id,
+      direction: inbound ? "inbound" : "outbound",
+      content: inbound ? `历史测试消息 ${id}` : `这是对应的历史回复 ${id}`,
+      attachments: [],
+      createdAt: new Date(Date.now() - (total - id) * 60_000).toISOString()
+    };
+  });
+  return { items, pageInfo: { hasMore: lower > 1, before: lower > 1 ? lower : null } };
 }
 
 function emptyHistoryPage() {
@@ -1007,6 +1063,9 @@ function setTextInputMode() {
 .conversation-list { padding-top: 18rpx; }
 .history-item { display: flex; flex-direction: column; }
 .history-loading { padding: 12rpx 0 20rpx; color: #87909e; font-size: 20rpx; line-height: 30rpx; text-align: center; }
+.jump-latest-button { position: absolute; z-index: 24; bottom: calc(142rpx + env(safe-area-inset-bottom)); left: 50%; display: flex; align-items: center; justify-content: center; width: 64rpx; height: 64rpx; margin: 0; padding: 0; border: 1rpx solid rgba(20,120,242,.16); border-radius: 50%; background: rgba(255,255,255,.92); box-shadow: 0 12rpx 34rpx rgba(18,31,54,.2); transform: translateX(-50%); backdrop-filter: blur(12rpx); -webkit-backdrop-filter: blur(12rpx); }
+.jump-latest-button::after { border: 0; }
+.back-jump-latest { bottom: calc(150rpx + env(safe-area-inset-bottom)); }
 .ai-page-disclosure { display: block; color: #7b8492; font-size: 20rpx; line-height: 30rpx; text-align: center; }
 .front-disclosure { flex: 0 0 auto; padding: 10rpx 24rpx 8rpx; background: #f5f6f8; box-sizing: border-box; }
 .scroll-anchor { width: 1rpx; height: 1rpx; }
