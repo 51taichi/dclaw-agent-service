@@ -232,6 +232,15 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     if (!channel || !accountId) return res.status(404).json({ error: "公司助手不存在" });
     res.json({ items: store.pollOutbox(accountId, publicIdentifier(req.params.conversationId, "conversationId"), clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER, 0)) });
   });
+  app.get("/api/public/channels/:publicSlug/assistant/conversations/:conversationId/history", (req, res) => {
+    const access = workspaceMiniapps.authorizeConversation(req.header("authorization"), {
+      publicSlug: req.params.publicSlug,
+      conversationId: req.params.conversationId,
+      assistant: true
+    });
+    if (!access.accountId) return res.status(404).json({ error: "公司助手不存在" });
+    res.json({ items: publicHistoryItems(store.publicConversationHistory(access.accountId, access.conversationId)) });
+  });
   app.post("/api/public/channels/:publicSlug/media", express.raw({ type: () => true, limit: "12mb" }), asyncHandler(async (req, res) => {
     const channel = store.publicChannel(req.params.publicSlug);
     if (!channel) return res.status(404).json({ error: "渠道不存在" });
@@ -268,6 +277,13 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     if (!channel) return res.status(404).json({ error: "渠道不存在" });
     const conversationId = publicIdentifier(req.params.conversationId, "conversationId");
     res.json({ items: store.pollOutbox(channel.deployment.accountId, conversationId, clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER, 0)) });
+  });
+  app.get("/api/public/channels/:publicSlug/conversations/:conversationId/history", (req, res) => {
+    const access = workspaceMiniapps.authorizeConversation(req.header("authorization"), {
+      publicSlug: req.params.publicSlug,
+      conversationId: req.params.conversationId
+    });
+    res.json({ items: publicHistoryItems(store.publicConversationHistory(access.accountId, access.conversationId)) });
   });
 
   app.get("/api/accounts", (req, res) => res.json({ items: store.listAccounts({ workspaceId: req.adminSession.role === "workspace" ? req.adminSession.workspaceId : String(req.query.workspace || "") }) }));
@@ -541,6 +557,18 @@ async function transcribeInboundAudio({ transcriber, messageType, attachments, r
 
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function publicHistoryItems(items) {
+  return items.map((item) => ({
+    id: item.id,
+    direction: item.direction,
+    senderType: item.senderType,
+    messageType: item.messageType,
+    content: item.content,
+    attachments: Array.isArray(item.metadata?.attachments) ? item.metadata.attachments : [],
+    createdAt: item.createdAt
+  }));
 }
 
 function numberId(value) {

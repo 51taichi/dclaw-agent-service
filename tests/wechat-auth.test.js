@@ -128,6 +128,17 @@ test("wechat login adopts the existing local conversation and preserves its hist
   });
   assert.equal(continued.conversation.id, adopted.id);
   assert.deepEqual(app.store.listMessages(adopted.id).map((item) => item.content), ["这是升级前的历史消息", "这是升级后的新消息"]);
+
+  const history = await jsonRequest(app.baseUrl, `/api/public/channels/dingmai-assistant/conversations/${encodeURIComponent(login.data.identity.conversationId)}/history`, {
+    headers: { authorization: `Bearer ${login.data.sessionToken}` }
+  });
+  assert.equal(history.response.status, 200);
+  assert.deepEqual(history.data.items.map((item) => item.content), ["这是升级前的历史消息", "这是升级后的新消息"]);
+
+  const denied = await jsonRequest(app.baseUrl, "/api/public/channels/dingmai-assistant/conversations/wechat:someone-else:person/history", {
+    headers: { authorization: `Bearer ${login.data.sessionToken}` }
+  });
+  assert.equal(denied.response.status, 401);
 });
 
 test("wechat profile update rejects an invalid session", async (t) => {

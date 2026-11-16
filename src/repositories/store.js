@@ -1065,6 +1065,18 @@ export class Store {
     }));
   }
 
+  publicConversationHistory(accountId, externalConversationId, limit = 200) {
+    const conversation = this.db.prepare("SELECT id FROM conversations WHERE account_id = ? AND external_conversation_id = ?")
+      .get(String(accountId || ""), String(externalConversationId || ""));
+    if (!conversation) return [];
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 500));
+    return this.db.prepare(`
+      SELECT * FROM (
+        SELECT * FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?
+      ) ORDER BY id
+    `).all(conversation.id, safeLimit).map(messageView);
+  }
+
   recordInbound(event) {
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -1678,8 +1690,10 @@ function channelEndpoints(accountId, provider, publicSlug, { deploymentId = "", 
     publicMessages: `/api/public/channels/${publicSlug}/messages`,
     publicMedia: `/api/public/channels/${publicSlug}/media`,
     publicOutbox: `/api/public/channels/${publicSlug}/conversations/{conversationId}/outbox?after=0`,
+      publicHistory: `/api/public/channels/${publicSlug}/conversations/{conversationId}/history`,
     assistantMessages: assistantAccountId ? `/api/public/channels/${publicSlug}/assistant/messages` : "",
     assistantOutbox: assistantAccountId ? `/api/public/channels/${publicSlug}/assistant/conversations/{conversationId}/outbox?after=0` : "",
+      assistantHistory: assistantAccountId ? `/api/public/channels/${publicSlug}/assistant/conversations/{conversationId}/history` : "",
     inbound: `/api/channels/${provider}/${accountId}/events`,
     outbox: `/api/channels/${provider}/${accountId}/conversations/{conversationId}/outbox?after=0`,
     receipts: `/api/channels/${provider}/${accountId}/receipts`

@@ -603,11 +603,16 @@ async function loadChannel() {
     await prepareShareCard();
     const welcome = config.value.welcomeMessage || `您好，我是${profile.value.name}，很高兴认识您。`;
     const biography = config.value.biography || `我是${profile.value.name}，将结合${companyName.value}的业务资料，为您提供清晰、准确的解答。`;
-    frontMessages.value = [
+    const [frontHistory, assistantHistory] = await Promise.all([
+      restoreConversationHistory(data.value?.endpoints?.publicHistory, conversationId).catch(() => []),
+      restoreConversationHistory(data.value?.endpoints?.assistantHistory, companyConversationId).catch(() => [])
+    ]);
+    frontMessages.value = frontHistory.length ? frontHistory : [
       message("assistant-response", { content: `${welcome}\n\n${biography}` }),
       ...(config.value.suggestedQuestions?.length ? [message("suggestion-chips", { items: config.value.suggestedQuestions })] : []),
       ...(config.value.resources?.length ? [message("resource-list", { items: config.value.resources })] : [])
     ];
+    companyMessages.value = assistantHistory;
   } catch (loadError) {
     error.value = localizedErrorMessage(loadError, "名片加载失败");
   } finally {
@@ -658,6 +663,33 @@ function appendAgentReply(target, content, attachments = []) {
     else if (attachment.type === "card") target.value.push(message("attachment-card", { attachment }));
     else target.value.push(message("attachment", { attachment }));
   }
+}
+
+function historyEndpointUrl(endpoint, activeConversationId) {
+  return String(endpoint || "").replace("{conversationId}", encodeURIComponent(activeConversationId));
+}
+
+async function restoreConversationHistory(endpoint, activeConversationId) {
+  const sessionToken = String(uni.getStorageSync(WECHAT_SESSION_STORAGE_KEY) || "");
+  if (!endpoint || !activeConversationId || !sessionToken) return [];
+  const history = await request(historyEndpointUrl(endpoint, activeConversationId), {
+    headers: { Authorization: `Bearer ${sessionToken}` }
+  });
+  const restored = [];
+  for (const item of history.items || []) {
+    if (item.direction === "inbound") {
+      restored.push(message("message", { id: `history-${item.id}`, role: "customer", content: item.content || "[已发送消息]" }));
+      continue;
+    }
+    if (item.content) restored.push(message("assistant-response", { id: `history-${item.id}-reply`, content: item.content }));
+    for (const [index, attachment] of (item.attachments || []).entries()) {
+      const id = `history-${item.id}-attachment-${index}`;
+      if (["single-choice", "multi-choice", "lead-form"].includes(attachment.type)) restored.push(message(attachment.type, { id, ...attachment }));
+      else if (attachment.type === "card") restored.push(message("attachment-card", { id, attachment }));
+      else restored.push(message("attachment", { id, attachment }));
+    }
+  }
+  return restored;
 }
 
 function conversationOutboxUrl(endpoint, activeConversationId, after) {

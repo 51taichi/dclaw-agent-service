@@ -98,6 +98,34 @@ export class WorkspaceMiniappService {
     return this.store.saveWechatVisitorProfile(identity.workspaceId, identity.appId, identity.openid, input);
   }
 
+  authorizeConversation(authorization, { publicSlug = "", deploymentId = "", conversationId = "", assistant = false } = {}) {
+    const scope = this.store.resolveMiniappWorkspace({ publicSlug, deploymentId });
+    if (!scope) {
+      const error = new Error("智能名片不存在或未开通");
+      error.status = 404;
+      throw error;
+    }
+    const tokenScope = WechatAuth.peekScope(authorization);
+    if (tokenScope.workspaceId !== scope.workspaceId) throw unauthorized("微信登录状态与当前名片不匹配");
+    const config = this.requirePrivateConfig(scope.workspaceId);
+    if (config.appId !== tokenScope.appId) throw unauthorized("微信登录状态与当前小程序不匹配");
+    const auth = new WechatAuth({
+      appId: config.appId,
+      appSecret: config.appSecret,
+      sessionTtlDays: this.sessionTtlDays,
+      fetchImpl: this.fetchImpl,
+      tokenScope: { workspaceId: scope.workspaceId, appId: config.appId }
+    });
+    const identity = auth.verifyAuthorization(authorization);
+    const visitorId = auth.visitorId(identity.openid);
+    const expectedConversationId = `wechat:${visitorId}:${assistant ? "assistant" : "person"}`;
+    if (String(conversationId || "") !== expectedConversationId) throw unauthorized("无权读取该会话记录");
+    return {
+      accountId: assistant ? scope.assistantAccountId : scope.accountId,
+      conversationId: expectedConversationId
+    };
+  }
+
   requirePrivateConfig(workspaceId) {
     const config = this.store.getWorkspaceMiniapp(workspaceId, { includeSecrets: true });
     if (!config?.encryptedAppSecret) {
