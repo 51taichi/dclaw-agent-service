@@ -25,7 +25,7 @@ export function loadConfig(env = process.env) {
     credentialEncryptionKey: env.CREDENTIAL_ENCRYPTION_KEY || "",
     platformAdminPassword,
     adminAuthRequired,
-    adminSessionTtlHours: positiveInteger(env.ADMIN_SESSION_TTL_HOURS, 12)
+    adminSessionTtlHours: nonNegativeInteger(env.ADMIN_SESSION_TTL_HOURS, 0)
   });
 }
 
@@ -37,4 +37,9 @@ function booleanValue(value, fallback) {
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function nonNegativeInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }

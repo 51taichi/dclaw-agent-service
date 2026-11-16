@@ -6,7 +6,7 @@ import fs from "node:fs";
 import { once } from "node:events";
 import { createApp } from "../src/app.js";
 
-async function fixture() {
+async function fixture(overrides = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "dclaw-admin-auth-"));
   const context = createApp({
     databasePath: path.join(directory, "test.sqlite"),
@@ -16,7 +16,8 @@ async function fixture() {
     wechatSessionTtlDays: 30,
     adminAuthRequired: true,
     platformAdminPassword: "platform-password",
-    adminSessionTtlHours: 12
+    adminSessionTtlHours: 12,
+    ...overrides
   });
   const server = context.app.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -38,7 +39,8 @@ async function request(app, pathname, { cookie = "", ...options } = {}) {
     body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body
   });
   const data = response.status === 204 ? null : await response.json();
-  return { response, data, cookie: response.headers.get("set-cookie")?.split(";", 1)[0] || "" };
+  const setCookie = response.headers.get("set-cookie") || "";
+  return { response, data, cookie: setCookie.split(";", 1)[0] || "", setCookie };
 }
 
 test("admin authentication separates platform and workspace permissions", async (t) => {
@@ -139,4 +141,17 @@ test("expired admin sessions are rejected and removed", async (t) => {
   const session = await request(app, "/api/admin/auth/session", { cookie: login.cookie });
   assert.equal(session.data.authenticated, false);
   assert.equal(app.db.prepare("SELECT COUNT(*) AS count FROM admin_sessions").get().count, 0);
+});
+
+test("admin sessions can remain valid without an hourly expiry", async (t) => {
+  const app = await fixture({ adminSessionTtlHours: 0 });
+  t.after(() => app.close());
+  const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
+  assert.equal(login.response.status, 200);
+  assert.equal(login.data.expiresAt, null);
+  assert.match(login.setCookie, /Max-Age=34560000/);
+  assert.equal(app.db.prepare("SELECT expires_at AS expiresAt FROM admin_sessions").get().expiresAt, "9999-12-31T23:59:59.999Z");
+  const session = await request(app, "/api/admin/auth/session", { cookie: login.cookie });
+  assert.equal(session.data.authenticated, true);
+  assert.equal(session.data.expiresAt, null);
 });

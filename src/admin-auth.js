@@ -2,13 +2,16 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 
 const COOKIE_NAME = "dclaw_admin_session";
 const PASSWORD_MIN_LENGTH = 8;
+const PERMANENT_SESSION_EXPIRY = "9999-12-31T23:59:59.999Z";
+const PERSISTENT_COOKIE_MAX_AGE_MS = 400 * 24 * 60 * 60 * 1000;
 
 export class AdminAuth {
-  constructor({ store, platformPassword = "", required = false, sessionTtlHours = 12 } = {}) {
+  constructor({ store, platformPassword = "", required = false, sessionTtlHours = 0 } = {}) {
     this.store = store;
     this.platformPassword = String(platformPassword || "");
     this.required = Boolean(required);
-    this.sessionTtlMs = Math.max(1, Number(sessionTtlHours) || 12) * 60 * 60 * 1000;
+    const ttlHours = Number(sessionTtlHours);
+    this.sessionTtlMs = Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours * 60 * 60 * 1000 : 0;
     this.failures = new Map();
     if (this.required && !this.platformPassword) throw new Error("启用后台登录后必须配置平台管理员密码");
   }
@@ -52,16 +55,16 @@ export class AdminAuth {
     const existingToken = cookieValue(req, COOKIE_NAME);
     if (existingToken) this.store.deleteAdminSession(tokenHash(existingToken));
     const token = randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + this.sessionTtlMs).toISOString();
+    const expiresAt = this.sessionTtlMs ? new Date(Date.now() + this.sessionTtlMs).toISOString() : PERMANENT_SESSION_EXPIRY;
     this.store.createAdminSession({ tokenHash: tokenHash(token), scopeType, workspaceId: workspace?.id || null, expiresAt });
-    setSessionCookie(req, res, token, this.sessionTtlMs);
+    setSessionCookie(req, res, token, this.sessionTtlMs || PERSISTENT_COOKIE_MAX_AGE_MS);
     return {
       authenticated: true,
       authRequired: true,
       role: scopeType,
       workspaceId: workspace?.id || null,
       workspace: workspace ? workspaceSummary(workspace) : null,
-      expiresAt
+      expiresAt: this.sessionTtlMs ? expiresAt : null
     };
   }
 
@@ -171,7 +174,7 @@ function sessionView(row, authRequired) {
     role: row.scopeType,
     workspaceId: row.workspaceId || null,
     workspace: row.workspaceId ? { id: row.workspaceId, name: row.workspaceName, slug: row.workspaceSlug } : null,
-    expiresAt: row.expiresAt
+    expiresAt: row.expiresAt === PERMANENT_SESSION_EXPIRY ? null : row.expiresAt
   };
 }
 
