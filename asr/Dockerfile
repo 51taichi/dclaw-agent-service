@@ -6,8 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r requirements.txt \
     && useradd --create-home --uid 10001 asr \
     && install -d -o asr -g asr /models
 

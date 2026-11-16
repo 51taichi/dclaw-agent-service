@@ -75,6 +75,7 @@ SPEECH_MODEL=small
 DCLAW_ASR_CPU_THREADS=2
 DCLAW_ASR_CPUS=2.0
 DCLAW_ASR_MEMORY_LIMIT=3g
+PIP_INDEX_URL=https://pypi.org/simple
 ```
 
 直接使用 `npm start` 或改用第三方转写服务时，配置以下环境变量：

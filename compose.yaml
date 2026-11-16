@@ -5,6 +5,8 @@ services:
     build:
       context: ./asr
       dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     image: dclaw-asr:local
     container_name: dclaw-asr-local
     init: true
