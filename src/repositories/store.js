@@ -332,16 +332,27 @@ export class Store {
     try {
       const stable = this.db.prepare("SELECT * FROM conversations WHERE account_id = ? AND external_conversation_id = ?").get(normalizedAccountId, stableId);
       if (stable) {
+        if (legacyId) this.db.prepare(`INSERT INTO conversation_identity_aliases (account_id, external_conversation_id, conversation_id) VALUES (?, ?, ?)
+          ON CONFLICT(account_id, external_conversation_id) DO UPDATE SET conversation_id = excluded.conversation_id`).run(normalizedAccountId, legacyId, stable.id);
         this.db.prepare("UPDATE conversations SET external_user_id = ?, updated_at = ? WHERE id = ?").run(userId, isoNow(), stable.id);
         this.db.exec("COMMIT");
         return conversationView({ ...stable, external_user_id: userId });
       }
-      const legacy = legacyId
+      let legacy = legacyId
         ? this.db.prepare("SELECT * FROM conversations WHERE account_id = ? AND external_conversation_id = ?").get(normalizedAccountId, legacyId)
         : null;
+      if (!legacy && legacyId) {
+        legacy = this.db.prepare(`SELECT c.* FROM conversation_identity_aliases alias
+          JOIN conversations c ON c.id = alias.conversation_id
+          WHERE alias.account_id = ? AND alias.external_conversation_id = ?`).get(normalizedAccountId, legacyId);
+      }
       if (!legacy) {
         this.db.exec("COMMIT");
         return null;
+      }
+      for (const alias of new Set([legacyId, legacy.external_conversation_id].filter(Boolean))) {
+        this.db.prepare(`INSERT INTO conversation_identity_aliases (account_id, external_conversation_id, conversation_id) VALUES (?, ?, ?)
+          ON CONFLICT(account_id, external_conversation_id) DO UPDATE SET conversation_id = excluded.conversation_id`).run(normalizedAccountId, alias, legacy.id);
       }
       this.db.prepare("UPDATE conversations SET external_conversation_id = ?, external_user_id = ?, updated_at = ? WHERE id = ?")
         .run(stableId, userId, isoNow(), legacy.id);
@@ -354,6 +365,16 @@ export class Store {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  saveConversationIdentityAlias(accountId, externalConversationId, conversationId) {
+    const conversation = this.db.prepare("SELECT id FROM conversations WHERE id = ? AND account_id = ?")
+      .get(Number(conversationId), String(accountId || ""));
+    if (!conversation) throw new TypeError("会话身份别名目标不存在");
+    this.db.prepare(`INSERT INTO conversation_identity_aliases (account_id, external_conversation_id, conversation_id) VALUES (?, ?, ?)
+      ON CONFLICT(account_id, external_conversation_id) DO UPDATE SET conversation_id = excluded.conversation_id`)
+      .run(String(accountId), requiredText(externalConversationId, "旧会话 ID", 240), Number(conversationId));
+    return true;
   }
 
   listPeople(workspaceId) {

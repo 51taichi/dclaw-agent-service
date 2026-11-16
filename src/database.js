@@ -70,6 +70,14 @@ function migrate(db) {
       UNIQUE(conversation_id, direction, external_message_id)
     );
 
+    CREATE TABLE IF NOT EXISTS conversation_identity_aliases (
+      account_id TEXT NOT NULL REFERENCES channel_accounts(id) ON DELETE CASCADE,
+      external_conversation_id TEXT NOT NULL,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (${nowSql}),
+      PRIMARY KEY(account_id, external_conversation_id)
+    );
+
     CREATE TABLE IF NOT EXISTS deliveries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -398,6 +406,7 @@ function migrate(db) {
 
     CREATE INDEX IF NOT EXISTS idx_conversations_account_recent ON conversations(account_id, last_message_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_recent ON messages(conversation_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_conversation_alias_target ON conversation_identity_aliases(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_alerts_status_recent ON attention_alerts(status, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_outbox_poll ON channel_outbox(account_id, external_conversation_id, id);
     CREATE INDEX IF NOT EXISTS idx_flow_events_conversation ON flow_state_events(conversation_id, id);

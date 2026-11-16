@@ -141,6 +141,36 @@ test("wechat login adopts the existing local conversation and preserves its hist
   assert.equal(denied.response.status, 401);
 });
 
+test("wechat login resolves a merged legacy conversation through its identity alias", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+  const canonical = app.store.recordInbound({
+    provider: "miniapp",
+    accountId: "miniapp-default",
+    eventId: "canonical-event-001",
+    occurredAt: new Date().toISOString(),
+    externalConversationId: "canonical-local-conversation",
+    externalUserId: "canonical-local-user",
+    displayName: "微信客户小王",
+    externalMessageId: "canonical-message-001",
+    messageType: "text",
+    text: "合并后保留的历史消息",
+    attachments: [],
+    metadata: {}
+  });
+  app.store.saveConversationIdentityAlias("miniapp-default", "deleted-legacy-conversation", canonical.conversation.id);
+
+  const login = await jsonRequest(app.baseUrl, "/api/public/wechat/login", {
+    method: "POST",
+    body: { code: "login-code-alias", publicSlug: "dingmai-assistant", legacyConversationId: "deleted-legacy-conversation" }
+  });
+
+  assert.equal(login.response.status, 200);
+  const adopted = app.store.getConversation(canonical.conversation.id);
+  assert.equal(adopted.externalConversationId, login.data.identity.conversationId);
+  assert.equal(app.store.listMessages(adopted.id)[0].content, "合并后保留的历史消息");
+});
+
 test("wechat profile update rejects an invalid session", async (t) => {
   const app = await fixture();
   t.after(() => app.close());
