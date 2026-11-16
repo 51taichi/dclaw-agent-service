@@ -38,7 +38,8 @@ async function request(app, pathname, { cookie = "", ...options } = {}) {
     headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}), ...options.headers },
     body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body
   });
-  const data = response.status === 204 ? null : await response.json();
+  const contentType = response.headers.get("content-type") || "";
+  const data = response.status === 204 || !contentType.includes("application/json") ? null : await response.json();
   const setCookie = response.headers.get("set-cookie") || "";
   return { response, data, cookie: setCookie.split(";", 1)[0] || "", setCookie };
 }
@@ -156,48 +157,64 @@ test("admin sessions can remain valid without an hourly expiry", async (t) => {
   assert.equal(session.data.expiresAt, null);
 });
 
-test("one-time preview tickets authorize only their scoped draft preview", async (t) => {
+test("preview launch URLs mirror the reusable handoff and long browser session", async (t) => {
   const app = await fixture();
   t.after(() => app.close());
 
   const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
-  const issued = await request(app, "/api/admin/deployments/dingmai-website-assistant/preview-token", {
+  const issued = await request(app, "/api/admin/deployments/dingmai-website-assistant/preview-launch", {
     method: "POST",
     cookie: login.cookie
   });
   assert.equal(issued.response.status, 200);
-  assert.ok(issued.data.token);
   assert.equal(issued.response.headers.get("cache-control"), "no-store");
+  const launchUrl = new URL(issued.data.launchUrl);
+  assert.match(launchUrl.pathname, /^\/api\/preview-launch\/[A-Za-z0-9_-]{43}$/);
+  assert.equal(launchUrl.search, "");
 
-  const exchanged = await request(app, `/api/admin/deployments/dingmai-website-assistant/preview?previewToken=${encodeURIComponent(issued.data.token)}`);
-  assert.equal(exchanged.response.status, 200);
-  assert.equal(exchanged.data.mode, "draft");
-  assert.match(exchanged.cookie, /^dclaw_preview_session=/);
+  const exchanged = await request(app, launchUrl.pathname, { redirect: "manual" });
+  assert.equal(exchanged.response.status, 303);
+  assert.match(exchanged.response.headers.get("location"), /^\/channels\/dingmai-assistant-web\?deployment=dingmai-website-assistant&preview=draft&t=\d+$/);
+  assert.equal(exchanged.response.headers.get("referrer-policy"), "no-referrer");
+  assert.match(exchanged.cookie, /^dclaw_preview_session_dingmai=/);
   assert.match(exchanged.setCookie, /Path=\/api\/admin/);
   assert.match(exchanged.setCookie, /HttpOnly/);
-  assert.match(exchanged.setCookie, /Max-Age=1800/);
+  assert.match(exchanged.setCookie, /Max-Age=2592000/);
 
-  const reused = await request(app, `/api/admin/deployments/dingmai-website-assistant/preview?previewToken=${encodeURIComponent(issued.data.token)}`);
-  assert.equal(reused.response.status, 401);
+  const reused = await request(app, launchUrl.pathname, { redirect: "manual" });
+  assert.equal(reused.response.status, 303);
+  assert.match(reused.cookie, /^dclaw_preview_session_dingmai=/);
+  assert.notEqual(reused.cookie, exchanged.cookie);
 
   const sameDeployment = await request(app, "/api/admin/deployments/dingmai-website-assistant/preview", { cookie: exchanged.cookie });
   assert.equal(sameDeployment.response.status, 200);
-  const otherDeployment = await request(app, "/api/admin/deployments/dingmai-miniapp-assistant/preview", { cookie: exchanged.cookie });
-  assert.equal(otherDeployment.response.status, 401);
+  const sameWorkspaceDeployment = await request(app, "/api/admin/deployments/dingmai-miniapp-assistant/preview", { cookie: exchanged.cookie });
+  assert.equal(sameWorkspaceDeployment.response.status, 200);
+
+  app.store.createWorkspace({ id: "other-workspace", slug: "other-workspace", name: "其他工作区" });
+  app.store.createWorkspaceChannel("other-workspace", { id: "other-website", provider: "website", name: "其他官网" });
+  const otherWorkspace = await request(app, "/api/admin/channels/other-website/preview", { cookie: exchanged.cookie });
+  assert.equal(otherWorkspace.response.status, 401);
   const generalAdminApi = await request(app, "/api/admin/workspaces", { cookie: exchanged.cookie });
   assert.equal(generalAdminApi.response.status, 401);
+
+  app.db.prepare("UPDATE preview_launch_tickets SET expires_at = ?").run("2000-01-01T00:00:00.000Z");
+  const expired = await request(app, launchUrl.pathname, { redirect: "manual" });
+  assert.equal(expired.response.status, 410);
 });
 
-test("channel preview tickets cover only that channel and its deployment preview APIs", async (t) => {
+test("channel preview launch redirects establish the same workspace session", async (t) => {
   const app = await fixture();
   t.after(() => app.close());
 
   const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
-  const issued = await request(app, "/api/admin/channels/dingmai-website/preview-token", { method: "POST", cookie: login.cookie });
-  const exchanged = await request(app, `/api/admin/channels/dingmai-website/preview?previewToken=${encodeURIComponent(issued.data.token)}`);
-  assert.equal(exchanged.response.status, 200);
+  const issued = await request(app, "/api/admin/channels/dingmai-website/preview-launch", { method: "POST", cookie: login.cookie });
+  const launchPath = new URL(issued.data.launchUrl).pathname;
+  const exchanged = await request(app, launchPath, { redirect: "manual" });
+  assert.equal(exchanged.response.status, 303);
+  assert.match(exchanged.response.headers.get("location"), /^\/channels\/channel-preview\?channel=dingmai-website&preview=draft&t=\d+$/);
   const deploymentPreview = await request(app, "/api/admin/deployments/dingmai-website-assistant/preview", { cookie: exchanged.cookie });
   assert.equal(deploymentPreview.response.status, 200);
-  const otherChannel = await request(app, "/api/admin/channels/dingmai-miniapp/preview", { cookie: exchanged.cookie });
-  assert.equal(otherChannel.response.status, 401);
+  const sameWorkspaceChannel = await request(app, "/api/admin/channels/dingmai-miniapp/preview", { cookie: exchanged.cookie });
+  assert.equal(sameWorkspaceChannel.response.status, 200);
 });

@@ -240,6 +240,25 @@ function migrate(db) {
       created_at TEXT NOT NULL DEFAULT (${nowSql})
     );
 
+    CREATE TABLE IF NOT EXISTS preview_launch_tickets (
+      token_hash TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      resource_type TEXT NOT NULL CHECK(resource_type IN ('deployment', 'channel')),
+      resource_id TEXT NOT NULL,
+      launch_path TEXT NOT NULL,
+      redemption_count INTEGER NOT NULL DEFAULT 0,
+      first_redeemed_at TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
+    CREATE TABLE IF NOT EXISTS preview_sessions (
+      token_hash TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (${nowSql})
+    );
+
     CREATE TABLE IF NOT EXISTS people (
       id TEXT PRIMARY KEY,
       workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -383,6 +402,8 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_agent_configs_defaults ON agent_configs(default_for_person, default_for_assistant);
     CREATE INDEX IF NOT EXISTS idx_workspace_wechat_visitors_openid ON workspace_wechat_visitors(app_id, openid);
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_preview_launch_tickets_expiry ON preview_launch_tickets(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_preview_sessions_expiry ON preview_sessions(expires_at);
   `);
 
   ensureColumn(db, "state_machine_configs", "enabled", "INTEGER NOT NULL DEFAULT 0");

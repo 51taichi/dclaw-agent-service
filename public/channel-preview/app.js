@@ -143,16 +143,8 @@ async function load() {
     : channelId
       ? `/api/admin/channels/${encodeURIComponent(channelId)}/preview`
       : `/api/public/channels/${encodeURIComponent(publicSlug)}`;
-  const previewToken = parameters.get("previewToken");
-  const requestUrl = new URL(endpoint, location.origin);
-  if (previewToken && (deploymentId || channelId)) requestUrl.searchParams.set("previewToken", previewToken);
-  const response = await fetch(requestUrl);
+  const response = await fetch(endpoint);
   if (!response.ok) throw new Error(deploymentId ? "预览配置加载失败" : "渠道尚未发布或已停用");
-  if (previewToken) {
-    const cleanUrl = new URL(location.href);
-    cleanUrl.searchParams.delete("previewToken");
-    history.replaceState(null, "", cleanUrl);
-  }
   const data = await response.json();
   data.deployments = Array.isArray(data.deployments) && data.deployments.length
     ? data.deployments

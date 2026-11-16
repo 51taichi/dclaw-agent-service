@@ -8,7 +8,6 @@ const state = {
   agentConfigs: [], agentDefaults: { defaultAgentConfigId: "" },
   agentConfig: null, creatingAgentConfig: false, configProvider: "website", focusedConfigField: "", miniappMapFace: "back"
 };
-let previewRevision = 0;
 let mapSkinToneRevision = 0;
 
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.getAttribute("id"), node]));
@@ -702,41 +701,20 @@ function setMiniappMapFace(face) {
   document.querySelectorAll("[data-miniapp-map-panel]").forEach((panel) => { panel.hidden = panel.dataset.miniappMapPanel !== state.miniappMapFace; });
 }
 
-function previewUrlFor(provider) {
-  const channel = channelFor(provider);
-  if (!channel) return "";
-  const deployment = state.deployments.find((item) => item.workspaceChannelId === channel.id && item.enabled);
-  if (deployment) {
-    return `/channels/${encodeURIComponent(deployment.publicSlug)}?deployment=${encodeURIComponent(deployment.id)}&preview=draft&t=${Date.now()}-${++previewRevision}`;
-  }
-  return `/channels/channel-preview?channel=${encodeURIComponent(channel.id)}&preview=draft&t=${Date.now()}-${++previewRevision}`;
-}
-
-function previewTokenPathFor(provider) {
+function previewLaunchPathFor(provider) {
   const channel = channelFor(provider);
   if (!channel) return "";
   const deployment = state.deployments.find((item) => item.workspaceChannelId === channel.id && item.enabled);
   return deployment
-    ? `/api/admin/deployments/${encodeURIComponent(deployment.id)}/preview-token`
-    : `/api/admin/channels/${encodeURIComponent(channel.id)}/preview-token`;
+    ? `/api/admin/deployments/${encodeURIComponent(deployment.id)}/preview-launch`
+    : `/api/admin/channels/${encodeURIComponent(channel.id)}/preview-launch`;
 }
 
 async function openDraftPreview(provider) {
-  const url = previewUrlFor(provider);
-  const tokenPath = previewTokenPathFor(provider);
-  if (!url || !tokenPath) return;
-  const previewWindow = window.open("about:blank", "_blank");
-  if (!previewWindow) throw new Error("浏览器阻止了预览窗口，请允许弹出窗口后重试");
-  previewWindow.opener = null;
-  try {
-    const ticket = await api(tokenPath, { method: "POST" });
-    const previewUrl = new URL(url, location.origin);
-    previewUrl.searchParams.set("previewToken", ticket.token);
-    previewWindow.location.replace(previewUrl.href);
-  } catch (error) {
-    previewWindow.close();
-    throw error;
-  }
+  const launchPath = previewLaunchPathFor(provider);
+  if (!launchPath) return;
+  const data = await api(launchPath, { method: "POST" });
+  window.open(data.launchUrl, "_blank", "noopener,noreferrer");
 }
 
 function websiteDeployment() {

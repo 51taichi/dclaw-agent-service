@@ -140,6 +140,72 @@ export class Store {
     this.db.prepare("DELETE FROM admin_sessions WHERE scope_type = 'workspace' AND workspace_id = ?").run(workspaceId);
   }
 
+  createPreviewLaunchTicket({ tokenHash, workspaceId, resourceType, resourceId, launchPath, expiresAt }) {
+    this.db.prepare("DELETE FROM preview_launch_tickets WHERE expires_at <= ?").run(isoNow());
+    this.db.prepare(`INSERT INTO preview_launch_tickets
+      (token_hash, workspace_id, resource_type, resource_id, launch_path, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(tokenHash, workspaceId, resourceType, resourceId, launchPath, expiresAt);
+  }
+
+  redeemPreviewLaunchTicket(tokenHash) {
+    const redeemedAt = isoNow();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.db.prepare(`SELECT ticket.*, workspace.enabled AS workspace_enabled
+        FROM preview_launch_tickets ticket JOIN workspaces workspace ON workspace.id = ticket.workspace_id
+        WHERE ticket.token_hash = ?`).get(tokenHash);
+      if (!row || row.expires_at <= redeemedAt || !row.workspace_enabled) {
+        if (row) this.db.prepare("DELETE FROM preview_launch_tickets WHERE token_hash = ?").run(tokenHash);
+        this.db.exec("COMMIT");
+        return null;
+      }
+      this.db.prepare(`UPDATE preview_launch_tickets
+        SET redemption_count = redemption_count + 1,
+            first_redeemed_at = COALESCE(first_redeemed_at, ?)
+        WHERE token_hash = ?`).run(redeemedAt, tokenHash);
+      this.db.exec("COMMIT");
+      return {
+        workspaceId: row.workspace_id,
+        resourceType: row.resource_type,
+        resourceId: row.resource_id,
+        launchPath: row.launch_path,
+        expiresAt: row.expires_at,
+        redemptionCount: Number(row.redemption_count || 0) + 1
+      };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  createPreviewSession({ tokenHash, workspaceId, expiresAt }) {
+    this.db.prepare("DELETE FROM preview_sessions WHERE expires_at <= ?").run(isoNow());
+    this.db.prepare("INSERT INTO preview_sessions (token_hash, workspace_id, expires_at) VALUES (?, ?, ?)")
+      .run(tokenHash, workspaceId, expiresAt);
+  }
+
+  getPreviewSession(tokenHash) {
+    this.db.prepare("DELETE FROM preview_sessions WHERE expires_at <= ?").run(isoNow());
+    const row = this.db.prepare(`SELECT session.*, workspace.enabled AS workspace_enabled
+      FROM preview_sessions session JOIN workspaces workspace ON workspace.id = session.workspace_id
+      WHERE session.token_hash = ? AND session.expires_at > ?`).get(tokenHash, isoNow());
+    if (!row || !row.workspace_enabled) {
+      if (row) this.deletePreviewSession(tokenHash);
+      return null;
+    }
+    return { workspaceId: row.workspace_id, expiresAt: row.expires_at };
+  }
+
+  deletePreviewSession(tokenHash) {
+    this.db.prepare("DELETE FROM preview_sessions WHERE token_hash = ?").run(tokenHash);
+  }
+
+  deleteWorkspacePreviewAccess(workspaceId) {
+    this.db.prepare("DELETE FROM preview_launch_tickets WHERE workspace_id = ?").run(workspaceId);
+    this.db.prepare("DELETE FROM preview_sessions WHERE workspace_id = ?").run(workspaceId);
+  }
+
   getWorkspaceMiniapp(workspaceId, { includeSecrets = false } = {}) {
     const row = this.db.prepare("SELECT * FROM workspace_miniapps WHERE workspace_id = ?").get(workspaceId);
     return row ? workspaceMiniappView(row, includeSecrets) : null;

@@ -1,12 +1,13 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 const COOKIE_NAME = "dclaw_admin_session";
-const PREVIEW_COOKIE_NAME = "dclaw_preview_session";
+const LEGACY_PREVIEW_COOKIE_NAME = "dclaw_preview_session";
+const PREVIEW_COOKIE_PREFIX = "dclaw_preview_session_";
 const PASSWORD_MIN_LENGTH = 8;
 const PERMANENT_SESSION_EXPIRY = "9999-12-31T23:59:59.999Z";
 const PERSISTENT_COOKIE_MAX_AGE_MS = 400 * 24 * 60 * 60 * 1000;
-const PREVIEW_TICKET_TTL_MS = 60 * 1000;
-const PREVIEW_SESSION_TTL_MS = 30 * 60 * 1000;
+const PREVIEW_LAUNCH_TICKET_TTL_MS = 2 * 60 * 1000;
+const PREVIEW_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export class AdminAuth {
   constructor({ store, platformPassword = "", required = false, sessionTtlHours = 0 } = {}) {
@@ -16,8 +17,6 @@ export class AdminAuth {
     const ttlHours = Number(sessionTtlHours);
     this.sessionTtlMs = Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours * 60 * 60 * 1000 : 0;
     this.failures = new Map();
-    this.previewTickets = new Map();
-    this.previewSessions = new Map();
     if (this.required && !this.platformPassword) throw new Error("启用后台登录后必须配置平台管理员密码");
   }
 
@@ -76,10 +75,11 @@ export class AdminAuth {
   logout(req, res) {
     const token = cookieValue(req, COOKIE_NAME);
     if (token) this.store.deleteAdminSession(tokenHash(token));
-    const previewToken = cookieValue(req, PREVIEW_COOKIE_NAME);
-    if (previewToken) this.previewSessions.delete(tokenHash(previewToken));
+    const previewCookies = cookieEntries(req).filter(([name]) => name === LEGACY_PREVIEW_COOKIE_NAME || name.startsWith(PREVIEW_COOKIE_PREFIX));
+    for (const [, previewToken] of previewCookies) if (previewToken) this.store.deletePreviewSession(tokenHash(previewToken));
     clearSessionCookie(req, res);
-    clearPreviewCookie(req, res);
+    for (const [name] of previewCookies) clearPreviewCookie(req, res, name);
+    if (!previewCookies.some(([name]) => name === LEGACY_PREVIEW_COOKIE_NAME)) clearPreviewCookie(req, res, LEGACY_PREVIEW_COOKIE_NAME);
   }
 
   requireSession(req, res, next) {
@@ -89,44 +89,51 @@ export class AdminAuth {
     next();
   }
 
-  issuePreviewToken(session, { deploymentId = "", channelId = "" } = {}) {
-    this.prunePreviewAccess();
+  issuePreviewLaunch(session, { deploymentId = "", channelId = "" } = {}) {
     const scope = deploymentId ? { type: "deployment", id: String(deploymentId) } : channelId ? { type: "channel", id: String(channelId) } : null;
     if (!session?.authenticated || !scope) throw unauthorized("预览权限无效");
     const resource = scope.type === "deployment" ? this.store.getDeployment(scope.id) : this.store.getWorkspaceChannel(scope.id);
     if (!resource) throw notFound("预览对象不存在");
     if (session.role === "workspace" && resource.workspaceId !== session.workspaceId) throw forbidden("无权预览其他工作区");
     const token = randomBytes(32).toString("base64url");
-    const expiresAt = Date.now() + PREVIEW_TICKET_TTL_MS;
-    this.previewTickets.set(tokenHash(token), { ...scope, workspaceId: resource.workspaceId, expiresAt });
-    return { token, expiresAt: new Date(expiresAt).toISOString() };
+    const expiresAt = new Date(Date.now() + PREVIEW_LAUNCH_TICKET_TTL_MS).toISOString();
+    const launchPath = scope.type === "deployment"
+      ? `/channels/${encodeURIComponent(resource.publicSlug)}?deployment=${encodeURIComponent(resource.id)}&preview=draft&t=${Date.now()}`
+      : `/channels/channel-preview?channel=${encodeURIComponent(resource.id)}&preview=draft&t=${Date.now()}`;
+    this.store.createPreviewLaunchTicket({
+      tokenHash: tokenHash(token),
+      workspaceId: resource.workspaceId,
+      resourceType: scope.type,
+      resourceId: scope.id,
+      launchPath,
+      expiresAt
+    });
+    return { token, expiresAt };
   }
 
-  authorizePreview(req, res) {
-    this.prunePreviewAccess();
-    const cookieToken = cookieValue(req, PREVIEW_COOKIE_NAME);
-    let access = cookieToken ? this.previewSessions.get(tokenHash(cookieToken)) : null;
-    if (access && this.previewAccessMatches(access, req.path)) return true;
-
-    const ticketToken = String(req.query?.previewToken || "").trim();
-    const ticketHash = ticketToken ? tokenHash(ticketToken) : "";
-    const ticket = ticketHash ? this.previewTickets.get(ticketHash) : null;
-    if (!ticket || !this.previewAccessMatches(ticket, req.path)) return false;
-    this.previewTickets.delete(ticketHash);
-
+  redeemPreviewLaunch(req, res, token) {
+    const ticket = this.store.redeemPreviewLaunchTicket(tokenHash(token));
+    if (!ticket) throw gone("预览启动链接已过期，请从管理后台重新打开");
     const previewToken = randomBytes(32).toString("base64url");
-    access = { ...ticket, expiresAt: Date.now() + PREVIEW_SESSION_TTL_MS };
-    this.previewSessions.set(tokenHash(previewToken), access);
-    setPreviewCookie(req, res, previewToken, PREVIEW_SESSION_TTL_MS);
-    return true;
+    const expiresAt = new Date(Date.now() + PREVIEW_SESSION_TTL_MS).toISOString();
+    this.store.createPreviewSession({ tokenHash: tokenHash(previewToken), workspaceId: ticket.workspaceId, expiresAt });
+    setPreviewCookie(req, res, previewCookieName(this.store.getWorkspace(ticket.workspaceId)), previewToken, PREVIEW_SESSION_TTL_MS);
+    return { ...ticket, expiresAt };
+  }
+
+  authorizePreview(req) {
+    const workspaceId = this.previewWorkspaceId(req.path);
+    if (!workspaceId) return false;
+    const cookieToken = cookieValue(req, previewCookieName(this.store.getWorkspace(workspaceId)));
+    const session = cookieToken ? this.store.getPreviewSession(tokenHash(cookieToken)) : null;
+    return Boolean(session && workspaceId === session.workspaceId);
   }
 
   setWorkspacePassword(workspaceId, password) {
     const normalized = this.validateWorkspacePassword(password);
     this.store.setWorkspacePasswordHash(workspaceId, hashPassword(normalized));
     this.store.deleteWorkspaceAdminSessions(workspaceId);
-    for (const [key, access] of this.previewTickets) if (access.workspaceId === workspaceId) this.previewTickets.delete(key);
-    for (const [key, access] of this.previewSessions) if (access.workspaceId === workspaceId) this.previewSessions.delete(key);
+    this.store.deleteWorkspacePreviewAccess(workspaceId);
   }
 
   validateWorkspacePassword(password) {
@@ -156,23 +163,15 @@ export class AdminAuth {
     this.failures.delete(clientKey(req));
   }
 
-  previewAccessMatches(access, pathname) {
+  previewWorkspaceId(pathname) {
     let match = String(pathname || "").match(/^\/api\/admin\/deployments\/([^/]+)\/preview(?:\/|$)/);
     if (match) {
       const deploymentId = decodePathSegment(match[1]);
-      if (!deploymentId) return false;
-      if (access.type === "deployment") return access.id === deploymentId;
-      const deployment = this.store.getDeployment(deploymentId);
-      return access.type === "channel" && deployment?.workspaceChannelId === access.id;
+      return deploymentId ? this.store.getDeployment(deploymentId)?.workspaceId || "" : "";
     }
     match = String(pathname || "").match(/^\/api\/admin\/channels\/([^/]+)\/preview$/);
-    return Boolean(match && access.type === "channel" && access.id === decodePathSegment(match[1]));
-  }
-
-  prunePreviewAccess() {
-    const now = Date.now();
-    for (const [key, access] of this.previewTickets) if (access.expiresAt <= now) this.previewTickets.delete(key);
-    for (const [key, access] of this.previewSessions) if (access.expiresAt <= now) this.previewSessions.delete(key);
+    const channelId = match ? decodePathSegment(match[1]) : "";
+    return channelId ? this.store.getWorkspaceChannel(channelId)?.workspaceId || "" : "";
   }
 }
 
@@ -209,13 +208,22 @@ function tokenHash(token) {
 }
 
 function cookieValue(req, name) {
-  const source = String(req.headers.cookie || "");
-  for (const part of source.split(";")) {
+  return cookieEntries(req).find(([entryName]) => entryName === name)?.[1] || "";
+}
+
+function cookieEntries(req) {
+  const entries = [];
+  for (const part of String(req.headers.cookie || "").split(";")) {
     const index = part.indexOf("=");
-    if (index < 0 || part.slice(0, index).trim() !== name) continue;
-    try { return decodeURIComponent(part.slice(index + 1).trim()); } catch { return ""; }
+    if (index < 0) continue;
+    try { entries.push([part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())]); } catch {}
   }
-  return "";
+  return entries;
+}
+
+function previewCookieName(workspace) {
+  const scope = String(workspace?.slug || workspace?.id || "preview").replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80);
+  return `${PREVIEW_COOKIE_PREFIX}${scope}`;
 }
 
 function setSessionCookie(req, res, token, maxAgeMs) {
@@ -228,14 +236,14 @@ function clearSessionCookie(req, res) {
   res.setHeader("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`);
 }
 
-function setPreviewCookie(req, res, token, maxAgeMs) {
+function setPreviewCookie(req, res, name, token, maxAgeMs) {
   const secure = req.secure || String(req.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim() === "https";
-  res.append("Set-Cookie", `${PREVIEW_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/api/admin; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(maxAgeMs / 1000)}${secure ? "; Secure" : ""}`);
+  res.append("Set-Cookie", `${name}=${encodeURIComponent(token)}; Path=/api/admin; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(maxAgeMs / 1000)}${secure ? "; Secure" : ""}`);
 }
 
-function clearPreviewCookie(req, res) {
+function clearPreviewCookie(req, res, name) {
   const secure = req.secure || String(req.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim() === "https";
-  res.append("Set-Cookie", `${PREVIEW_COOKIE_NAME}=; Path=/api/admin; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`);
+  res.append("Set-Cookie", `${name}=; Path=/api/admin; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`);
 }
 
 function sessionView(row, authRequired) {
@@ -272,5 +280,11 @@ function forbidden(message) {
 function notFound(message) {
   const error = new Error(message);
   error.status = 404;
+  return error;
+}
+
+function gone(message) {
+  const error = new Error(message);
+  error.status = 410;
   return error;
 }

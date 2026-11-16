@@ -89,9 +89,14 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     adminAuth.logout(req, res);
     res.status(204).end();
   });
+  app.get("/api/preview-launch/:token", (req, res) => {
+    const launch = adminAuth.redeemPreviewLaunch(req, res, req.params.token);
+    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+    res.redirect(303, launch.launchPath);
+  });
   app.use((req, res, next) => {
     if (!isManagementApi(req.path)) return next();
-    if (isPreviewApi(req.path) && adminAuth.authorizePreview(req, res)) return next();
+    if (isPreviewApi(req.path) && adminAuth.authorizePreview(req)) return next();
     return adminAuth.requireSession(req, res, () => {
       const denial = workspaceScopeDenial(req, store);
       if (denial) return res.status(403).json({ error: denial, code: "WORKSPACE_ACCESS_DENIED" });
@@ -138,13 +143,15 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.get("/api/admin/workspaces/:workspaceId/deployments", (req, res) => res.json({ items: store.listDeployments(req.params.workspaceId) }));
   app.post("/api/admin/workspaces/:workspaceId/deployments", (req, res) => res.status(201).json(store.createDeployment(req.params.workspaceId, req.body || {})));
   app.put("/api/admin/deployments/:deploymentId", (req, res) => respondFound(res, store.updateDeployment(req.params.deploymentId, req.body || {})));
-  app.post("/api/admin/deployments/:deploymentId/preview-token", (req, res) => {
+  app.post("/api/admin/deployments/:deploymentId/preview-launch", (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json(adminAuth.issuePreviewToken(req.adminSession, { deploymentId: req.params.deploymentId }));
+    const launch = adminAuth.issuePreviewLaunch(req.adminSession, { deploymentId: req.params.deploymentId });
+    res.json({ launchUrl: previewLaunchUrl(config.publicBaseUrl, req, launch.token), expiresAt: launch.expiresAt });
   });
-  app.post("/api/admin/channels/:channelId/preview-token", (req, res) => {
+  app.post("/api/admin/channels/:channelId/preview-launch", (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json(adminAuth.issuePreviewToken(req.adminSession, { channelId: req.params.channelId }));
+    const launch = adminAuth.issuePreviewLaunch(req.adminSession, { channelId: req.params.channelId });
+    res.json({ launchUrl: previewLaunchUrl(config.publicBaseUrl, req, launch.token), expiresAt: launch.expiresAt });
   });
   app.get("/api/admin/deployments/:deploymentId/preview", (req, res) => respondFound(res, store.channelPreview(req.params.deploymentId, { published: req.query.published === "1" })));
   app.get("/api/admin/channels/:channelId/preview", (req, res) => respondFound(res, store.workspaceChannelPreview(req.params.channelId)));
@@ -378,6 +385,11 @@ function isManagementApi(pathname) {
 function isPreviewApi(pathname) {
   return /^\/api\/admin\/deployments\/[^/]+\/preview(?:\/|$)/.test(pathname)
     || /^\/api\/admin\/channels\/[^/]+\/preview$/.test(pathname);
+}
+
+function previewLaunchUrl(publicBaseUrl, req, token) {
+  const fallback = `${req.protocol}://${req.get("host")}`;
+  return new URL(`/api/preview-launch/${encodeURIComponent(token)}`, publicBaseUrl || fallback).toString();
 }
 
 function workspaceScopeDenial(req, store) {
