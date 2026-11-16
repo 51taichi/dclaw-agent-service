@@ -182,8 +182,10 @@ const recordPermissionGranted = ref(false);
 const requestingRecordPermission = ref(false);
 const WECHAT_PROFILE_STORAGE_KEY = "dclaw:uni:wechat-profile";
 const WECHAT_SESSION_STORAGE_KEY = "dclaw:uni:wechat-session";
+const WECHAT_VISITOR_STORAGE_KEY = "dclaw:uni:wechat-visitor";
 const WECHAT_LOGIN_SKIPPED_KEY = "dclaw:uni:wechat-login-skipped";
 const storedWechatProfile = uni.getStorageSync(WECHAT_PROFILE_STORAGE_KEY) || {};
+const storedWechatVisitorId = String(uni.getStorageSync(WECHAT_VISITOR_STORAGE_KEY) || "").trim();
 const wechatNickname = ref(String(storedWechatProfile.nickName || "").trim());
 const wechatNicknameDraft = ref("");
 const wechatAvatarDraft = ref(String(storedWechatProfile.avatarUrl || ""));
@@ -191,10 +193,10 @@ const wechatLoginVisible = ref(false);
 const wechatLoginPending = ref(false);
 const wechatProfileStep = ref("login");
 const faceSwitchRatio = ref(Number(uni.getStorageSync("dclaw:face-switch-ratio")) || 0.54);
-const conversationId = persistentId("dclaw:uni:conversation");
-const userId = persistentId("dclaw:uni:user");
-const companyConversationId = persistentId("dclaw:uni:company-conversation");
-const companyUserId = persistentId("dclaw:uni:company-user");
+let conversationId = storedWechatVisitorId ? `wechat:${storedWechatVisitorId}:person` : persistentId("dclaw:uni:conversation");
+let userId = storedWechatVisitorId ? `wechat:${storedWechatVisitorId}` : persistentId("dclaw:uni:user");
+let companyConversationId = storedWechatVisitorId ? `wechat:${storedWechatVisitorId}:assistant` : persistentId("dclaw:uni:company-conversation");
+let companyUserId = storedWechatVisitorId ? `wechat:${storedWechatVisitorId}` : persistentId("dclaw:uni:company-user");
 let recorder = null;
 let recordingStartedAt = 0;
 let recordingStartY = 0;
@@ -253,7 +255,7 @@ onLoad((query = {}) => {
   uni.showShareMenu?.({ menus: ["shareAppMessage", "shareTimeline"] });
   wechatLoginVisible.value = !wechatNickname.value && uni.getStorageSync(WECHAT_LOGIN_SKIPPED_KEY) !== true;
   // #endif
-  loadChannel();
+  initializeCard();
 });
 
 onReady(measureStage);
@@ -320,23 +322,61 @@ function requestWechatLogin() {
   });
 }
 
+function applyWechatIdentity(rawIdentity) {
+  const visitorId = String(rawIdentity?.visitorId || rawIdentity || "").trim();
+  if (!visitorId) return false;
+  uni.setStorageSync(WECHAT_VISITOR_STORAGE_KEY, visitorId);
+  conversationId = String(rawIdentity?.conversationId || `wechat:${visitorId}:person`);
+  userId = String(rawIdentity?.userId || `wechat:${visitorId}`);
+  companyConversationId = String(rawIdentity?.assistantConversationId || `wechat:${visitorId}:assistant`);
+  companyUserId = userId;
+  outboxAfter.value = 0;
+  companyOutboxAfter.value = 0;
+  if (data.value) {
+    outboxReady = primeOutboxCursor(data.value?.endpoints?.publicOutbox, conversationId, outboxAfter).catch((syncError) => syncError);
+    companyOutboxReady = primeOutboxCursor(data.value?.endpoints?.assistantOutbox, companyConversationId, companyOutboxAfter).catch((syncError) => syncError);
+  }
+  return true;
+}
+
+async function establishWechatSession({ requestProfile = false } = {}) {
+  const loginResult = await requestWechatLogin();
+  const legacyConversationId = conversationId;
+  const legacyAssistantConversationId = companyConversationId;
+  const session = await request("/api/public/wechat/login", {
+    method: "POST",
+    data: { code: loginResult.code, publicSlug: options.slug, deploymentId: options.deployment, legacyConversationId, legacyAssistantConversationId }
+  });
+  uni.setStorageSync(WECHAT_SESSION_STORAGE_KEY, session.sessionToken);
+  applyWechatIdentity(session.identity || session.visitorId);
+  const nickName = String(session.profile?.nickName || "").trim();
+  if (nickName) persistWechatProfile(nickName, session.profile?.avatarUrl || "");
+  else if (requestProfile) {
+    wechatNicknameDraft.value = "";
+    wechatAvatarDraft.value = "";
+    wechatProfileStep.value = "profile";
+    wechatLoginVisible.value = true;
+  }
+  return session;
+}
+
+async function restoreWechatIdentity() {
+  try { await establishWechatSession(); }
+  catch { /* Keep the existing local identity when WeChat login is temporarily unavailable. */ }
+}
+
+async function initializeCard() {
+  // #ifdef MP-WEIXIN
+  await restoreWechatIdentity();
+  // #endif
+  await loadChannel();
+}
+
 async function authorizeWechatProfile() {
   if (wechatLoginPending.value) return;
   wechatLoginPending.value = true;
   try {
-    const loginResult = await requestWechatLogin();
-    const session = await request("/api/public/wechat/login", {
-      method: "POST",
-      data: { code: loginResult.code, publicSlug: options.slug, deploymentId: options.deployment }
-    });
-    uni.setStorageSync(WECHAT_SESSION_STORAGE_KEY, session.sessionToken);
-    const nickName = String(session.profile?.nickName || "").trim();
-    if (nickName) persistWechatProfile(nickName, session.profile?.avatarUrl || "");
-    else {
-      wechatNicknameDraft.value = "";
-      wechatAvatarDraft.value = "";
-      wechatProfileStep.value = "profile";
-    }
+    await establishWechatSession({ requestProfile: true });
   } catch (loginError) {
     showToast(localizedErrorMessage(loginError, "微信登录失败，请重试"));
   } finally {

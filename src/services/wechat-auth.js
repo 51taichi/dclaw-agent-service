@@ -42,6 +42,16 @@ export class WechatAuth {
     return `${payload}.${this.sign(payload)}`;
   }
 
+  visitorId(openid) {
+    const workspaceId = String(this.tokenScope.workspaceId || "");
+    const appId = String(this.tokenScope.appId || this.appId);
+    const subject = String(openid || "").trim();
+    if (!workspaceId || !appId || !subject) throw httpError(400, "微信访客身份无效");
+    return `wx_${createHmac("sha256", this.appSecret)
+      .update(`dclaw-visitor-v1:${workspaceId}:${appId}:${subject}`)
+      .digest("base64url")}`;
+  }
+
   verifyAuthorization(value) {
     if (!this.isConfigured()) throw httpError(503, "微信小程序登录尚未配置");
     const token = String(value || "").replace(/^Bearer\s+/i, "").trim();

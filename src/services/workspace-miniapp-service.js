@@ -49,7 +49,7 @@ export class WorkspaceMiniappService {
     return this.store.markWorkspaceMiniappVerified(workspaceId);
   }
 
-  async login({ publicSlug = "", deploymentId = "", code = "" } = {}) {
+  async login({ publicSlug = "", deploymentId = "", code = "", legacyConversationId = "", legacyAssistantConversationId = "" } = {}) {
     const scope = this.store.resolveMiniappWorkspace({ publicSlug, deploymentId });
     if (!scope) {
       const error = new Error("智能名片不存在或未开通");
@@ -66,7 +66,21 @@ export class WorkspaceMiniappService {
     });
     const identity = await auth.exchangeCode(code);
     const profile = this.store.ensureWechatVisitor(scope.workspaceId, config.appId, identity.openid, identity.unionid);
-    return { sessionToken: auth.issueToken(identity.openid), profile };
+    const visitorId = auth.visitorId(identity.openid);
+    const conversationIdentity = {
+      visitorId,
+      userId: `wechat:${visitorId}`,
+      conversationId: `wechat:${visitorId}:person`,
+      assistantConversationId: `wechat:${visitorId}:assistant`
+    };
+    this.store.adoptConversationIdentity(scope.accountId, legacyConversationId, conversationIdentity.conversationId, conversationIdentity.userId);
+    this.store.adoptConversationIdentity(scope.assistantAccountId, legacyAssistantConversationId, conversationIdentity.assistantConversationId, conversationIdentity.userId);
+    return {
+      sessionToken: auth.issueToken(identity.openid),
+      visitorId,
+      identity: conversationIdentity,
+      profile
+    };
   }
 
   saveProfile(authorization, input) {

@@ -284,10 +284,16 @@ export class Store {
     const field = deploymentId ? "d.id" : "d.public_slug";
     const value = deploymentId || publicSlug;
     if (!value) return null;
-    const row = this.db.prepare(`SELECT c.workspace_id, d.id AS deployment_id, d.public_slug
+    const row = this.db.prepare(`SELECT c.workspace_id, c.assistant_account_id, d.id AS deployment_id, d.account_id, d.public_slug
       FROM channel_deployments d JOIN workspace_channels c ON c.id = d.workspace_channel_id
       WHERE ${field} = ? AND c.provider = 'miniapp' AND c.enabled = 1 AND d.enabled = 1`).get(value);
-    return row ? { workspaceId: row.workspace_id, deploymentId: row.deployment_id, publicSlug: row.public_slug } : null;
+    return row ? {
+      workspaceId: row.workspace_id,
+      deploymentId: row.deployment_id,
+      publicSlug: row.public_slug,
+      accountId: row.account_id,
+      assistantAccountId: row.assistant_account_id || ""
+    } : null;
   }
 
   getWechatVisitor(workspaceId, appId, openid) {
@@ -313,6 +319,41 @@ export class Store {
     this.db.prepare("UPDATE workspace_wechat_visitors SET nickname = ?, avatar_url = ?, updated_at = ? WHERE workspace_id = ? AND app_id = ? AND openid = ?")
       .run(nickname, avatarUrl, isoNow(), String(workspaceId), String(appId), String(openid));
     return this.getWechatVisitor(workspaceId, appId, openid);
+  }
+
+  adoptConversationIdentity(accountId, legacyConversationId, stableConversationId, stableUserId) {
+    const normalizedAccountId = String(accountId || "").trim();
+    const legacyId = String(legacyConversationId || "").trim();
+    const stableId = String(stableConversationId || "").trim();
+    const userId = String(stableUserId || "").trim();
+    if (!normalizedAccountId || !stableId || !userId) return null;
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const stable = this.db.prepare("SELECT * FROM conversations WHERE account_id = ? AND external_conversation_id = ?").get(normalizedAccountId, stableId);
+      if (stable) {
+        this.db.prepare("UPDATE conversations SET external_user_id = ?, updated_at = ? WHERE id = ?").run(userId, isoNow(), stable.id);
+        this.db.exec("COMMIT");
+        return conversationView({ ...stable, external_user_id: userId });
+      }
+      const legacy = legacyId
+        ? this.db.prepare("SELECT * FROM conversations WHERE account_id = ? AND external_conversation_id = ?").get(normalizedAccountId, legacyId)
+        : null;
+      if (!legacy) {
+        this.db.exec("COMMIT");
+        return null;
+      }
+      this.db.prepare("UPDATE conversations SET external_conversation_id = ?, external_user_id = ?, updated_at = ? WHERE id = ?")
+        .run(stableId, userId, isoNow(), legacy.id);
+      this.db.prepare("UPDATE channel_outbox SET external_conversation_id = ? WHERE account_id = ? AND external_conversation_id = ?")
+        .run(stableId, normalizedAccountId, legacyId);
+      const adopted = this.db.prepare("SELECT * FROM conversations WHERE id = ?").get(legacy.id);
+      this.db.exec("COMMIT");
+      return conversationView(adopted);
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   listPeople(workspaceId) {

@@ -64,7 +64,9 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
     res.json(await workspaceMiniapps.login({
       publicSlug: String(req.body?.publicSlug || ""),
       deploymentId: String(req.body?.deploymentId || ""),
-      code: req.body?.code
+      code: req.body?.code,
+      legacyConversationId: String(req.body?.legacyConversationId || ""),
+      legacyAssistantConversationId: String(req.body?.legacyAssistantConversationId || "")
     }));
   }));
   app.put("/api/public/wechat/profile", (req, res) => {

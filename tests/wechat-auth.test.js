@@ -61,6 +61,9 @@ test("wechat login persists a confirmed profile by openid and restores it", asyn
   assert.equal(login.response.status, 200);
   assert.equal(login.data.profile.profileComplete, false);
   assert.ok(login.data.sessionToken);
+  assert.match(login.data.visitorId, /^wx_[A-Za-z0-9_-]{40,}$/);
+  assert.equal(login.data.identity.conversationId, `wechat:${login.data.visitorId}:person`);
+  assert.equal(login.data.identity.assistantConversationId, `wechat:${login.data.visitorId}:assistant`);
   assert.match(app.fetchCalls[0], /appid=wx-test-app/);
   assert.match(app.fetchCalls[0], /js_code=login-code-001/);
 
@@ -74,8 +77,57 @@ test("wechat login persists a confirmed profile by openid and restores it", asyn
   assert.equal(saved.data.profile.profileComplete, true);
 
   const restored = await jsonRequest(app.baseUrl, "/api/public/wechat/login", { method: "POST", body: { code: "login-code-002", publicSlug: "dingmai-assistant" } });
+  assert.equal(restored.data.visitorId, login.data.visitorId);
   assert.equal(restored.data.profile.nickName, "微信客户小王");
   assert.equal(restored.data.profile.avatarUrl, "http://127.0.0.1/media/avatar.jpg");
+});
+
+test("wechat login adopts the existing local conversation and preserves its history", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+  const legacyConversationId = "legacy-local-conversation";
+  const received = app.store.recordInbound({
+    provider: "miniapp",
+    accountId: "miniapp-default",
+    eventId: "legacy-event-001",
+    occurredAt: new Date().toISOString(),
+    externalConversationId: legacyConversationId,
+    externalUserId: "legacy-local-user",
+    displayName: "微信客户小王",
+    externalMessageId: "legacy-message-001",
+    messageType: "text",
+    text: "这是升级前的历史消息",
+    attachments: [],
+    metadata: {}
+  });
+
+  const login = await jsonRequest(app.baseUrl, "/api/public/wechat/login", {
+    method: "POST",
+    body: { code: "login-code-adopt", publicSlug: "dingmai-assistant", legacyConversationId }
+  });
+
+  assert.equal(login.response.status, 200);
+  const adopted = app.store.getConversation(received.conversation.id);
+  assert.equal(adopted.externalConversationId, login.data.identity.conversationId);
+  assert.equal(adopted.externalUserId, login.data.identity.userId);
+  assert.equal(app.store.listMessages(adopted.id)[0].content, "这是升级前的历史消息");
+
+  const continued = app.store.recordInbound({
+    provider: "miniapp",
+    accountId: "miniapp-default",
+    eventId: "stable-event-002",
+    occurredAt: new Date().toISOString(),
+    externalConversationId: login.data.identity.conversationId,
+    externalUserId: login.data.identity.userId,
+    displayName: "微信客户小王",
+    externalMessageId: "stable-message-002",
+    messageType: "text",
+    text: "这是升级后的新消息",
+    attachments: [],
+    metadata: {}
+  });
+  assert.equal(continued.conversation.id, adopted.id);
+  assert.deepEqual(app.store.listMessages(adopted.id).map((item) => item.content), ["这是升级前的历史消息", "这是升级后的新消息"]);
 });
 
 test("wechat profile update rejects an invalid session", async (t) => {
@@ -119,6 +171,7 @@ test("wechat identities and session tokens are isolated by workspace and app", a
   });
   assert.equal(dingmaiLogin.response.status, 200);
   assert.equal(acmeLogin.response.status, 200);
+  assert.notEqual(dingmaiLogin.data.visitorId, acmeLogin.data.visitorId);
 
   await jsonRequest(app.baseUrl, "/api/public/wechat/profile", {
     method: "PUT",
