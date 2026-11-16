@@ -91,6 +91,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   });
   app.use((req, res, next) => {
     if (!isManagementApi(req.path)) return next();
+    if (isPreviewApi(req.path) && adminAuth.authorizePreview(req, res)) return next();
     return adminAuth.requireSession(req, res, () => {
       const denial = workspaceScopeDenial(req, store);
       if (denial) return res.status(403).json({ error: denial, code: "WORKSPACE_ACCESS_DENIED" });
@@ -137,6 +138,14 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
   app.get("/api/admin/workspaces/:workspaceId/deployments", (req, res) => res.json({ items: store.listDeployments(req.params.workspaceId) }));
   app.post("/api/admin/workspaces/:workspaceId/deployments", (req, res) => res.status(201).json(store.createDeployment(req.params.workspaceId, req.body || {})));
   app.put("/api/admin/deployments/:deploymentId", (req, res) => respondFound(res, store.updateDeployment(req.params.deploymentId, req.body || {})));
+  app.post("/api/admin/deployments/:deploymentId/preview-token", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(adminAuth.issuePreviewToken(req.adminSession, { deploymentId: req.params.deploymentId }));
+  });
+  app.post("/api/admin/channels/:channelId/preview-token", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(adminAuth.issuePreviewToken(req.adminSession, { channelId: req.params.channelId }));
+  });
   app.get("/api/admin/deployments/:deploymentId/preview", (req, res) => respondFound(res, store.channelPreview(req.params.deploymentId, { published: req.query.published === "1" })));
   app.get("/api/admin/channels/:channelId/preview", (req, res) => respondFound(res, store.workspaceChannelPreview(req.params.channelId)));
   app.get("/api/admin/agents", (req, res) => res.json({ items: store.listAgentConfigs(), defaults: store.agentDefaults() }));
@@ -364,6 +373,11 @@ function isManagementApi(pathname) {
     || pathname.startsWith("/api/flow-machines/")
     || pathname.startsWith("/api/tag-schemas/")
     || pathname.startsWith("/api/alerts/");
+}
+
+function isPreviewApi(pathname) {
+  return /^\/api\/admin\/deployments\/[^/]+\/preview(?:\/|$)/.test(pathname)
+    || /^\/api\/admin\/channels\/[^/]+\/preview$/.test(pathname);
 }
 
 function workspaceScopeDenial(req, store) {

@@ -155,3 +155,49 @@ test("admin sessions can remain valid without an hourly expiry", async (t) => {
   assert.equal(session.data.authenticated, true);
   assert.equal(session.data.expiresAt, null);
 });
+
+test("one-time preview tickets authorize only their scoped draft preview", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
+  const issued = await request(app, "/api/admin/deployments/dingmai-website-assistant/preview-token", {
+    method: "POST",
+    cookie: login.cookie
+  });
+  assert.equal(issued.response.status, 200);
+  assert.ok(issued.data.token);
+  assert.equal(issued.response.headers.get("cache-control"), "no-store");
+
+  const exchanged = await request(app, `/api/admin/deployments/dingmai-website-assistant/preview?previewToken=${encodeURIComponent(issued.data.token)}`);
+  assert.equal(exchanged.response.status, 200);
+  assert.equal(exchanged.data.mode, "draft");
+  assert.match(exchanged.cookie, /^dclaw_preview_session=/);
+  assert.match(exchanged.setCookie, /Path=\/api\/admin/);
+  assert.match(exchanged.setCookie, /HttpOnly/);
+  assert.match(exchanged.setCookie, /Max-Age=1800/);
+
+  const reused = await request(app, `/api/admin/deployments/dingmai-website-assistant/preview?previewToken=${encodeURIComponent(issued.data.token)}`);
+  assert.equal(reused.response.status, 401);
+
+  const sameDeployment = await request(app, "/api/admin/deployments/dingmai-website-assistant/preview", { cookie: exchanged.cookie });
+  assert.equal(sameDeployment.response.status, 200);
+  const otherDeployment = await request(app, "/api/admin/deployments/dingmai-miniapp-assistant/preview", { cookie: exchanged.cookie });
+  assert.equal(otherDeployment.response.status, 401);
+  const generalAdminApi = await request(app, "/api/admin/workspaces", { cookie: exchanged.cookie });
+  assert.equal(generalAdminApi.response.status, 401);
+});
+
+test("channel preview tickets cover only that channel and its deployment preview APIs", async (t) => {
+  const app = await fixture();
+  t.after(() => app.close());
+
+  const login = await request(app, "/api/admin/auth/login", { method: "POST", body: { password: "platform-password" } });
+  const issued = await request(app, "/api/admin/channels/dingmai-website/preview-token", { method: "POST", cookie: login.cookie });
+  const exchanged = await request(app, `/api/admin/channels/dingmai-website/preview?previewToken=${encodeURIComponent(issued.data.token)}`);
+  assert.equal(exchanged.response.status, 200);
+  const deploymentPreview = await request(app, "/api/admin/deployments/dingmai-website-assistant/preview", { cookie: exchanged.cookie });
+  assert.equal(deploymentPreview.response.status, 200);
+  const otherChannel = await request(app, "/api/admin/channels/dingmai-miniapp/preview", { cookie: exchanged.cookie });
+  assert.equal(otherChannel.response.status, 401);
+});

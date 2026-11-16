@@ -321,8 +321,13 @@ test("website roster opens the shared card renderer instead of a separate chat U
 
 test("admin preview uses a real deployment for every channel provider", () => {
   const adminSource = readFileSync(new URL("../public/admin/app.js", import.meta.url), "utf8");
+  const previewSource = readFileSync(new URL("../public/channel-preview/app.js", import.meta.url), "utf8");
   assert.match(adminSource, /if \(deployment\) \{\s*return `\/channels\/\$\{encodeURIComponent\(deployment\.publicSlug\)\}/);
   assert.doesNotMatch(adminSource, /provider === "miniapp" && deployment/);
+  assert.match(adminSource, /\/preview-token/);
+  assert.match(adminSource, /previewUrl\.searchParams\.set\("previewToken", ticket\.token\)/);
+  assert.match(previewSource, /requestUrl\.searchParams\.set\("previewToken", previewToken\)/);
+  assert.match(previewSource, /cleanUrl\.searchParams\.delete\("previewToken"\)/);
 });
 
 test("admin workspace title stays on one line and uses the company name instead of its slug", () => {

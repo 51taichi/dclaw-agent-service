@@ -712,6 +712,33 @@ function previewUrlFor(provider) {
   return `/channels/channel-preview?channel=${encodeURIComponent(channel.id)}&preview=draft&t=${Date.now()}-${++previewRevision}`;
 }
 
+function previewTokenPathFor(provider) {
+  const channel = channelFor(provider);
+  if (!channel) return "";
+  const deployment = state.deployments.find((item) => item.workspaceChannelId === channel.id && item.enabled);
+  return deployment
+    ? `/api/admin/deployments/${encodeURIComponent(deployment.id)}/preview-token`
+    : `/api/admin/channels/${encodeURIComponent(channel.id)}/preview-token`;
+}
+
+async function openDraftPreview(provider) {
+  const url = previewUrlFor(provider);
+  const tokenPath = previewTokenPathFor(provider);
+  if (!url || !tokenPath) return;
+  const previewWindow = window.open("about:blank", "_blank");
+  if (!previewWindow) throw new Error("浏览器阻止了预览窗口，请允许弹出窗口后重试");
+  previewWindow.opener = null;
+  try {
+    const ticket = await api(tokenPath, { method: "POST" });
+    const previewUrl = new URL(url, location.origin);
+    previewUrl.searchParams.set("previewToken", ticket.token);
+    previewWindow.location.replace(previewUrl.href);
+  } catch (error) {
+    previewWindow.close();
+    throw error;
+  }
+}
+
 function websiteDeployment() {
   const channel = channelFor("website");
   return channel?.publishedVersion > 0 && state.deployments.find((item) => item.workspaceChannelId === channel.id && item.enabled && item.publicSlug);
@@ -1211,10 +1238,7 @@ function bindEvents() {
   els.deletePerson.addEventListener("click", () => deletePerson().catch(handleError));
   document.querySelectorAll("[data-publish-provider]").forEach((button) => button.addEventListener("click", () => publishProviderConfig(button.dataset.publishProvider).catch(handleError)));
   document.querySelectorAll("[data-deploy-provider='website']").forEach((button) => button.addEventListener("click", openWebsiteDeployDialog));
-  document.querySelectorAll("[data-preview-provider]").forEach((button) => button.addEventListener("click", () => {
-    const url = previewUrlFor(button.dataset.previewProvider);
-    if (url) window.open(url, "_blank", "noopener");
-  }));
+  document.querySelectorAll("[data-preview-provider]").forEach((button) => button.addEventListener("click", () => openDraftPreview(button.dataset.previewProvider).catch(handleError)));
   els.agentConfigForm.addEventListener("submit", (event) => saveAgentConfig(event).catch(handleError));
   els.agentDefaultsForm.addEventListener("submit", (event) => saveAgentDefaults(event).catch(handleError));
   els.deleteAgentConfig.addEventListener("click", () => deleteAgentConfig().catch(handleError));
