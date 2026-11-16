@@ -47,9 +47,10 @@
         </view>
 
         <text class="ai-page-disclosure front-disclosure" role="note">本服务为AI生成内容，结果仅供参考</text>
-        <scroll-view class="conversation-scroll" scroll-y :scroll-into-view="frontScrollTarget">
+        <scroll-view class="conversation-scroll" scroll-y :scroll-into-view="frontScrollTarget" upper-threshold="40" @scrolltoupper="loadEarlierHistory('front')">
           <view class="conversation-list">
-            <ConversationItem v-for="item in frontMessages" :key="item.id" :item="item" @action="handleAction" @question="sendFrontText" @choice="submitFrontChoice" @lead="submitFrontLead" @open="openResource" />
+            <view v-if="frontHistoryState.loading" class="history-loading">正在加载更早消息...</view>
+            <view v-for="item in frontMessages" :id="historyAnchorId('front', item)" :key="item.id" class="history-item"><ConversationItem :item="item" @action="handleAction" @question="sendFrontText" @choice="submitFrontChoice" @lead="submitFrontLead" @open="openResource" /></view>
             <view id="front-bottom" class="scroll-anchor"></view>
           </view>
         </scroll-view>
@@ -84,7 +85,7 @@
           object-fit="cover"
         />
         <image v-else class="scene-image" :src="assistant.image" mode="aspectFit" />
-        <scroll-view class="assistant-scroll" scroll-y :scroll-into-view="backScrollTarget">
+        <scroll-view class="assistant-scroll" scroll-y :scroll-into-view="backScrollTarget" upper-threshold="40" @scrolltoupper="loadEarlierHistory('back')">
           <view class="assistant-content">
             <view class="assistant-scene">
               <view class="scene-overlay">
@@ -103,7 +104,8 @@
             </view>
 
             <view v-if="companyMessages.length" class="company-conversation">
-              <ConversationItem v-for="item in companyMessages" :key="item.id" :item="item" @action="handleAction" @question="sendCompanyText" @choice="submitCompanyChoice" @lead="submitCompanyLead" @open="openResource" />
+              <view v-if="companyHistoryState.loading" class="history-loading">正在加载更早消息...</view>
+              <view v-for="item in companyMessages" :id="historyAnchorId('back', item)" :key="item.id" class="history-item"><ConversationItem :item="item" @action="handleAction" @question="sendCompanyText" @choice="submitCompanyChoice" @lead="submitCompanyLead" @open="openResource" /></view>
               <view id="back-bottom" class="scroll-anchor"></view>
             </view>
           </view>
@@ -168,6 +170,8 @@ const frontInput = ref("");
 const inputMode = ref("text");
 const frontMessages = ref([]);
 const companyMessages = ref([]);
+const frontHistoryState = reactive({ hasMore: false, before: null, loading: false });
+const companyHistoryState = reactive({ hasMore: false, before: null, loading: false });
 const preparedAssets = reactive({});
 const shareCardImage = ref("");
 const frontScrollTarget = ref("");
@@ -604,15 +608,18 @@ async function loadChannel() {
     const welcome = config.value.welcomeMessage || `您好，我是${profile.value.name}，很高兴认识您。`;
     const biography = config.value.biography || `我是${profile.value.name}，将结合${companyName.value}的业务资料，为您提供清晰、准确的解答。`;
     const [frontHistory, assistantHistory] = await Promise.all([
-      restoreConversationHistory(data.value?.endpoints?.publicHistory, conversationId).catch(() => []),
-      restoreConversationHistory(data.value?.endpoints?.assistantHistory, companyConversationId).catch(() => [])
+      restoreConversationHistory(data.value?.endpoints?.publicHistory, conversationId).catch(emptyHistoryPage),
+      restoreConversationHistory(data.value?.endpoints?.assistantHistory, companyConversationId).catch(emptyHistoryPage)
     ]);
-    frontMessages.value = frontHistory.length ? frontHistory : [
+    applyHistoryState(frontHistoryState, frontHistory.pageInfo);
+    applyHistoryState(companyHistoryState, assistantHistory.pageInfo);
+    frontMessages.value = frontHistory.messages.length ? frontHistory.messages : [
       message("assistant-response", { content: `${welcome}\n\n${biography}` }),
       ...(config.value.suggestedQuestions?.length ? [message("suggestion-chips", { items: config.value.suggestedQuestions })] : []),
       ...(config.value.resources?.length ? [message("resource-list", { items: config.value.resources })] : [])
     ];
-    companyMessages.value = assistantHistory;
+    companyMessages.value = assistantHistory.messages;
+    if (frontHistory.messages.length) scrollConversation(frontScrollTarget, "front-bottom");
   } catch (loadError) {
     error.value = localizedErrorMessage(loadError, "名片加载失败");
   } finally {
@@ -665,14 +672,15 @@ function appendAgentReply(target, content, attachments = []) {
   }
 }
 
-function historyEndpointUrl(endpoint, activeConversationId) {
-  return String(endpoint || "").replace("{conversationId}", encodeURIComponent(activeConversationId));
+function historyEndpointUrl(endpoint, activeConversationId, before = null) {
+  const url = String(endpoint || "").replace("{conversationId}", encodeURIComponent(activeConversationId));
+  return before ? `${url}${url.includes("?") ? "&" : "?"}before=${encodeURIComponent(before)}` : url;
 }
 
-async function restoreConversationHistory(endpoint, activeConversationId) {
+async function restoreConversationHistory(endpoint, activeConversationId, before = null) {
   const sessionToken = String(uni.getStorageSync(WECHAT_SESSION_STORAGE_KEY) || "");
-  if (!endpoint || !activeConversationId || !sessionToken) return [];
-  const history = await request(historyEndpointUrl(endpoint, activeConversationId), {
+  if (!endpoint || !activeConversationId || !sessionToken) return emptyHistoryPage();
+  const history = await request(historyEndpointUrl(endpoint, activeConversationId, before), {
     headers: { Authorization: `Bearer ${sessionToken}` }
   });
   const restored = [];
@@ -689,7 +697,42 @@ async function restoreConversationHistory(endpoint, activeConversationId) {
       else restored.push(message("attachment", { id, attachment }));
     }
   }
-  return restored;
+  return { messages: restored, pageInfo: history.pageInfo || { hasMore: false, before: null } };
+}
+
+function emptyHistoryPage() {
+  return { messages: [], pageInfo: { hasMore: false, before: null } };
+}
+
+function applyHistoryState(state, pageInfo) {
+  state.hasMore = pageInfo?.hasMore === true;
+  state.before = state.hasMore ? Number(pageInfo?.before) || null : null;
+}
+
+function historyAnchorId(surface, item) {
+  return `${surface}-history-${String(item?.id || "").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+async function loadEarlierHistory(surface) {
+  const company = surface === "back";
+  const state = company ? companyHistoryState : frontHistoryState;
+  if (!state.hasMore || !state.before || state.loading) return;
+  const target = company ? companyMessages : frontMessages;
+  const scrollTarget = company ? backScrollTarget : frontScrollTarget;
+  const endpoint = company ? data.value?.endpoints?.assistantHistory : data.value?.endpoints?.publicHistory;
+  const activeConversationId = company ? companyConversationId : conversationId;
+  const previousFirst = target.value[0];
+  state.loading = true;
+  try {
+    const page = await restoreConversationHistory(endpoint, activeConversationId, state.before);
+    target.value = [...page.messages, ...target.value];
+    applyHistoryState(state, page.pageInfo);
+    if (previousFirst) scrollConversation(scrollTarget, historyAnchorId(surface, previousFirst));
+  } catch (historyError) {
+    showToast(localizedErrorMessage(historyError, "更早消息加载失败"));
+  } finally {
+    state.loading = false;
+  }
 }
 
 function conversationOutboxUrl(endpoint, activeConversationId, after) {
@@ -962,6 +1005,8 @@ function setTextInputMode() {
 .conversation-scroll { flex: 1; min-height: 0; }
 .conversation-list, .company-conversation { display: flex; flex-direction: column; padding: 24rpx 24rpx 36rpx; }
 .conversation-list { padding-top: 18rpx; }
+.history-item { display: flex; flex-direction: column; }
+.history-loading { padding: 12rpx 0 20rpx; color: #87909e; font-size: 20rpx; line-height: 30rpx; text-align: center; }
 .ai-page-disclosure { display: block; color: #7b8492; font-size: 20rpx; line-height: 30rpx; text-align: center; }
 .front-disclosure { flex: 0 0 auto; padding: 10rpx 24rpx 8rpx; background: #f5f6f8; box-sizing: border-box; }
 .scroll-anchor { width: 1rpx; height: 1rpx; }

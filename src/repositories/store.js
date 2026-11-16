@@ -1087,15 +1087,24 @@ export class Store {
   }
 
   publicConversationHistory(accountId, externalConversationId, limit = 50) {
+    return this.publicConversationHistoryPage(accountId, externalConversationId, { limit }).items;
+  }
+
+  publicConversationHistoryPage(accountId, externalConversationId, { limit = 50, before = 0 } = {}) {
     const conversation = this.db.prepare("SELECT id FROM conversations WHERE account_id = ? AND external_conversation_id = ?")
       .get(String(accountId || ""), String(externalConversationId || ""));
-    if (!conversation) return [];
+    if (!conversation) return { items: [], pageInfo: { hasMore: false, before: null } };
     const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 500));
-    return this.db.prepare(`
-      SELECT * FROM (
-        SELECT * FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?
-      ) ORDER BY id
-    `).all(conversation.id, safeLimit).map(messageView);
+    const beforeId = Number.isSafeInteger(Number(before)) && Number(before) > 0 ? Number(before) : null;
+    const rows = beforeId
+      ? this.db.prepare("SELECT * FROM messages WHERE conversation_id = ? AND id < ? ORDER BY id DESC LIMIT ?").all(conversation.id, beforeId, safeLimit + 1)
+      : this.db.prepare("SELECT * FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?").all(conversation.id, safeLimit + 1);
+    const hasMore = rows.length > safeLimit;
+    const items = rows.slice(0, safeLimit).reverse().map(messageView);
+    return {
+      items,
+      pageInfo: { hasMore, before: hasMore && items.length ? items[0].id : null }
+    };
   }
 
   recordInbound(event) {

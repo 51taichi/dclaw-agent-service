@@ -239,7 +239,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
       assistant: true
     });
     if (!access.accountId) return res.status(404).json({ error: "公司助手不存在" });
-    res.json({ items: publicHistoryItems(store.publicConversationHistory(access.accountId, access.conversationId)) });
+    res.json(publicHistoryResponse(store, access, req.query.before));
   });
   app.post("/api/public/channels/:publicSlug/media", express.raw({ type: () => true, limit: "12mb" }), asyncHandler(async (req, res) => {
     const channel = store.publicChannel(req.params.publicSlug);
@@ -283,7 +283,7 @@ export function createApp(config, { database = null, fetchImpl = globalThis.fetc
       publicSlug: req.params.publicSlug,
       conversationId: req.params.conversationId
     });
-    res.json({ items: publicHistoryItems(store.publicConversationHistory(access.accountId, access.conversationId)) });
+    res.json(publicHistoryResponse(store, access, req.query.before));
   });
 
   app.get("/api/accounts", (req, res) => res.json({ items: store.listAccounts({ workspaceId: req.adminSession.role === "workspace" ? req.adminSession.workspaceId : String(req.query.workspace || "") }) }));
@@ -569,6 +569,13 @@ function publicHistoryItems(items) {
     attachments: Array.isArray(item.metadata?.attachments) ? item.metadata.attachments : [],
     createdAt: item.createdAt
   }));
+}
+
+function publicHistoryResponse(store, access, before) {
+  const page = store.publicConversationHistoryPage(access.accountId, access.conversationId, {
+    before: clampInt(before, 1, Number.MAX_SAFE_INTEGER, 0)
+  });
+  return { items: publicHistoryItems(page.items), pageInfo: page.pageInfo };
 }
 
 function numberId(value) {

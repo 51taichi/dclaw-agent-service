@@ -196,6 +196,13 @@ test("miniapp history restores only the most recent 50 messages", async (t) => {
   assert.equal(items.length, 50);
   assert.equal(items[0].content, "历史消息 11");
   assert.equal(items.at(-1).content, "历史消息 60");
+
+  const latest = app.store.publicConversationHistoryPage("miniapp-default", externalConversationId);
+  assert.equal(latest.pageInfo.hasMore, true);
+  assert.equal(latest.pageInfo.before, latest.items[0].id);
+  const earlier = app.store.publicConversationHistoryPage("miniapp-default", externalConversationId, { before: latest.pageInfo.before });
+  assert.equal(earlier.pageInfo.hasMore, false);
+  assert.deepEqual(earlier.items.map((item) => item.content), Array.from({ length: 10 }, (_, index) => `历史消息 ${index + 1}`));
 });
 
 test("wechat profile update rejects an invalid session", async (t) => {
