@@ -473,6 +473,7 @@ function renderMessages(messages) {
     const sender = outbound ? (message.senderType === "human" ? "人工客服" : "AI 客服") : state.conversation.displayName;
     return `<div class="chat-bubble-row ${outbound ? "outbound" : "inbound"}" data-message-id="${message.id}">${outbound ? "" : `<img class="chat-avatar" src="./assets/ddeer.png" alt="" />`}<div class="chat-bubble"><div class="chat-meta"><small>${escapeHtml(sender)}</small><time>${escapeHtml(formatDate(message.createdAt))}</time></div>${message.content ? `<div class="chat-text">${escapeHtml(message.content)}</div>` : ""}${renderMessageAttachments(message.metadata?.attachments)}${renderMessageSources(message.metadata?.sources)}${outbound ? `<div class="chat-delivery">${escapeHtml(deliveryLabel(message.deliveryStatus))}</div>` : ""}</div>${outbound ? `<img class="chat-avatar" src="./assets/bot-avatar.png" alt="" />` : ""}</div>`;
   }).join("") : `<div class="empty-state">暂无会话记录</div>`;
+  hydrateVoiceMessages();
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 }
 
@@ -481,10 +482,58 @@ function renderMessageAttachments(value) {
   if (!attachments.length) return "";
   return `<div class="chat-attachments" aria-label="附件">${attachments.map((attachment) => {
     const name = attachment.title || attachment.name || attachment.url;
+    if (isAudioAttachment(attachment)) return `<button class="chat-voice-message" data-voice-message type="button" aria-label="播放语音"><audio preload="metadata" src="${escapeHtml(attachment.url)}"></audio><span class="chat-voice-duration" data-voice-duration>--&quot;</span>${icon("volume")}</button>`;
     if (attachment.type === "image") return `<a class="chat-attachment-link chat-media-image-link" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer"><img class="chat-media-image" src="${escapeHtml(attachment.url)}" alt="${escapeHtml(name)}" loading="lazy" /></a>`;
     if (attachment.type === "card") return `<a class="chat-message-card-link" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer"><span class="chat-message-card-shell"><span class="chat-message-card-copy"><strong>${escapeHtml(attachment.title || attachment.name || "卡片")}</strong><small>${escapeHtml(attachment.subtitle || "")}</small><span class="chat-message-card-host">${icon("link")}打开资料</span></span><span class="chat-message-card-image ${attachment.pictureUrl ? "" : "chat-message-card-image-fallback"}">${attachment.pictureUrl ? `<img src="${escapeHtml(attachment.pictureUrl)}" alt="" loading="lazy" />` : icon("image")}</span></span></a>`;
     return `<a class="chat-attachment-link" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>`;
   }).join("")}</div>`;
+}
+
+function isAudioAttachment(attachment) {
+  return attachment?.type === "audio"
+    || String(attachment?.mimeType || "").startsWith("audio/")
+    || /\.(?:mp3|m4a|ogg|wav|webm)(?:[?#]|$)/i.test(String(attachment?.url || attachment?.name || ""));
+}
+
+function hydrateVoiceMessages() {
+  els.chatMessages.querySelectorAll("[data-voice-message]").forEach((button) => {
+    const audio = button.querySelector("audio");
+    const duration = button.querySelector("[data-voice-duration]");
+    const syncDuration = () => {
+      if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+      const seconds = Math.max(1, Math.round(audio.duration));
+      duration.textContent = `${seconds}\"`;
+      button.setAttribute("aria-label", `${button.classList.contains("is-playing") ? "暂停" : "播放"} ${seconds} 秒语音`);
+    };
+    if (audio.readyState >= 1) syncDuration();
+    else audio.addEventListener("loadedmetadata", syncDuration, { once: true });
+    audio.addEventListener("play", () => {
+      els.chatMessages.querySelectorAll("[data-voice-message]").forEach((otherButton) => {
+        if (otherButton === button) return;
+        const otherAudio = otherButton.querySelector("audio");
+        if (!otherAudio.paused) otherAudio.pause();
+        otherButton.classList.remove("is-playing");
+      });
+      button.classList.add("is-playing");
+      button.setAttribute("aria-label", button.getAttribute("aria-label").replace("播放", "暂停"));
+    });
+    audio.addEventListener("pause", () => {
+      button.classList.remove("is-playing");
+      button.setAttribute("aria-label", button.getAttribute("aria-label").replace("暂停", "播放"));
+    });
+    audio.addEventListener("ended", () => {
+      button.classList.remove("is-playing");
+      button.setAttribute("aria-label", button.getAttribute("aria-label").replace("暂停", "播放"));
+    });
+  });
+}
+
+function toggleVoiceMessage(button) {
+  const audio = button.querySelector("audio");
+  if (!audio) return;
+  if (!audio.paused) return audio.pause();
+  if (Number.isFinite(audio.duration) && audio.currentTime >= audio.duration) audio.currentTime = 0;
+  audio.play().catch(() => showToast("语音播放失败，请稍后重试", "error"));
 }
 
 function renderMessageSources(value) {
@@ -747,6 +796,10 @@ function bindEvents() {
   els.conversationChannelTabs.addEventListener("click", (event) => {
     const button = event.target.closest("[data-channel-account-id]");
     if (button) selectEmployeeChannel(button.dataset.channelAccountId).catch(handleError);
+  });
+  els.chatMessages.addEventListener("click", (event) => {
+    const voiceMessage = event.target.closest("[data-voice-message]");
+    if (voiceMessage) toggleVoiceMessage(voiceMessage);
   });
   els.businessDashboard.addEventListener("click", (event) => {
     const channelButton = event.target.closest("[data-dashboard-channel]");

@@ -6390,6 +6390,88 @@ html.has-bot-context .action-toolbox-toggle:hover {
   text-underline-offset: 2px;
 }
 
+.chat-voice-message {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  justify-self: start;
+  width: min(180px, 100%);
+  height: 44px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 10px;
+  background: #95ed9c;
+  color: #101410;
+  box-shadow: none;
+  font-weight: 800;
+}
+
+.chat-voice-message::before {
+  position: absolute;
+  top: 15px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: #95ed9c;
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+  content: "";
+}
+
+.chat-bubble-row.outbound .chat-voice-message {
+  justify-self: end;
+}
+
+.chat-bubble-row.outbound .chat-voice-message::before {
+  right: -6px;
+  left: auto;
+  transform: rotate(180deg);
+}
+
+.chat-voice-message:hover,
+.chat-voice-message:focus-visible,
+.chat-voice-message.is-playing {
+  border: 0;
+  background: #82e78b;
+  color: #101410;
+  box-shadow: 0 0 0 3px rgba(80, 190, 91, 0.16);
+  transform: none;
+}
+
+.chat-voice-message:hover::before,
+.chat-voice-message:focus-visible::before,
+.chat-voice-message.is-playing::before {
+  background: #82e78b;
+}
+
+.chat-voice-message audio {
+  display: none;
+}
+
+.chat-voice-duration {
+  min-width: 28px;
+  text-align: right;
+}
+
+.chat-voice-message .icon {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  stroke-width: 2.3;
+}
+
+.chat-voice-message.is-playing .icon {
+  animation: chatVoicePulse 900ms ease-in-out infinite;
+}
+
+@keyframes chatVoicePulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.88);
+  }
+}
+
 .chat-sources {
   display: flex;
   flex-wrap: wrap;

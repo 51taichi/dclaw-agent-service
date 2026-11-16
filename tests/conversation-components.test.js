@@ -348,6 +348,19 @@ test("workspace console opens through the shared authenticated launch handoff", 
   assert.match(consoleSource, /"X-DClaw-Workspace": workspaceScope\(\)/);
 });
 
+test("console audio attachments render as playable voice bubbles instead of file links", () => {
+  const consoleSource = readFileSync(new URL("../public/console/app.js", import.meta.url), "utf8");
+  const consoleStyles = readFileSync(new URL("../public/console/styles.css", import.meta.url), "utf8");
+  const consoleMarkup = readFileSync(new URL("../public/console/index.html", import.meta.url), "utf8");
+  assert.match(consoleSource, /if \(isAudioAttachment\(attachment\)\) return `<button class="chat-voice-message"/);
+  assert.match(consoleSource, /audio\.play\(\)\.catch/);
+  assert.match(consoleSource, /audio\.addEventListener\("loadedmetadata", syncDuration/);
+  assert.match(consoleSource, /els\.chatMessages\.addEventListener\("click"/);
+  assert.match(consoleStyles, /\.chat-voice-message\s*\{[^}]*background: #95ed9c;/s);
+  assert.match(consoleStyles, /\.chat-voice-message\.is-playing \.icon/);
+  assert.match(consoleMarkup, /id="icon-volume"/);
+});
+
 test("admin browser and header use the website card management title", () => {
   const adminMarkup = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   assert.match(adminMarkup, /<title>官网名片智能体管理后台<\/title>/);
