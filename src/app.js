@@ -595,7 +595,7 @@ function respondFound(res, value) {
 
 function publicIdentifier(value, field) {
   const result = String(value || "");
-  if (!/^[A-Za-z0-9_-]{8,120}$/.test(result)) throw new TypeError(`${field} 格式无效`);
+  if (!/^[A-Za-z0-9_:-]{8,120}$/.test(result)) throw new TypeError(`${field} 格式无效`);
   return result;
 }
 

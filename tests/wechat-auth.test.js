@@ -85,6 +85,7 @@ test("wechat login persists a confirmed profile by openid and restores it", asyn
 test("wechat login adopts the existing local conversation and preserves its history", async (t) => {
   const app = await fixture();
   t.after(() => app.close());
+  app.store.publishWorkspaceChannel("dingmai-miniapp");
   const legacyConversationId = "legacy-local-conversation";
   const received = app.store.recordInbound({
     provider: "miniapp",
@@ -134,6 +135,21 @@ test("wechat login adopts the existing local conversation and preserves its hist
   });
   assert.equal(history.response.status, 200);
   assert.deepEqual(history.data.items.map((item) => item.content), ["这是升级前的历史消息", "这是升级后的新消息"]);
+
+  const outbox = await jsonRequest(app.baseUrl, `/api/public/channels/dingmai-assistant/conversations/${encodeURIComponent(login.data.identity.conversationId)}/outbox?after=0`);
+  assert.equal(outbox.response.status, 200, JSON.stringify(outbox.data));
+  assert.ok(Array.isArray(outbox.data.items));
+
+  const message = await jsonRequest(app.baseUrl, "/api/public/channels/dingmai-assistant/messages", {
+    method: "POST",
+    body: {
+      conversationId: login.data.identity.conversationId,
+      userId: login.data.identity.userId,
+      displayName: "微信客户小王",
+      message: { id: "wechat-stable-message-003", type: "text", text: "稳定会话继续发送" }
+    }
+  });
+  assert.equal(message.response.status, 202);
 
   const denied = await jsonRequest(app.baseUrl, "/api/public/channels/dingmai-assistant/conversations/wechat:someone-else:person/history", {
     headers: { authorization: `Bearer ${login.data.sessionToken}` }
